@@ -1,6 +1,6 @@
 [project]
 name = "agentlys"
-version = "0.19.1"
+version = "0.19.2"
 description = "Small OpenAI/Anthropic library to support chat templates, and function calls."
 authors = [
     {name = "Benjamin Derville", email = "benderville@gmail.com"}
