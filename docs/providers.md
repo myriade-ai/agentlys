@@ -1,6 +1,6 @@
 # Provider Guide
 
-Autochat supports multiple LLM providers out of the box, with easy configuration and the ability to create custom providers.
+Agentlys supports multiple LLM providers out of the box, with easy configuration and the ability to create custom providers.
 
 ## Supported Providers
 
@@ -12,22 +12,22 @@ OpenAI's GPT models are the default provider.
 
 ```bash
 export OPENAI_API_KEY="your-openai-key"
-export AUTOCHAT_MODEL="gpt-5-mini"  # optional, this is the default
+export AGENTLYS_MODEL="gpt-5-mini"  # optional, this is the default
 ```
 
 **Usage:**
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 
 # Default (uses OpenAI)
-agent = Autochat()
+agent = Agentlys()
 
 # Explicit OpenAI
-agent = Autochat(provider="openai")
+agent = Agentlys(provider="openai")
 
 # Specific model
-agent = Autochat(provider="openai", model="gpt-5-mini")
+agent = Agentlys(provider="openai", model="gpt-5-mini")
 ```
 
 ### Anthropic
@@ -38,17 +38,17 @@ Anthropic's Claude models, recommended for agentic behavior.
 
 ```bash
 export ANTHROPIC_API_KEY="your-anthropic-key"
-export AUTOCHAT_MODEL="claude-sonnet-4-20250514"
+export AGENTLYS_MODEL="claude-sonnet-4-20250514"
 ```
 
 **Usage:**
 
 ```python
 # Use Anthropic
-agent = Autochat(provider="anthropic")
+agent = Agentlys(provider="anthropic")
 
 # Specific Claude model
-agent = Autochat(provider="anthropic", model="claude-sonnet-4-20250514")
+agent = Agentlys(provider="anthropic", model="claude-sonnet-4-20250514")
 ```
 
 ### Custom Provider Host
@@ -56,7 +56,7 @@ agent = Autochat(provider="anthropic", model="claude-sonnet-4-20250514")
 Use alternative endpoints or self-hosted models:
 
 ```bash
-export AUTOCHAT_HOST="https://your-custom-endpoint.com"
+export AGENTLYS_HOST="https://your-custom-endpoint.com"
 ```
 
 ## Configuration Patterns
@@ -69,13 +69,13 @@ The simplest approach using environment variables:
 # .env file
 OPENAI_API_KEY=your-openai-key
 ANTHROPIC_API_KEY=your-anthropic-key
-AUTOCHAT_MODEL=claude-sonnet-4-20250514
+AGENTLYS_MODEL=claude-sonnet-4-20250514
 
 # Python code
-from autochat import Autochat
+from agentlys import Agentlys
 
 # Uses environment variables automatically
-agent = Autochat(provider="anthropic")
+agent = Agentlys(provider="anthropic")
 ```
 
 ### Runtime Configuration
@@ -83,17 +83,17 @@ agent = Autochat(provider="anthropic")
 Configure providers programmatically:
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 
 # OpenAI with custom settings
-openai_agent = Autochat(
+openai_agent = Agentlys(
     provider="openai",
     model="gpt-5-mini",
     instruction="You are a helpful assistant"
 )
 
 # Anthropic with custom settings
-claude_agent = Autochat(
+claude_agent = Agentlys(
     provider="anthropic",
     model="claude-sonnet-4-20250514",
     instruction="You are a thoughtful assistant"
@@ -108,14 +108,14 @@ Use different providers for different tasks:
 class AgentManager:
     def __init__(self):
         # Fast agent for simple tasks
-        self.quick_agent = Autochat(
+        self.quick_agent = Agentlys(
             provider="openai",
             model="gpt-5-mini",
             instruction="Provide quick, concise answers"
         )
 
         # Powerful agent for complex tasks
-        self.smart_agent = Autochat(
+        self.smart_agent = Agentlys(
             provider="anthropic",
             model="claude-sonnet-4-20250514",
             instruction="Think deeply and provide comprehensive solutions"
@@ -135,8 +135,8 @@ Create custom providers for specialized use cases:
 ### Basic Custom Provider
 
 ```python
-from autochat.providers.base_provider import BaseProvider
-from autochat import Autochat, Message
+from agentlys.providers.base_provider import BaseProvider
+from agentlys import Agentlys, Message
 
 class MyCustomProvider(BaseProvider):
     def __init__(self, api_key: str, **kwargs):
@@ -172,14 +172,14 @@ class MyCustomProvider(BaseProvider):
         return response.json()["choices"][0]["message"]["content"]
 
 # Usage
-custom_agent = Autochat(provider=MyCustomProvider(api_key="your-key"))
+custom_agent = Agentlys(provider=MyCustomProvider(api_key="your-key"))
 ```
 
 ### Advanced Custom Provider with Function Calling
 
 ```python
-from autochat.providers.base_provider import BaseProvider
-from autochat import Message, MessagePart
+from agentlys.providers.base_provider import BaseProvider
+from agentlys import Message, MessagePart
 import json
 
 class AdvancedCustomProvider(BaseProvider):
@@ -187,7 +187,7 @@ class AdvancedCustomProvider(BaseProvider):
         super().__init__(**kwargs)
 
     def create_completion(self, messages, functions=None, **kwargs):
-        # Convert autochat messages to your provider's format
+        # Convert agentlys messages to your provider's format
         provider_messages = self._convert_messages(messages)
 
         # Include function schemas if provided
@@ -215,7 +215,7 @@ class AdvancedCustomProvider(BaseProvider):
             )
 
     def _convert_messages(self, messages):
-        # Convert autochat Message objects to your provider's format
+        # Convert agentlys Message objects to your provider's format
         converted = []
         for msg in messages:
             converted.append({
@@ -225,7 +225,7 @@ class AdvancedCustomProvider(BaseProvider):
         return converted
 
     def _convert_function_schema(self, function_schema):
-        # Convert autochat function schema to your provider's format
+        # Convert agentlys function schema to your provider's format
         return {
             "name": function_schema["name"],
             "description": function_schema["description"],
@@ -243,14 +243,14 @@ class AdvancedCustomProvider(BaseProvider):
 
 ```python
 # OpenAI-specific model configurations
-openai_agent = Autochat(
+openai_agent = Agentlys(
     provider="openai",
     model="gpt-5-mini",
     # OpenAI-specific parameters can be passed through kwargs
 )
 
 # Access to OpenAI's latest models
-o1_agent = Autochat(
+o1_agent = Agentlys(
     provider="openai",
     model="o1-preview"  # For complex reasoning tasks
 )
@@ -260,7 +260,7 @@ o1_agent = Autochat(
 
 ```python
 # Anthropic excels at tool use and following instructions
-anthropic_agent = Autochat(
+anthropic_agent = Agentlys(
     provider="anthropic",
     model="claude-sonnet-4-20250514",
     instruction="""You are a meticulous developer agent that:
@@ -278,14 +278,14 @@ anthropic_agent = Autochat(
 Handle provider-specific errors gracefully:
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 from openai import RateLimitError
 from anthropic import AuthenticationError
 
 def robust_agent_call(query: str):
     agents = [
-        Autochat(provider="anthropic"),
-        Autochat(provider="openai", model="gpt-5-mini"),  # Fallback
+        Agentlys(provider="anthropic"),
+        Agentlys(provider="openai", model="gpt-5-mini"),  # Fallback
     ]
 
     for agent in agents:

@@ -1,107 +1,111 @@
 interactions:
-- request:
-    body: '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
-      a helpful assistant that can read books."}]},{"role":"user","content":[{"type":"text","text":"Hello,
-      read book ''the great gatsby''"}]}],"model":"o1-2024-12-17","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
-      for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
-      Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMUjFd6MjXKNBLbsy1IMcK7ihQJr7\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701037,\n  \"model\": \"o1-2024-12-17\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_cAr8rnpugZT0HV9UnsWUe78b\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"read_book\",\n
-        \             \"arguments\": \"{\\\"book_name\\\":\\\"the great gatsby\\\"}\"\n
-        \           }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 80,\n    \"completion_tokens\":
-        541,\n    \"total_tokens\": 621,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 512,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_2ef8962a57\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
-      a helpful assistant that can read books."}]},{"role":"user","content":[{"type":"text","text":"Hello,
-      read book ''the great gatsby''"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_cAr8rnpugZT0HV9UnsWUe78b","type":"function","function":{"name":"read_book","arguments":"{\"book_name\":
-      \"the great gatsby\"}"}}]},{"role":"tool","tool_call_id":"call_cAr8rnpugZT0HV9UnsWUe78b","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/tests/test_calls_function.py\",
-      line 17, in read_book\n    return BOOKS[book_name]\n           ~~~~~^^^^^^^^^^^\n\nKeyError:
-      ''the great gatsby''"}],"name":"read_book"}],"model":"o1-2024-12-17","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
-      for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
-      Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMUjPYc0CFSAGisIawRkuj3M9PSJz\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701047,\n  \"model\": \"o1-2024-12-17\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"I\u2019m sorry, but I don\u2019t have
-        \u201Cthe great gatsby\u201D in my library.\",\n        \"refusal\": null,\n
-        \       \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\":
-        \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 167,\n    \"completion_tokens\":
-        95,\n    \"total_tokens\": 262,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 64,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_2ef8962a57\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
+        a helpful assistant that can read books."}]},{"role":"user","content":[{"type":"text","text":"Hello,
+        read book ''the great gatsby''"}]}],"model":"o1-2024-12-17","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
+        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
+        Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMUjFd6MjXKNBLbsy1IMcK7ihQJr7\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744701037,\n  \"model\": \"o1-2024-12-17\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
+          \           \"id\": \"call_cAr8rnpugZT0HV9UnsWUe78b\",\n            \"type\":
+          \"function\",\n            \"function\": {\n              \"name\": \"read_book\",\n
+          \             \"arguments\": \"{\\\"book_name\\\":\\\"the great gatsby\\\"}\"\n
+          \           }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\":
+          []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
+          \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 80,\n    \"completion_tokens\":
+          541,\n    \"total_tokens\": 621,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+          0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+          {\n      \"reasoning_tokens\": 512,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+          0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_2ef8962a57\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
+        a helpful assistant that can read books."}]},{"role":"user","content":[{"type":"text","text":"Hello,
+        read book ''the great gatsby''"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_cAr8rnpugZT0HV9UnsWUe78b","type":"function","function":{"name":"read_book","arguments":"{\"book_name\":
+        \"the great gatsby\"}"}}]},{"role":"tool","tool_call_id":"call_cAr8rnpugZT0HV9UnsWUe78b","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_calls_function.py\",
+        line 17, in read_book\n    return BOOKS[book_name]\n           ~~~~~^^^^^^^^^^^\n\nKeyError:
+        ''the great gatsby''"}],"name":"read_book"}],"model":"o1-2024-12-17","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
+        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
+        Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMUjPYc0CFSAGisIawRkuj3M9PSJz\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744701047,\n  \"model\": \"o1-2024-12-17\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": \"I\u2019m sorry, but I don\u2019t have
+          \u201Cthe great gatsby\u201D in my library.\",\n        \"refusal\": null,\n
+          \       \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\":
+          \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 167,\n    \"completion_tokens\":
+          95,\n    \"total_tokens\": 262,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+          0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+          {\n      \"reasoning_tokens\": 64,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+          0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_2ef8962a57\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
 version: 1

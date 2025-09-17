@@ -1,10 +1,9 @@
 import os
 
 import pytest
+from agentlys import Agentlys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-from autochat import Autochat
 
 currentdir = os.path.dirname(__file__)
 
@@ -29,7 +28,7 @@ async def handle_server(provider):
             # Initialize the connection
             await session.initialize()
 
-            agent = Autochat(provider=provider)
+            agent = Agentlys(provider=provider)
             await agent.add_mcp_server(session)
             # Use the async version of ask
             async for message in agent.run_conversation_async(

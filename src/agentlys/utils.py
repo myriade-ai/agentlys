@@ -11,7 +11,7 @@ from pydantic import ConfigDict, Field, create_model
 from pydantic.json_schema import GenerateJsonSchema
 from pydantic_core import PydanticOmit
 
-from autochat.model import Message
+from agentlys.model import Message
 
 
 def limit_data_size(

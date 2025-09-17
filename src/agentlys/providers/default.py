@@ -1,14 +1,14 @@
 import json
 import os
 
-from autochat.base import AutochatBase
-from autochat.model import Message
-from autochat.providers.openai import (
+from agentlys.base import AgentlysBase
+from agentlys.model import Message
+from agentlys.providers.openai import (
     OpenAIProvider,
     parts_to_openai_dict,
 )
 
-AUTOCHAT_HOST = os.getenv("AUTOCHAT_HOST")
+AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def message_to_openai_dict(message: Message) -> dict:
@@ -54,9 +54,9 @@ class DefaultProvider(OpenAIProvider):
     - Function call content is a string
     """
 
-    def __init__(self, chat: AutochatBase, model: str, base_url: str = None):
+    def __init__(self, chat: AgentlysBase, model: str, base_url: str = None):
         from openai import OpenAI
 
         self.chat = chat
         self.model = model
-        self.client = OpenAI(base_url=AUTOCHAT_HOST)
+        self.client = OpenAI(base_url=AGENTLYS_HOST)

@@ -1,10 +1,9 @@
 import asyncio
 
 import pytest
-
-from autochat import Autochat
-from autochat.model import Message
-from autochat.providers.base_provider import APIProvider
+from agentlys import Agentlys
+from agentlys.model import Message
+from agentlys.providers.base_provider import APIProvider
 
 
 # Mock async function that simulates an external tool
@@ -24,7 +23,7 @@ async def async_data_processor(**kwargs):
 @pytest.mark.asyncio
 async def test_call_with_signature_async():
     """Test that _call_with_signature properly handles async functions"""
-    chat = Autochat()
+    chat = Agentlys()
 
     # Test with async function
     result = await chat._call_with_signature(async_calculator, None, a=1, b=2)
@@ -39,7 +38,7 @@ async def test_call_with_signature_async():
 @pytest.mark.asyncio
 async def test_ask_async():
     """Test the async version of ask method"""
-    chat = Autochat()
+    chat = Agentlys()
 
     # Add a test function
     chat.add_function(async_calculator)
@@ -54,7 +53,7 @@ async def test_ask_async():
 @pytest.mark.asyncio
 async def test_run_conversation_async():
     """Test the async generator behavior of run_conversation_async"""
-    chat = Autochat()
+    chat = Agentlys()
 
     # Add test functions
     chat.add_function(async_calculator)
@@ -71,7 +70,7 @@ async def test_run_conversation_async():
 
 async def run_conversation_async_multiple_turns(provider: APIProvider):
     """Test multiple turns in an async conversation"""
-    chat = Autochat(provider=provider)
+    chat = Agentlys(provider=provider)
 
     # Add both test functions
     chat.add_function(async_calculator)
@@ -108,7 +107,7 @@ async def test_run_conversation_async_multiple_turns_openai():
 @pytest.mark.vcr
 def test_run_conversation_sync_wrapper():
     """Test that the sync wrapper for run_conversation works"""
-    chat = Autochat()
+    chat = Agentlys()
 
     # Add a test function
     chat.add_function(async_calculator)

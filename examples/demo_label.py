@@ -1,4 +1,4 @@
-from autochat import Autochat
+from agentlys import Agentlys
 
 
 def label_item(category: str):
@@ -6,7 +6,7 @@ def label_item(category: str):
     raise NotImplementedError()
 
 
-classifierGPT = Autochat(instruction="you classify title")
+classifierGPT = Agentlys(instruction="you classify title")
 classifierGPT.add_function(label_item)
 
 text = "The new iPhone is out"

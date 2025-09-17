@@ -1,8 +1,8 @@
-# Autochat
+# Agentlys
 
-[![image](https://img.shields.io/pypi/v/autochat.svg)](https://pypi.python.org/pypi/autochat)
-[![image](https://img.shields.io/github/license/BenderV/autochat)](https://github.com/BenderV/autochat/blob/master/LICENSE)
-[![Actions status](https://github.com/BenderV/autochat/actions/workflows/test.yml/badge.svg)](https://github.com/BenderV/autochat/actions)
+[![image](https://img.shields.io/pypi/v/agentlys.svg)](https://pypi.python.org/pypi/agentlys)
+[![image](https://img.shields.io/github/license/myriade-ai/agentlys)](https://github.com/myriade-ai/agentlys/blob/master/LICENSE)
+[![Actions status](https://github.com/myriade-ai/agentlys/actions/workflows/test.yml/badge.svg)](https://github.com/myriade-ai/agentlys/actions)
 
 > ⚠️ **Warning**: Since agentic capabilities are evolving fast, expect the API to change.
 
@@ -20,16 +20,16 @@ A lightweight Python library for building AI agents. Turn any Python function or
 
 ## Real-World Example: Code Development Agent
 
-Autochat excels at building development agents. Here's how [autocode](https://github.com/myriade-ai/autocode) uses autochat to create an AI developer:
+Agentlys excels at building development agents. Here's how [autocode](https://github.com/myriade-ai/autocode) uses agentlys to create an AI developer:
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 from autocode.code_editor import CodeEditor
 from autocode.terminal import Terminal
 from autocode.git import Git
 
 # Create a developer agent
-agent = Autochat(
+agent = Agentlys(
     instruction="""You are a developer agent equipped with tools to:
     1. Edit code files
     2. Run terminal commands
@@ -57,23 +57,23 @@ for message in agent.run_conversation("Create a FastAPI hello world app with tes
 
 ## Installation
 
-Install autochat with all providers and features:
+Install agentlys with all providers and features:
 
 ```bash
-pip install 'autochat[all]'
+pip install 'agentlys[all]'
 ```
 
 Or install with specific providers:
 
 ```bash
 # OpenAI only
-pip install 'autochat[openai]'
+pip install 'agentlys[openai]'
 
 # Anthropic only
-pip install 'autochat[anthropic]'
+pip install 'agentlys[anthropic]'
 
 # With MCP support (Python 3.10+)
-pip install 'autochat[mcp]'
+pip install 'agentlys[mcp]'
 ```
 
 ## Usage
@@ -81,12 +81,12 @@ pip install 'autochat[mcp]'
 ### Functions
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 
 def get_weather(city: str) -> str:
     return f"Sunny in {city}"
 
-agent = Autochat()
+agent = Agentlys()
 agent.add_function(get_weather)
 agent.ask("What's the weather in Tokyo?")
 ```
@@ -104,7 +104,7 @@ class FileManager:
             f.write(content)
 
 files = FileManager()
-agent = Autochat()
+agent = Agentlys()
 agent.add_tool(files)
 
 # AI can now read/write files
@@ -117,10 +117,10 @@ for msg in agent.run_conversation("Read config.json and update the port to 8080"
 ### Image Support
 
 ```python
-from autochat import Autochat, Message
+from agentlys import Agentlys, Message
 from PIL import Image
 
-agent = Autochat()
+agent = Agentlys()
 image = Image.open("examples/image.jpg")
 message = Message(role="user", content="Describe this image", image=image)
 response = agent.ask(message)
@@ -130,7 +130,7 @@ response = agent.ask(message)
 
 ```python
 # Load agent from markdown template
-agent = Autochat.from_template("./agent_template.md")
+agent = Agentlys.from_template("./agent_template.md")
 ```
 
 ### Async Support
@@ -150,7 +150,7 @@ export OPENAI_API_KEY="your-key"
 export ANTHROPIC_API_KEY="your-key"
 
 # Choose your model (optional)
-export AUTOCHAT_MODEL="claude-sonnet-4-20250514"  # or gpt-5-mini
+export AGENTLYS_MODEL="claude-sonnet-4-20250514"  # or gpt-5-mini
 ```
 
 💡 **Recommendation**: Use Anthropic's Claude models for complex agentic behavior and tool use.

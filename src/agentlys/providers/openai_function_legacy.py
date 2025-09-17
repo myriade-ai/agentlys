@@ -2,12 +2,12 @@ import json
 import os
 import typing
 
-from autochat.base import AutochatBase
-from autochat.model import Message, MessagePart
-from autochat.providers.base_provider import BaseProvider
-from autochat.providers.utils import FunctionCallParsingError
+from agentlys.base import AgentlysBase
+from agentlys.model import Message, MessagePart
+from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.utils import FunctionCallParsingError
 
-AUTOCHAT_HOST = os.getenv("AUTOCHAT_HOST")
+AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def from_openai_object(
@@ -97,7 +97,7 @@ def message_to_openai_dict(message: Message) -> dict:
 
 
 class OpenAIProviderFunctionLegacy(BaseProvider):
-    def __init__(self, chat: AutochatBase, model: str, base_url: str = None):
+    def __init__(self, chat: AgentlysBase, model: str, base_url: str = None):
         from openai import OpenAI
 
         self.chat = chat
@@ -105,7 +105,7 @@ class OpenAIProviderFunctionLegacy(BaseProvider):
         # Possibly set up openai.api_key, base_url, etc.
         self.client = OpenAI(
             base_url=(
-                f"{AUTOCHAT_HOST}/v1" if AUTOCHAT_HOST else "https://api.openai.com/v1"
+                f"{AGENTLYS_HOST}/v1" if AGENTLYS_HOST else "https://api.openai.com/v1"
             ),
         )
 

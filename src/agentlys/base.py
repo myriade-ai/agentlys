@@ -1,9 +1,10 @@
 import typing
-from autochat.model import Message
-from autochat.providers.base_provider import BaseProvider
+
+from agentlys.model import Message
+from agentlys.providers.base_provider import BaseProvider
 
 
-class AutochatBase:  # TODO: rename ?
+class AgentlysBase:  # TODO: rename ?
     instruction: str = (None,)
     examples: typing.Union[list[Message], None]
     messages: typing.Union[list[Message], None]

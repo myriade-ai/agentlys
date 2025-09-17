@@ -2,8 +2,8 @@ import typing
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from autochat.model import Message, MessagePart
-from autochat.utils import get_event_loop_or_create
+from agentlys.model import Message, MessagePart
+from agentlys.utils import get_event_loop_or_create
 
 
 class APIProvider(Enum):

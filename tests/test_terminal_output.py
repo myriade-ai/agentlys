@@ -8,7 +8,7 @@ import os
 
 from PIL import Image as PILImage
 
-from autochat.model import Message, MessagePart
+from agentlys.model import Message, MessagePart
 
 
 def main(display_image: bool):

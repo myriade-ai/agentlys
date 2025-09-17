@@ -7,8 +7,7 @@ testing and experimentation.
 """
 
 import pytest
-
-from autochat import APIProvider, Autochat
+from agentlys import Agentlys, APIProvider
 
 
 def multiply(a: int, b: int) -> int:
@@ -18,7 +17,7 @@ def multiply(a: int, b: int) -> int:
 @pytest.mark.vcr
 def test_openai_function_shim():
     # The only model thing you need to do is set the provider to "openai_function_shim"
-    agent = Autochat(provider=APIProvider.OPENAI_FUNCTION_SHIM, model="o1-preview")
+    agent = Agentlys(provider=APIProvider.OPENAI_FUNCTION_SHIM, model="o1-preview")
     agent.add_function(multiply)
 
     text = "What is 343354 * 13243343214"

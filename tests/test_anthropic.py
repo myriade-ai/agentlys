@@ -1,8 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-
-from autochat import APIProvider, Autochat, Message
+from agentlys import Agentlys, APIProvider, Message
 
 
 class TestAnthropic(unittest.TestCase):
@@ -10,7 +9,7 @@ class TestAnthropic(unittest.TestCase):
         self.mock_anthropic_client = MagicMock()
 
     def test_transform_conversation_anthropic(self):
-        agent = Autochat(instruction="Test instruction", provider=APIProvider.ANTHROPIC)
+        agent = Agentlys(instruction="Test instruction", provider=APIProvider.ANTHROPIC)
         agent.messages = [
             Message(
                 role="function",

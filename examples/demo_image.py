@@ -1,9 +1,9 @@
-from autochat import Autochat, Message
-
-from PIL import Image
-import sys
-import os
 import argparse
+import os
+import sys
+
+from agentlys import Agentlys, Message
+from PIL import Image
 
 sys.path.append("..")
 
@@ -16,7 +16,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-agent = Autochat(provider=args.provider)
+agent = Agentlys(provider=args.provider)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 image = Image.open(os.path.join(current_dir, "image.jpg"))

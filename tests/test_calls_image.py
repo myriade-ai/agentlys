@@ -1,9 +1,8 @@
 import os
 
 import pytest
+from agentlys import Agentlys, APIProvider, Message
 from PIL import Image
-
-from autochat import APIProvider, Autochat, Message
 
 img_path = os.path.join(os.path.dirname(__file__), "images", "mileage.jpg")
 
@@ -24,7 +23,7 @@ TEST_CASES = [
 @pytest.mark.parametrize("provider", TEST_CASES)
 @pytest.mark.vcr
 def test_read_image(provider):
-    agent = Autochat(provider=provider, use_tools_only=True)
+    agent = Agentlys(provider=provider, use_tools_only=True)
     agent.add_function(report_mileage)
 
     image = Image.open(img_path)
