@@ -1,11 +1,11 @@
 # API Reference
 
-## Autochat Class
+## Agentlys Class
 
 ### Constructor
 
 ```python
-Autochat(
+Agentlys(
     name: str = None,
     instruction: str = None,
     examples: list[Message] = None,
@@ -20,13 +20,14 @@ Autochat(
 ```
 
 **Parameters:**
+
 - `name`: Optional name for the agent (useful when using agent as a tool)
 - `instruction`: System instruction that defines the agent's behavior
 - `examples`: List of example messages for few-shot learning
 - `messages`: Initial conversation history
 - `context`: Additional context for the agent
 - `max_interactions`: Maximum number of interactions in a conversation (default: 100)
-- `model`: Model to use (defaults to env var AUTOCHAT_MODEL)
+- `model`: Model to use (defaults to env var AGENTLYS_MODEL)
 - `provider`: LLM provider ("openai", "anthropic", or custom provider class)
 - `use_tools_only`: Beta feature - agent only uses tools, no LLM calls
 - `mcp_servers`: List of MCP server connections
@@ -34,6 +35,7 @@ Autochat(
 ### Core Methods
 
 #### ask(message) -> Message
+
 Send a single message and get a response.
 
 ```python
@@ -42,6 +44,7 @@ print(response.content)
 ```
 
 #### ask_async(message) -> Message
+
 Async version of ask().
 
 ```python
@@ -49,6 +52,7 @@ response = await agent.ask_async("What is Python?")
 ```
 
 #### run_conversation(prompt) -> Generator[Message]
+
 Run a conversation as a generator, yielding each message.
 
 ```python
@@ -57,6 +61,7 @@ for message in agent.run_conversation("Help me code a web server"):
 ```
 
 #### run_conversation_async(prompt) -> AsyncGenerator[Message]
+
 Async version of run_conversation().
 
 ```python
@@ -67,6 +72,7 @@ async for message in agent.run_conversation_async("Help me code"):
 ### Tool Management
 
 #### add_function(func)
+
 Add a Python function as a tool.
 
 ```python
@@ -78,6 +84,7 @@ agent.add_function(calculate)
 ```
 
 #### add_tool(obj, name=None)
+
 Add a Python object/class instance as a tool.
 
 ```python
@@ -91,11 +98,12 @@ agent.add_tool(calc, "Calculator")
 
 ### Template Methods
 
-#### from_template(file_path) -> Autochat
+#### from_template(file_path) -> Agentlys
+
 Create an agent from a template file.
 
 ```python
-agent = Autochat.from_template("templates/coding_assistant.md")
+agent = Agentlys.from_template("templates/coding_assistant.md")
 ```
 
 ## Message Class
@@ -117,12 +125,15 @@ Message(
 ### Methods
 
 #### to_markdown() -> str
+
 Convert message to markdown format for display.
 
 #### to_terminal(display_image=False) -> str
+
 Convert message to terminal-friendly format.
 
 #### to_dict() -> dict
+
 Convert message to dictionary format.
 
 ## MessagePart Class
@@ -144,28 +155,29 @@ MessagePart(
 Available LLM providers:
 
 ```python
-from autochat import APIProvider
+from agentlys import APIProvider
 
 APIProvider.OPENAI              # OpenAI GPT models
-APIProvider.ANTHROPIC           # Anthropic Claude models  
+APIProvider.ANTHROPIC           # Anthropic Claude models
 APIProvider.OPENAI_FUNCTION_LEGACY  # Legacy OpenAI function calling
 ```
 
 ## Environment Variables
 
-- `AUTOCHAT_MODEL`: Default model to use
-- `AUTOCHAT_HOST`: Custom provider endpoint
-- `AUTOCHAT_OUTPUT_SIZE_LIMIT`: Maximum output size in characters (default: 4000)
+- `AGENTLYS_MODEL`: Default model to use
+- `AGENTLYS_HOST`: Custom provider endpoint
+- `AGENTLYS_OUTPUT_SIZE_LIMIT`: Maximum output size in characters (default: 4000)
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key
 
 ## Error Handling
 
 ### StopLoopException
+
 Raised to stop conversation loops.
 
 ```python
-from autochat.chat import StopLoopException
+from agentlys.chat import StopLoopException
 
 try:
     for message in agent.run_conversation("Hello"):
@@ -179,15 +191,15 @@ except StopLoopException:
 Create custom providers by extending `BaseProvider`:
 
 ```python
-from autochat.providers.base_provider import BaseProvider
+from agentlys.providers.base_provider import BaseProvider
 
 class MyCustomProvider(BaseProvider):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-    
+
     def create_completion(self, messages, **kwargs):
         # Implement your provider logic
         pass
 
-agent = Autochat(provider=MyCustomProvider)
+agent = Agentlys(provider=MyCustomProvider)
 ```

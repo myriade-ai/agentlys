@@ -1,5 +1,5 @@
 [project]
-name = "autochat"
+name = "agentlys"
 version = "0.19.1"
 description = "Small OpenAI/Anthropic library to support chat templates, and function calls."
 authors = [
@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/BenderV/autochat"
-Changelog = "https://github.com/BenderV/autochat/blob/master/CHANGELOG.md"
+Repository = "https://github.com/myriade-ai/agentlys"
+Changelog = "https://github.com/myriade-ai/agentlys/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.46.0"]
@@ -43,7 +43,7 @@ dist_path = "dist/"
 commit_message = "chore(release): bump version to {version}"
 
 [tool.uv.sources]
-autochat = { workspace = true }
+agentlys = { workspace = true }
 vcrpy = { git = "https://github.com/tysonholub/vcrpy.git", rev = "fix.httpx-async" }
 
 [build-system]

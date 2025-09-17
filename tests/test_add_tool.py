@@ -1,4 +1,4 @@
-from autochat.chat import Autochat
+from agentlys.chat import Agentlys
 
 
 class DummyTool:
@@ -17,7 +17,7 @@ class DummyTool:
 
 
 def test_add_tool():
-    agent = Autochat()
+    agent = Agentlys()
     tool_id = agent.add_tool(DummyTool)
 
     # Check if the tool was added correctly
@@ -39,7 +39,7 @@ def test_add_tool():
 
 
 def test_add_tool_with_custom_id():
-    agent = Autochat()
+    agent = Agentlys()
     custom_id = "custom_tool_id"
     tool_id = agent.add_tool(DummyTool(), tool_id=custom_id)
 
@@ -49,7 +49,7 @@ def test_add_tool_with_custom_id():
 
 
 def test_add_tool_instance():
-    agent = Autochat()
+    agent = Agentlys()
     tool_instance = DummyTool()
     tool_id = agent.add_tool(tool_instance)
 

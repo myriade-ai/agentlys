@@ -1,246 +1,254 @@
 interactions:
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
-      are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-      \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
-      {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
-      {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
-      [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
-      \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
-      FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
-      you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
-      is 343354 * 13243343214"}]}],"model":"o1-preview"}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMLD3wOwhMqq07lwc5tlyuH07bikc\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744664445,\n  \"model\": \"o1-preview-2024-09-12\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"```\\nCALLING FUNCTION: multiply\\n{\\n
-        \ \\\"arg1\\\": \\\"343354\\\",\\n  \\\"arg2\\\": \\\"13243343214\\\"\\n}\\n```\",\n
-        \       \"refusal\": null,\n        \"annotations\": []\n      },\n      \"finish_reason\":
-        \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 211,\n    \"completion_tokens\":
-        1261,\n    \"total_tokens\": 1472,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 1216,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
-      are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-      \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
-      {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
-      {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
-      [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
-      \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
-      FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
-      you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
-      is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\",
-      line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
-      \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\", line 340,
-      in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
-      multiply() got an unexpected keyword argument ''arg1''\n"}]}],"model":"o1-preview"}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMLDECp69KKcx79DIWqgwnYV7F0t7\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744664456,\n  \"model\": \"o1-preview-2024-09-12\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"I'm sorry for the error. Here's the
-        corrected function call:\\n\\n```\\nCALLING FUNCTION: multiply\\n{\\\"a\\\":
-        \\\"343354\\\", \\\"b\\\": \\\"13243343214\\\"}\\n```\",\n        \"refusal\":
-        null,\n        \"annotations\": []\n      },\n      \"finish_reason\": \"stop\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 381,\n    \"completion_tokens\":
-        1459,\n    \"total_tokens\": 1840,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 1408,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
-      are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-      \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
-      {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
-      {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
-      [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
-      \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
-      FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
-      you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
-      is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\",
-      line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
-      \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\", line 340,
-      in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
-      multiply() got an unexpected keyword argument ''arg1''\n"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"a\": \"343354\", \"b\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/tests/test_openai_function_shim.py\",
-      line 15, in multiply\n    return a * b\n           ~~^~~\n\nTypeError: can''t
-      multiply sequence by non-int of type ''str''"}]}],"model":"o1-preview"}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMLDScjApouLQe51n6u06MbXjV52e\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744664470,\n  \"model\": \"o1-preview-2024-09-12\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"CALLING FUNCTION: multiply\\n{\\\"a\\\":
-        343354, \\\"b\\\": 13243343214}\",\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\":
-        {\n    \"prompt_tokens\": 493,\n    \"completion_tokens\": 1013,\n    \"total_tokens\":
-        1506,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\":
-        0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\":
-        960,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n
-        \     \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
-      are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-      \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
-      {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
-      {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
-      [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
-      \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
-      FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
-      you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
-      is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\",
-      line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
-      \"/Users/smileos/Workspaces/catalys/autochat/src/autochat/chat.py\", line 340,
-      in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
-      multiply() got an unexpected keyword argument ''arg1''\n"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"a\": \"343354\", \"b\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
-      (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/autochat/tests/test_openai_function_shim.py\",
-      line 15, in multiply\n    return a * b\n           ~~^~~\n\nTypeError: can''t
-      multiply sequence by non-int of type ''str''"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
-      FUNCTION: multiply\n{\"a\": 343354, \"b\": 13243343214}\n"}]},{"role":"user","content":[{"type":"text","text":"4547154865899756"}]}],"model":"o1-preview"}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMLDcLxDIpl2KVlTy41PJ8RSWIg4o\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744664480,\n  \"model\": \"o1-preview-2024-09-12\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"The product of 343,354 and 13,243,343,214
-        is **4,547,154,865,899,756**.\",\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\":
-        {\n    \"prompt_tokens\": 546,\n    \"completion_tokens\": 775,\n    \"total_tokens\":
-        1321,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\":
-        0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\":
-        704,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n
-        \     \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
+        are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
+        {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
+        [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
+        \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
+        FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
+        you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
+        is 343354 * 13243343214"}]}],"model":"o1-preview"}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMLD3wOwhMqq07lwc5tlyuH07bikc\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744664445,\n  \"model\": \"o1-preview-2024-09-12\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": \"```\\nCALLING FUNCTION: multiply\\n{\\n
+          \ \\\"arg1\\\": \\\"343354\\\",\\n  \\\"arg2\\\": \\\"13243343214\\\"\\n}\\n```\",\n
+          \       \"refusal\": null,\n        \"annotations\": []\n      },\n      \"finish_reason\":
+          \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 211,\n    \"completion_tokens\":
+          1261,\n    \"total_tokens\": 1472,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+          0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+          {\n      \"reasoning_tokens\": 1216,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+          0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
+        are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
+        {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
+        [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
+        \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
+        FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
+        you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
+        is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\",
+        line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
+        \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\", line 340,
+        in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
+        multiply() got an unexpected keyword argument ''arg1''\n"}]}],"model":"o1-preview"}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMLDECp69KKcx79DIWqgwnYV7F0t7\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744664456,\n  \"model\": \"o1-preview-2024-09-12\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": \"I'm sorry for the error. Here's the
+          corrected function call:\\n\\n```\\nCALLING FUNCTION: multiply\\n{\\\"a\\\":
+          \\\"343354\\\", \\\"b\\\": \\\"13243343214\\\"}\\n```\",\n        \"refusal\":
+          null,\n        \"annotations\": []\n      },\n      \"finish_reason\": \"stop\"\n
+          \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 381,\n    \"completion_tokens\":
+          1459,\n    \"total_tokens\": 1840,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+          0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+          {\n      \"reasoning_tokens\": 1408,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+          0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
+        are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
+        {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
+        [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
+        \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
+        FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
+        you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
+        is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\",
+        line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
+        \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\", line 340,
+        in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
+        multiply() got an unexpected keyword argument ''arg1''\n"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"a\": \"343354\", \"b\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_openai_function_shim.py\",
+        line 15, in multiply\n    return a * b\n           ~~^~~\n\nTypeError: can''t
+        multiply sequence by non-int of type ''str''"}]}],"model":"o1-preview"}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMLDScjApouLQe51n6u06MbXjV52e\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744664470,\n  \"model\": \"o1-preview-2024-09-12\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": \"CALLING FUNCTION: multiply\\n{\\\"a\\\":
+          343354, \\\"b\\\": 13243343214}\",\n        \"refusal\": null,\n        \"annotations\":
+          []\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\":
+          {\n    \"prompt_tokens\": 493,\n    \"completion_tokens\": 1013,\n    \"total_tokens\":
+          1506,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\":
+          0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\":
+          960,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n
+          \     \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
+  - request:
+      body:
+        '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
+        are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
+        {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
+        [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
+        \"object\"\n    }\n  }\n]\n\nWhen you call a function, respond with:\n```\nCALLING
+        FUNCTION: <function_name>\n{\n  \"arg1\": \"...\",\n  \"arg2\": \"...\"\n}\n```\nIf
+        you do not need to call a function, just respond normally."}]},{"role":"user","content":[{"type":"text","text":"What
+        is 343354 * 13243343214"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"arg1\": \"343354\", \"arg2\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\",
+        line 367, in _call_function_and_build_message\n    content = await self._call_with_signature(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File
+        \"/Users/smileos/Workspaces/catalys/agentlys/src/agentlys/chat.py\", line 340,
+        in _call_with_signature\n    result = func(**kwargs)\n             ^^^^^^^^^^^^^^\nTypeError:
+        multiply() got an unexpected keyword argument ''arg1''\n"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"a\": \"343354\", \"b\": \"13243343214\"}\n"}]},{"role":"user","content":[{"type":"text","text":"Traceback
+        (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_openai_function_shim.py\",
+        line 15, in multiply\n    return a * b\n           ~~^~~\n\nTypeError: can''t
+        multiply sequence by non-int of type ''str''"}]},{"role":"assistant","content":[{"type":"text","text":"CALLING
+        FUNCTION: multiply\n{\"a\": 343354, \"b\": 13243343214}\n"}]},{"role":"user","content":[{"type":"text","text":"4547154865899756"}]}],"model":"o1-preview"}'
+      headers:
+        content-type:
+          - application/json
+        host:
+          - api.openai.com
+        x-stainless-read-timeout:
+          - "600"
+      method: POST
+      uri: https://api.openai.com/v1/chat/completions
+    response:
+      body:
+        string:
+          "{\n  \"id\": \"chatcmpl-BMLDcLxDIpl2KVlTy41PJ8RSWIg4o\",\n  \"object\":
+          \"chat.completion\",\n  \"created\": 1744664480,\n  \"model\": \"o1-preview-2024-09-12\",\n
+          \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+          \"assistant\",\n        \"content\": \"The product of 343,354 and 13,243,343,214
+          is **4,547,154,865,899,756**.\",\n        \"refusal\": null,\n        \"annotations\":
+          []\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\":
+          {\n    \"prompt_tokens\": 546,\n    \"completion_tokens\": 775,\n    \"total_tokens\":
+          1321,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\":
+          0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\":
+          704,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n
+          \     \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+          \"default\",\n  \"system_fingerprint\": \"fp_44031b8794\"\n}\n"
+      headers:
+        Connection:
+          - keep-alive
+        Content-Encoding:
+          - ""
+        Content-Type:
+          - application/json
+        Transfer-Encoding:
+          - chunked
+        X-Content-Type-Options:
+          - nosniff
+        access-control-expose-headers:
+          - X-Request-ID
+        alt-svc:
+          - h3=":443"; ma=86400
+        strict-transport-security:
+          - max-age=31536000; includeSubDomains; preload
+      status:
+        code: 200
+        message: OK
 version: 1

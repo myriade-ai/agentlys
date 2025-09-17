@@ -2,12 +2,12 @@ import json
 import os
 import typing
 
-from autochat.base import AutochatBase
-from autochat.model import Message, MessagePart
-from autochat.providers.base_provider import BaseProvider
-from autochat.providers.utils import FunctionCallParsingError, add_empty_function_result
+from agentlys.base import AgentlysBase
+from agentlys.model import Message, MessagePart
+from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.utils import FunctionCallParsingError, add_empty_function_result
 
-AUTOCHAT_HOST = os.getenv("AUTOCHAT_HOST")
+AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def from_openai_object(
@@ -128,14 +128,14 @@ def return_image_as_user_message(messages: list[Message]) -> list[Message]:
 
 
 class OpenAIProvider(BaseProvider):
-    def __init__(self, chat: AutochatBase, model: str, base_url: str = None):
+    def __init__(self, chat: AgentlysBase, model: str, base_url: str = None):
         from openai import OpenAI
 
         self.chat = chat
         self.model = model
         # Possibly set up openai.api_key, base_url, etc.
         self.client = OpenAI(
-            base_url=(AUTOCHAT_HOST if AUTOCHAT_HOST else "https://api.openai.com/v1"),
+            base_url=(AGENTLYS_HOST if AGENTLYS_HOST else "https://api.openai.com/v1"),
         )
 
     async def fetch_async(self, **kwargs) -> Message:

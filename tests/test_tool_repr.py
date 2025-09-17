@@ -1,6 +1,6 @@
 import unittest
 
-from autochat.chat import Autochat
+from agentlys.chat import Agentlys
 
 
 class MockTool:
@@ -18,7 +18,7 @@ class MockTool:
 
 class TestToolRepr(unittest.TestCase):
     def test_tool_repr_in_last_tools_states(self):
-        agent = Autochat(provider="openai")
+        agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
         class_name = mock_tool.__class__.__name__
         tool_id = agent.add_tool(mock_tool)
@@ -43,7 +43,7 @@ class TestToolRepr(unittest.TestCase):
         """
         We want to check that the last_tools_states is in the system last_message
         """
-        agent = Autochat(provider="openai")
+        agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
         class_name = mock_tool.__class__.__name__
         tool_id = agent.add_tool(mock_tool)
@@ -92,7 +92,7 @@ class TestToolRepr(unittest.TestCase):
         """
         We want to check that the last_tools_states is in the system messages
         """
-        agent = Autochat(provider="anthropic")
+        agent = Agentlys(provider="anthropic")
         mock_tool = MockTool("TestTool")
         class_name = mock_tool.__class__.__name__
         tool_id = agent.add_tool(mock_tool)

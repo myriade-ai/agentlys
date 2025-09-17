@@ -1,6 +1,6 @@
 # Best Practices for Building AI Agents
 
-This guide covers best practices for building robust, reliable AI agents with Autochat.
+This guide covers best practices for building robust, reliable AI agents with Agentlys.
 
 ## Agent Design Principles
 
@@ -10,10 +10,10 @@ Write specific, actionable instructions:
 
 ```python
 # ❌ Vague instruction
-agent = Autochat(instruction="Help with coding")
+agent = Agentlys(instruction="Help with coding")
 
 # ✅ Clear, specific instruction
-agent = Autochat(instruction="""
+agent = Agentlys(instruction="""
 You are a Python expert who helps with:
 1. Code review and optimization
 2. Debugging and error resolution
@@ -56,7 +56,7 @@ You are a senior developer agent with access to development tools.
 - Follow established patterns in the codebase
 """
 
-agent = Autochat(
+agent = Agentlys(
     instruction=DEVELOPER_INSTRUCTION,
     provider="anthropic",  # Recommended for complex workflows
     model="claude-3-5-sonnet-20241022"
@@ -194,7 +194,7 @@ Keep conversations focused and manage context effectively:
 ```python
 class ContextManagedAgent:
     def __init__(self):
-        self.agent = Autochat(
+        self.agent = Agentlys(
             instruction="You are a focused assistant",
             max_interactions=20  # Prevent runaway conversations
         )
@@ -231,7 +231,7 @@ class ContextManagedAgent:
 Implement smart stopping conditions:
 
 ```python
-class SmartAgent(Autochat):
+class SmartAgent(Agentlys):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.task_complete_indicators = [
@@ -537,7 +537,7 @@ from unittest.mock import Mock, patch
 
 class TestDeveloperAgent:
     def setup_method(self):
-        self.agent = Autochat(
+        self.agent = Agentlys(
             instruction="You are a test developer agent",
             provider="openai",  # Use cheaper model for testing
             model="gpt-5-mini"

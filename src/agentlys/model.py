@@ -342,7 +342,7 @@ class Message:
                         if part.image.image.format
                         else "png"
                     )
-                    file_name = f"autochat_image_{unique_id}.{file_format}"
+                    file_name = f"agentlys_image_{unique_id}.{file_format}"
                     file_path = os.path.join(tempfile.gettempdir(), file_name)
 
                     # Save the image to the temp file

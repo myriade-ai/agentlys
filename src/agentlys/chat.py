@@ -1,4 +1,4 @@
-"""AutoChat package."""
+"""Agentlys package."""
 
 __version__ = "0.4.1"
 
@@ -12,22 +12,21 @@ import typing
 import warnings
 from typing import Type
 
-from PIL import Image as PILImage
-
-from autochat.base import AutochatBase
-from autochat.model import Message
-from autochat.providers.base_provider import APIProvider, BaseProvider
-from autochat.providers.utils import get_provider_and_model
-from autochat.utils import (
+from agentlys.base import AgentlysBase
+from agentlys.model import Message
+from agentlys.providers.base_provider import APIProvider, BaseProvider
+from agentlys.providers.utils import get_provider_and_model
+from agentlys.utils import (
     csv_dumps,
     get_event_loop_or_create,
     inspect_schema,
     parse_chat_template,
 )
+from PIL import Image as PILImage
 
-AUTOCHAT_HOST = os.getenv("AUTOCHAT_HOST")
-AUTOCHAT_MODEL = os.getenv("AUTOCHAT_MODEL")
-OUTPUT_SIZE_LIMIT = int(os.getenv("AUTOCHAT_OUTPUT_SIZE_LIMIT", 4000))
+AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
+AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
+OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 4000))
 
 
 class StopLoopException(Exception):
@@ -43,7 +42,7 @@ def simple_response_default_callback(response: Message) -> Message:
     raise StopLoopException("Stopping the conversation after a simple response")
 
 
-class Autochat(AutochatBase):
+class Agentlys(AgentlysBase):
     def __llm__(self):
         return self.name  # If an agent is used as a tool, it must have a name
 
@@ -55,13 +54,13 @@ class Autochat(AutochatBase):
         messages: typing.Union[list[Message], None] = None,
         context: str = None,
         max_interactions: int = 100,
-        model=AUTOCHAT_MODEL,
+        model=AGENTLYS_MODEL,
         provider: str | Type[BaseProvider] = APIProvider.OPENAI,
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
     ) -> None:
         """
-        Initialize the Autochat instance.
+        Initialize the Agentlys instance.
         Args:
             use_tools_only: bool = False,
                 If True, the chat will only use tools and not the LLM.
@@ -212,7 +211,7 @@ class Autochat(AutochatBase):
         Add a MCP server to the agent instance.
         The MCP server will be used to call tools and resources.
         """
-        from autochat.mcp import fetch_mcp_server_resources, fetch_mcp_server_tools
+        from agentlys.mcp import fetch_mcp_server_resources, fetch_mcp_server_tools
 
         logging.warning("Experimental feature: MCP servers")
         tools_functions, schemas = await fetch_mcp_server_tools(mcp_server)

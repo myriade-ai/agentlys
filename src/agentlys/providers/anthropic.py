@@ -1,13 +1,12 @@
 import os
 
 import anthropic
+from agentlys.base import AgentlysBase
+from agentlys.model import Message, MessagePart
+from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.utils import add_empty_function_result
 
-from autochat.base import AutochatBase
-from autochat.model import Message, MessagePart
-from autochat.providers.base_provider import BaseProvider
-from autochat.providers.utils import add_empty_function_result
-
-AUTOCHAT_HOST = os.getenv("AUTOCHAT_HOST")
+AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def part_to_anthropic_dict(part: MessagePart) -> dict:
@@ -69,11 +68,11 @@ def message_to_anthropic_dict(message: Message) -> dict:
 
 
 class AnthropicProvider(BaseProvider):
-    def __init__(self, chat: AutochatBase, model: str):
+    def __init__(self, chat: AgentlysBase, model: str):
         self.model = model
         self.client = anthropic.Anthropic(
             default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-            base_url=AUTOCHAT_HOST if AUTOCHAT_HOST else "https://api.anthropic.com",
+            base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
         )
         self.chat = chat
 

@@ -3,9 +3,8 @@
 import os
 
 import pytest
+from agentlys import Agentlys, APIProvider
 from PIL import Image
-
-from autochat import APIProvider, Autochat
 
 img_path = os.path.join(os.path.dirname(__file__), "images", "mileage.jpg")
 
@@ -23,7 +22,7 @@ def read_image():
 )
 @pytest.mark.vcr
 def test_anthropic_callback_image(provider):
-    agent = Autochat(
+    agent = Agentlys(
         provider=provider,
     )
     agent.add_function(read_image)

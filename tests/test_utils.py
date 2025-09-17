@@ -2,8 +2,8 @@ import unittest
 
 from pydantic import BaseModel
 
-from autochat.model import Message
-from autochat.utils import inspect_schema, limit_data_size, parse_function
+from agentlys.model import Message
+from agentlys.utils import inspect_schema, limit_data_size, parse_function
 
 
 class TestLimitDataSizeUpdated(unittest.TestCase):

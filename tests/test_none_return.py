@@ -1,6 +1,5 @@
 import pytest
-
-from autochat import APIProvider, Autochat
+from agentlys import Agentlys, APIProvider
 
 
 def function_returning_none():
@@ -12,7 +11,7 @@ def function_returning_none():
 @pytest.mark.vcr
 def test_anthropic_none_return():
     """Test that a function returning None doesn't cause a crash with Anthropic."""
-    agent = Autochat(
+    agent = Agentlys(
         instruction="You are a helpful assistant that can call functions.",
         provider=APIProvider.ANTHROPIC,
     )
@@ -44,7 +43,7 @@ def test_anthropic_none_return():
 @pytest.mark.vcr
 def test_openai_none_return():
     """Test that a function returning None doesn't cause a crash with OpenAI."""
-    agent = Autochat(
+    agent = Agentlys(
         instruction="You are a helpful assistant that can call functions.",
         model="gpt-4o",
         provider=APIProvider.OPENAI,

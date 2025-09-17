@@ -1,6 +1,6 @@
 __pycache__/
-autochat.egg-info/
-autochat/__pycache__/
+agentlys.egg-info/
+agentlys/__pycache__/
 build/
 dist/
 .DS_Store

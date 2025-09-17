@@ -1,6 +1,6 @@
 # Tool Development Guide
 
-Tools are the key to building powerful AI agents with Autochat. This guide covers how to create effective tools that your AI agents can use.
+Tools are the key to building powerful AI agents with Agentlys. This guide covers how to create effective tools that your AI agents can use.
 
 ## Function-Based Tools
 
@@ -9,7 +9,7 @@ Tools are the key to building powerful AI agents with Autochat. This guide cover
 The simplest way to add tools is by decorating regular Python functions:
 
 ```python
-from autochat import Autochat
+from agentlys import Agentlys
 
 def get_current_time() -> str:
     """Get the current time in ISO format"""
@@ -28,7 +28,7 @@ def calculate_tip(bill_amount: float, tip_percentage: float = 15.0) -> float:
     """
     return bill_amount * (tip_percentage / 100)
 
-agent = Autochat()
+agent = Agentlys()
 agent.add_function(get_current_time)
 agent.add_function(calculate_tip)
 ```
@@ -66,7 +66,7 @@ def create_task(
 
 ### Async Function Tools
 
-Autochat supports async functions seamlessly:
+Agentlys supports async functions seamlessly:
 
 ```python
 import asyncio
@@ -83,7 +83,7 @@ async def process_data(data: List[str]) -> List[str]:
     await asyncio.sleep(0.1)  # Simulate async work
     return [item.upper() for item in data]
 
-agent = Autochat()
+agent = Agentlys()
 agent.add_function(fetch_url)
 agent.add_function(process_data)
 ```
@@ -118,7 +118,7 @@ class FileManager:
         return os.listdir(self.base_path)
 
 file_manager = FileManager("/tmp")
-agent = Autochat()
+agent = Agentlys()
 agent.add_tool(file_manager, "FileManager")
 ```
 
@@ -173,7 +173,7 @@ class DatabaseConnection:
         return False
 
 db = DatabaseConnection("data.db")
-agent = Autochat()
+agent = Agentlys()
 agent.add_tool(db, "Database")
 ```
 
@@ -370,7 +370,7 @@ def test_calculator_tool():
     assert calc.divide(10, 0) == {"error": "Cannot divide by zero"}
 
     # Test with agent
-    agent = Autochat()
+    agent = Agentlys()
     agent.add_tool(calc)
 
     response = agent.ask("What is 15 + 25?")

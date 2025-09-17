@@ -6,8 +6,8 @@ that don't support them yet in the API (ie. o1).
 import json
 import typing
 
-from autochat.model import Message
-from autochat.providers.openai import OpenAIProvider, parts_to_openai_dict
+from agentlys.model import Message
+from agentlys.providers.openai import OpenAIProvider, parts_to_openai_dict
 
 
 def parse_function_call_from_text(text: str):

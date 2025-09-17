@@ -1,25 +1,25 @@
 import unittest
 from unittest.mock import patch
 
-from autochat import Autochat, Message
-from autochat.providers.openai import OpenAIProvider
+from agentlys import Agentlys, Message
+from agentlys.providers.openai import OpenAIProvider
 
 
-class TestAutochat(unittest.TestCase):
-    def test_autochat_initialization(self):
-        agent = Autochat(instruction="Test instruction", provider="openai")
+class TestAgentlys(unittest.TestCase):
+    def test_agentlys_initialization(self):
+        agent = Agentlys(instruction="Test instruction", provider="openai")
         self.assertEqual(agent.instruction, "Test instruction")
         self.assertEqual(agent.provider.__class__, OpenAIProvider)
         # Instead of checking for a specific model, we'll just check if it's a string
         self.assertIsInstance(agent.model, str)
         self.assertTrue(len(agent.model) > 0)  # Ensure the model is not an empty string
 
-    def test_autochat_invalid_provider(self):
+    def test_agentlys_invalid_provider(self):
         with self.assertRaises(ValueError):
-            Autochat(provider="invalid_provider")
+            Agentlys(provider="invalid_provider")
 
     def test_add_function(self):
-        agent = Autochat()
+        agent = Agentlys()
 
         def test_function(arg1: str, arg2: int) -> str:
             return f"Received {arg1} and {arg2}"
@@ -33,7 +33,7 @@ class TestAutochat(unittest.TestCase):
         mock_fetch_openai.return_value = Message(
             role="assistant", content="Test response"
         )
-        agent = Autochat(provider="openai")
+        agent = Agentlys(provider="openai")
 
         response = agent.ask("Test question")
         self.assertEqual(response.role, "assistant")
@@ -45,7 +45,7 @@ class TestAutochat(unittest.TestCase):
         mock_fetch_openai.return_value = Message(
             role="assistant", content="Final response"
         )
-        agent = Autochat(provider="openai")
+        agent = Agentlys(provider="openai")
 
         responses = list(agent.run_conversation("Test question"))
         self.assertEqual(len(responses), 2)

@@ -1,6 +1,5 @@
 import pytest
-
-from autochat import APIProvider, Autochat
+from agentlys import Agentlys, APIProvider
 
 BOOKS = {
     "The Great Gatsby": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
@@ -30,7 +29,7 @@ TEST_CASES = [
 @pytest.mark.parametrize("provider, model", TEST_CASES)
 @pytest.mark.vcr
 def test_function_calling(provider: APIProvider, model: str):
-    agent = Autochat(
+    agent = Agentlys(
         instruction="You are a helpful assistant that can read books.",
         provider=provider,
         model=model,
