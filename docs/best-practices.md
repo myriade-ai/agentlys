@@ -59,7 +59,7 @@ You are a senior developer agent with access to development tools.
 agent = Agentlys(
     instruction=DEVELOPER_INSTRUCTION,
     provider="anthropic",  # Recommended for complex workflows
-    model="claude-3-5-sonnet-20241022"
+    model="claude-sonnet-4-20250514"
 )
 ```
 

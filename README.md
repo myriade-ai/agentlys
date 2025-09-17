@@ -12,7 +12,8 @@ A lightweight Python library for building AI agents. Turn any Python function or
 
 - Add functions: `agent.add_function(my_function)`
 - Add classes: `agent.add_tool(my_class_instance)`
-- Multiple providers: OpenAI, Anthropic, custom
+- MCP support
+- Multiple providers: OpenAI, Anthropic, ...
 - Async/await support
 - Image processing
 - Conversation streaming
@@ -20,23 +21,22 @@ A lightweight Python library for building AI agents. Turn any Python function or
 
 ## Real-World Example: Code Development Agent
 
-Agentlys excels at building development agents. Here's how [autocode](https://github.com/myriade-ai/autocode) uses agentlys to create an AI developer:
+Agentlys excels at building development agents. Here's how [agentlys-dev](https://github.com/myriade-ai/agentlys-dev) uses agentlys to create an AI developer:
 
 ```python
 from agentlys import Agentlys
-from autocode.code_editor import CodeEditor
-from autocode.terminal import Terminal
-from autocode.git import Git
+# pip install 'agentlys-tools[all]'
+from agentlys_tools.code_editor import CodeEditor
+from agentlys_tools.terminal import Terminal
 
 # Create a developer agent
 agent = Agentlys(
     instruction="""You are a developer agent equipped with tools to:
     1. Edit code files
     2. Run terminal commands
-    3. Manage git operations
-    4. Test and debug applications""",
+    3. Test and debug applications""",
     provider="anthropic",
-    model="claude-3-5-sonnet-latest",
+    model="claude-sonnet-4-20250514",
     name="Developer"
 )
 
@@ -46,9 +46,6 @@ agent.add_tool(code_editor)
 
 terminal = Terminal()
 agent.add_tool(terminal)
-
-git = Git()
-agent.add_tool(git)
 
 # The agent can now autonomously develop, test, and deploy code
 for message in agent.run_conversation("Create a FastAPI hello world app with tests"):
@@ -103,9 +100,9 @@ class FileManager:
         with open(path, 'w') as f:
             f.write(content)
 
-files = FileManager()
+file_manager = FileManager()
 agent = Agentlys()
-agent.add_tool(files)
+agent.add_tool(file_manager)
 
 # AI can now read/write files
 for msg in agent.run_conversation("Read config.json and update the port to 8080"):
@@ -158,7 +155,7 @@ export AGENTLYS_MODEL="claude-sonnet-4-20250514"  # or gpt-5-mini
 ## Use Cases
 
 - **🤖 AI Assistants**: Build conversational assistants with tool access
-- **🛠️ Development Agents**: Create agents that can code, test, and deploy (like autocode)
+- **🛠️ Development Agents**: Create agents that can code, test, and deploy (like [agentlys-dev](https://github.com/myriade-ai/agentlys-dev))
 - **📊 Data Analysis**: Agents that can query databases, generate reports, visualize data
 - **🌐 Web Automation**: Agents that interact with web APIs and services
 - **📋 Task Automation**: Automate complex workflows with AI decision-making
