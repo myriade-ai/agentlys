@@ -1,5 +1,47 @@
 # CHANGELOG
 
+
+## v0.19.2 (2025-09-17)
+
+### Bug Fixes
+
+- Build
+  ([`3c74e88`](https://github.com/myriade-ai/agentlys/commit/3c74e88035abf3b521a5e8c6c6ddcb8d2ee70896))
+
+### Build System
+
+- **deps**: Bump build from 1.2.2.post1 to 1.3.0
+  ([`e45baa0`](https://github.com/myriade-ai/agentlys/commit/e45baa009857fac75ff4d9054f599733e3249b8b))
+
+Bumps [build](https://github.com/pypa/build) from 1.2.2.post1 to 1.3.0. - [Release
+  notes](https://github.com/pypa/build/releases) -
+  [Changelog](https://github.com/pypa/build/blob/main/CHANGELOG.rst) -
+  [Commits](https://github.com/pypa/build/compare/1.2.2.post1...1.3.0)
+
+--- updated-dependencies: - dependency-name: build dependency-version: 1.3.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pytest-asyncio from 0.26.0 to 1.1.0
+  ([`9b3e527`](https://github.com/myriade-ai/agentlys/commit/9b3e52707311169f38810f23f801b6f3f7fb97d1))
+
+Bumps [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) from 0.26.0 to 1.1.0. -
+  [Release notes](https://github.com/pytest-dev/pytest-asyncio/releases) -
+  [Commits](https://github.com/pytest-dev/pytest-asyncio/compare/v0.26.0...v1.1.0)
+
+--- updated-dependencies: - dependency-name: pytest-asyncio dependency-version: 1.1.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+
 ## v0.19.1 (2025-08-30)
 
 ### Bug Fixes
@@ -18,9 +60,9 @@ Issue #68
   ([`c802483`](https://github.com/myriade-ai/agentlys/commit/c8024836bfdaaa831b08ad1d462fc78d9d61ed64))
 
 Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.57.1 to 0.64.0. -
-[Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
-[Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.57.1...v0.64.0)
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.57.1...v0.64.0)
 
 --- updated-dependencies: - dependency-name: anthropic dependency-version: 0.64.0
 
@@ -34,9 +76,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`c1b007f`](https://github.com/myriade-ai/agentlys/commit/c1b007f778e1cb650133628e0219162caae6fe28))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.100.0 to 1.101.0. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.100.0...v1.101.0)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.100.0...v1.101.0)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.101.0
 
@@ -50,9 +92,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`04d3e02`](https://github.com/myriade-ai/agentlys/commit/04d3e022e443800860b004df5682ace65f253a8e))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.95.1 to 1.100.0. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.95.1...v1.100.0)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.95.1...v1.100.0)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.100.0
 
@@ -66,9 +108,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`7f09c93`](https://github.com/myriade-ai/agentlys/commit/7f09c93d157db0cc3617a925e8087e24e8b1edf9))
 
 Bumps [pre-commit](https://github.com/pre-commit/pre-commit) from 4.2.0 to 4.3.0. - [Release
-notes](https://github.com/pre-commit/pre-commit/releases) -
-[Changelog](https://github.com/pre-commit/pre-commit/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/pre-commit/pre-commit/compare/v4.2.0...v4.3.0)
+  notes](https://github.com/pre-commit/pre-commit/releases) -
+  [Changelog](https://github.com/pre-commit/pre-commit/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/pre-commit/pre-commit/compare/v4.2.0...v4.3.0)
 
 --- updated-dependencies: - dependency-name: pre-commit dependency-version: 4.3.0
 
@@ -82,9 +124,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`5ea5983`](https://github.com/myriade-ai/agentlys/commit/5ea5983a2b7e61244bf5dd7dd74ceb42a8c10583))
 
 Bumps [pytest](https://github.com/pytest-dev/pytest) from 8.3.4 to 8.4.1. - [Release
-notes](https://github.com/pytest-dev/pytest/releases) -
-[Changelog](https://github.com/pytest-dev/pytest/blob/main/CHANGELOG.rst) -
-[Commits](https://github.com/pytest-dev/pytest/compare/8.3.4...8.4.1)
+  notes](https://github.com/pytest-dev/pytest/releases) -
+  [Changelog](https://github.com/pytest-dev/pytest/blob/main/CHANGELOG.rst) -
+  [Commits](https://github.com/pytest-dev/pytest/compare/8.3.4...8.4.1)
 
 --- updated-dependencies: - dependency-name: pytest dependency-version: 8.4.1
 
@@ -98,9 +140,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`ae9d5c4`](https://github.com/myriade-ai/agentlys/commit/ae9d5c4ce23ca6f08163a4a317916b6db0026344))
 
 Bumps [pytest-recording](https://github.com/kiwicom/pytest-recording) from 0.13.2 to 0.13.4. -
-[Release notes](https://github.com/kiwicom/pytest-recording/releases) -
-[Changelog](https://github.com/kiwicom/pytest-recording/blob/master/docs/changelog.rst) -
-[Commits](https://github.com/kiwicom/pytest-recording/compare/v0.13.2...v0.13.4)
+  [Release notes](https://github.com/kiwicom/pytest-recording/releases) -
+  [Changelog](https://github.com/kiwicom/pytest-recording/blob/master/docs/changelog.rst) -
+  [Commits](https://github.com/kiwicom/pytest-recording/compare/v0.13.2...v0.13.4)
 
 --- updated-dependencies: - dependency-name: pytest-recording dependency-version: 0.13.4
 
@@ -114,9 +156,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`77221e7`](https://github.com/myriade-ai/agentlys/commit/77221e78d54c4e5b7a772ef3617ffb43bfe854b8))
 
 Bumps [ruff](https://github.com/astral-sh/ruff) from 0.12.9 to 0.12.10. - [Release
-notes](https://github.com/astral-sh/ruff/releases) -
-[Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/astral-sh/ruff/compare/0.12.9...0.12.10)
+  notes](https://github.com/astral-sh/ruff/releases) -
+  [Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/astral-sh/ruff/compare/0.12.9...0.12.10)
 
 --- updated-dependencies: - dependency-name: ruff dependency-version: 0.12.10
 
@@ -130,9 +172,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`21d65a6`](https://github.com/myriade-ai/agentlys/commit/21d65a644021d5fbf583bcd7bb01e74ee06938b3))
 
 Bumps [ruff](https://github.com/astral-sh/ruff) from 0.8.3 to 0.12.9. - [Release
-notes](https://github.com/astral-sh/ruff/releases) -
-[Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/astral-sh/ruff/compare/0.8.3...0.12.9)
+  notes](https://github.com/astral-sh/ruff/releases) -
+  [Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/astral-sh/ruff/compare/0.8.3...0.12.9)
 
 --- updated-dependencies: - dependency-name: ruff dependency-version: 0.12.9
 
@@ -153,15 +195,17 @@ Signed-off-by: dependabot[bot] <support@github.com>
 - Update ref to claude model
   ([`accbc40`](https://github.com/myriade-ai/agentlys/commit/accbc406e224b1a86f049e53d5e9f8eb55311be8))
 
+
 ## v0.19.0 (2025-07-28)
 
 ### Features
 
-- Add agentlys_host support for anthropic
+- Add autochat_host support for anthropic
   ([`030b0be`](https://github.com/myriade-ai/agentlys/commit/030b0be6e4378329116065ac2201bbe70ac13ba1))
 
 - Support custom provider
   ([`93fc564`](https://github.com/myriade-ai/agentlys/commit/93fc56409e40cf532e5c559d0f311c297df65907))
+
 
 ## v0.18.2 (2025-07-20)
 
@@ -171,9 +215,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`6cacce7`](https://github.com/myriade-ai/agentlys/commit/6cacce74170ee07850043cf447a0d48a9ebf019b))
 
 Bumps [pydantic](https://github.com/pydantic/pydantic) from 2.10.3 to 2.11.7. - [Release
-notes](https://github.com/pydantic/pydantic/releases) -
-[Changelog](https://github.com/pydantic/pydantic/blob/main/HISTORY.md) -
-[Commits](https://github.com/pydantic/pydantic/compare/v2.10.3...v2.11.7)
+  notes](https://github.com/pydantic/pydantic/releases) -
+  [Changelog](https://github.com/pydantic/pydantic/blob/main/HISTORY.md) -
+  [Commits](https://github.com/pydantic/pydantic/compare/v2.10.3...v2.11.7)
 
 --- updated-dependencies: - dependency-name: pydantic dependency-version: 2.11.7
 
@@ -189,9 +233,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`4918b30`](https://github.com/myriade-ai/agentlys/commit/4918b30d7356a32191d855197a37399f784e9c5e))
 
 Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.46.0 to 0.51.0. -
-[Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
-[Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.46.0...v0.51.0)
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.46.0...v0.51.0)
 
 --- updated-dependencies: - dependency-name: anthropic dependency-version: 0.51.0
 
@@ -205,9 +249,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`3f0aee6`](https://github.com/myriade-ai/agentlys/commit/3f0aee684191c6943982fa143c2bde281f25348b))
 
 Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.51.0 to 0.54.0. -
-[Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
-[Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.51.0...v0.54.0)
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.51.0...v0.54.0)
 
 --- updated-dependencies: - dependency-name: anthropic dependency-version: 0.54.0
 
@@ -221,9 +265,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`de8b0ed`](https://github.com/myriade-ai/agentlys/commit/de8b0ed6db674024bf413c1b476fee9f2c72fc11))
 
 Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.54.0 to 0.57.1. -
-[Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
-[Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.54.0...v0.57.1)
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.54.0...v0.57.1)
 
 --- updated-dependencies: - dependency-name: anthropic dependency-version: 0.57.1
 
@@ -237,9 +281,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`9456b46`](https://github.com/myriade-ai/agentlys/commit/9456b46880ded1f35c7ce36e2208a31d39e5f90b))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.63.2 to 1.79.0. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.63.2...v1.79.0)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.63.2...v1.79.0)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.79.0
 
@@ -253,9 +297,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`64236be`](https://github.com/myriade-ai/agentlys/commit/64236be4aa5963aab15c266c4da149d5d6a46a56))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.79.0 to 1.86.0. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.79.0...v1.86.0)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.79.0...v1.86.0)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.86.0
 
@@ -269,9 +313,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`2d6acb7`](https://github.com/myriade-ai/agentlys/commit/2d6acb798b03e97a557f0b82056b06cd8a3f62d9))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.86.0 to 1.93.0. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.86.0...v1.93.0)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.86.0...v1.93.0)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.93.0
 
@@ -285,9 +329,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`580299e`](https://github.com/myriade-ai/agentlys/commit/580299ef924cd4510542c5418a8e322e0cc42453))
 
 Bumps [openai](https://github.com/openai/openai-python) from 1.93.0 to 1.95.1. - [Release
-notes](https://github.com/openai/openai-python/releases) -
-[Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
-[Commits](https://github.com/openai/openai-python/compare/v1.93.0...v1.95.1)
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.93.0...v1.95.1)
 
 --- updated-dependencies: - dependency-name: openai dependency-version: 1.95.1
 
@@ -301,9 +345,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`c708ef7`](https://github.com/myriade-ai/agentlys/commit/c708ef7cf6ddf009ec92abdf7536ea410aba392d))
 
 Bumps [pillow](https://github.com/python-pillow/Pillow) from 10.4.0 to 11.2.1. - [Release
-notes](https://github.com/python-pillow/Pillow/releases) -
-[Changelog](https://github.com/python-pillow/Pillow/blob/main/CHANGES.rst) -
-[Commits](https://github.com/python-pillow/Pillow/compare/10.4.0...11.2.1)
+  notes](https://github.com/python-pillow/Pillow/releases) -
+  [Changelog](https://github.com/python-pillow/Pillow/blob/main/CHANGES.rst) -
+  [Commits](https://github.com/python-pillow/Pillow/compare/10.4.0...11.2.1)
 
 --- updated-dependencies: - dependency-name: pillow dependency-version: 11.2.1
 
@@ -317,9 +361,9 @@ Signed-off-by: dependabot[bot] <support@github.com>
   ([`c4e4de9`](https://github.com/myriade-ai/agentlys/commit/c4e4de9b15942edf0fa96098ecfba9c0a06553e2))
 
 Bumps [pillow](https://github.com/python-pillow/Pillow) from 11.2.1 to 11.3.0. - [Release
-notes](https://github.com/python-pillow/Pillow/releases) -
-[Changelog](https://github.com/python-pillow/Pillow/blob/main/CHANGES.rst) -
-[Commits](https://github.com/python-pillow/Pillow/compare/11.2.1...11.3.0)
+  notes](https://github.com/python-pillow/Pillow/releases) -
+  [Changelog](https://github.com/python-pillow/Pillow/blob/main/CHANGES.rst) -
+  [Commits](https://github.com/python-pillow/Pillow/compare/11.2.1...11.3.0)
 
 --- updated-dependencies: - dependency-name: pillow dependency-version: 11.3.0
 
@@ -338,12 +382,14 @@ Signed-off-by: dependabot[bot] <support@github.com>
 - Add dependabot.yml
   ([`fe77c98`](https://github.com/myriade-ai/agentlys/commit/fe77c989bd334d6e694cefa493c4672499b58f92))
 
+
 ## v0.18.1 (2025-05-19)
 
 ### Bug Fixes
 
 - Fix pydantic version to avoid error
   ([`7f9c07c`](https://github.com/myriade-ai/agentlys/commit/7f9c07c8df5748ed5302941fbbc80461223a95fa))
+
 
 ## v0.18.0 (2025-04-22)
 
@@ -352,6 +398,7 @@ Signed-off-by: dependabot[bot] <support@github.com>
 - Add agent name
   ([`0305c04`](https://github.com/myriade-ai/agentlys/commit/0305c04115528b7a1257a961fa3e30c46d3b552a))
 
+
 ## v0.17.0 (2025-04-22)
 
 ### Features
@@ -359,12 +406,14 @@ Signed-off-by: dependabot[bot] <support@github.com>
 - Add classmethod support
   ([`5ef6e88`](https://github.com/myriade-ai/agentlys/commit/5ef6e88c4da856a888fcce218c42b39b8487523c))
 
+
 ## v0.16.0 (2025-04-22)
 
 ### Features
 
-- Switch to using **llm** for tool context if available
+- Switch to using __llm__ for tool context if available
   ([`1ed9989`](https://github.com/myriade-ai/agentlys/commit/1ed998912e2b507b5c13c57ef9af04e57d535ce8))
+
 
 ## v0.15.0 (2025-04-16)
 
@@ -374,6 +423,7 @@ Signed-off-by: dependabot[bot] <support@github.com>
   [`cc0fca2`](https://github.com/myriade-ai/agentlys/commit/cc0fca2bf88db7f6fb68f4ef93ca068a4c318474))
 
 OpenAI inspired interface that works for Open Source model
+
 
 ## v0.14.0 (2025-04-15)
 
@@ -398,7 +448,8 @@ OpenAI inspired interface that works for Open Source model
 
 ### Features
 
-- Switch openai from legacy functions to tools ([#25](https://github.com/myriade-ai/agentlys/pull/25),
+- Switch openai from legacy functions to tools
+  ([#25](https://github.com/myriade-ai/agentlys/pull/25),
   [`e8ab7da`](https://github.com/myriade-ai/agentlys/commit/e8ab7daa5d05659beafee385eea0cd3ce2d59b02))
 
 ### Testing
@@ -412,12 +463,14 @@ OpenAI inspired interface that works for Open Source model
 - Use pytest parametrize ([#24](https://github.com/myriade-ai/agentlys/pull/24),
   [`efbd63d`](https://github.com/myriade-ai/agentlys/commit/efbd63d71d83b2770e56dc6041b0246cb386ba87))
 
+
 ## v0.13.1 (2025-04-08)
 
 ### Bug Fixes
 
 - Yield in run_conversation
   ([`7930a0a`](https://github.com/myriade-ai/agentlys/commit/7930a0a6c07772d581c1b8c779591f0fbc2da431))
+
 
 ## v0.13.0 (2025-04-07)
 
@@ -433,12 +486,14 @@ Fetch tools & resources
 - Remove print
   ([`cacf05a`](https://github.com/myriade-ai/agentlys/commit/cacf05a54b3fc3a25db7818446fb4932fbb86309))
 
+
 ## v0.12.2 (2025-04-04)
 
 ### Bug Fixes
 
 - Ruff
   ([`208ec1a`](https://github.com/myriade-ai/agentlys/commit/208ec1a96a3d3d7d9d491a06495ec29f97895ee2))
+
 
 ## v0.12.1 (2025-04-03)
 
@@ -452,12 +507,14 @@ Fetch tools & resources
 - About async
   ([`27923e7`](https://github.com/myriade-ai/agentlys/commit/27923e721b9cb336c036cb46c7552a213323f869))
 
+
 ## v0.12.0 (2025-04-02)
 
 ### Features
 
 - Add async methods
   ([`28acdad`](https://github.com/myriade-ai/agentlys/commit/28acdadcd910e2e0b37d0505598f01887fa8e43b))
+
 
 ## v0.11.0 (2025-03-25)
 
@@ -496,12 +553,14 @@ breaking change 😨
 - Add use_tools_only
   ([`2f59e26`](https://github.com/myriade-ai/agentlys/commit/2f59e26779f74fc7c1e9a402d7f0909d423ccf84))
 
+
 ## v0.10.2 (2025-03-09)
 
 ### Bug Fixes
 
 - Handle function_result if they return None
   ([`0d3b92f`](https://github.com/myriade-ai/agentlys/commit/0d3b92f055aae2ea3240a798acd3de72f5600c35))
+
 
 ## v0.10.1 (2025-03-08)
 
@@ -515,12 +574,14 @@ breaking change 😨
 - Update uv.lock
   ([`a221f18`](https://github.com/myriade-ai/agentlys/commit/a221f1834736cbf33e2c87bff04c8a30b90daf13))
 
+
 ## v0.10.0 (2025-02-27)
 
 ### Features
 
 - Rework last tools states
   ([`5e860ee`](https://github.com/myriade-ai/agentlys/commit/5e860ee0873c1870e1ba38d97a6b82f756e9956d))
+
 
 ## v0.9.3 (2025-02-26)
 
@@ -534,12 +595,14 @@ breaking change 😨
 - Upgrade version
   ([`fb8a234`](https://github.com/myriade-ai/agentlys/commit/fb8a23454cd99091a2392dafe475f9c06b36d653))
 
+
 ## v0.9.2 (2025-02-26)
 
 ### Bug Fixes
 
 - Order of yield message
   ([`a5f42db`](https://github.com/myriade-ai/agentlys/commit/a5f42dbd2c6c1b3784d894da82d01b9189cbf20f))
+
 
 ## v0.9.1 (2025-02-26)
 
@@ -556,6 +619,7 @@ breaking change 😨
 - Switch to sonnet 3-7 by default
   ([`4cd667e`](https://github.com/myriade-ai/agentlys/commit/4cd667ee436230b74d166fb32d7ad09224388216))
 
+
 ## v0.9.0 (2025-02-24)
 
 ### Features
@@ -565,6 +629,7 @@ breaking change 😨
 
 support from_response and args in description
 
+
 ## v0.8.0 (2025-02-20)
 
 ### Features
@@ -572,12 +637,14 @@ support from_response and args in description
 - **dependencies**: Upgrade anthropic
   ([`dd66fc3`](https://github.com/myriade-ai/agentlys/commit/dd66fc339aafcd49dc9da7a29c4fee980fdf4012))
 
+
 ## v0.7.0 (2025-02-20)
 
 ### Features
 
 - **dependencies**: Upgrade openai
   ([`e3d1e48`](https://github.com/myriade-ai/agentlys/commit/e3d1e483319a08f62ce8416fbc9a94b4e7907ffd))
+
 
 ## v0.6.0 (2025-02-20)
 
@@ -595,6 +662,7 @@ And add small CONTRIBUTE.md file
 
 - **dependencies**: Clean lock file
   ([`46fa7ab`](https://github.com/myriade-ai/agentlys/commit/46fa7ab522d6d77940eac14ea2eabdf4be853cdb))
+
 
 ## v0.5.0 (2025-01-09)
 
@@ -626,12 +694,14 @@ And add small CONTRIBUTE.md file
 - **model**: Add support for function in o1
   ([`8672f20`](https://github.com/myriade-ai/agentlys/commit/8672f20e2b4b8b72516a72432d283f76254ed851))
 
+
 ## v0.4.1 (2024-12-27)
 
 ### Bug Fixes
 
 - **workflow**: Version
   ([`1413ceb`](https://github.com/myriade-ai/agentlys/commit/1413ceb70fe93daa0902c5fca5e6b6bdce5d42a1))
+
 
 ## v0.4.0 (2024-12-27)
 
@@ -689,6 +759,7 @@ And add small CONTRIBUTE.md file
 - **workflow**: Add ruff
   ([`29d90ea`](https://github.com/myriade-ai/agentlys/commit/29d90ea3003831483fd7e51f0602e45b5f8ba999))
 
+
 ## v0.3.12 (2024-12-15)
 
 ### Bug Fixes
@@ -700,6 +771,7 @@ And add small CONTRIBUTE.md file
 
 - Bump version to 0.3.12
   ([`32230ed`](https://github.com/myriade-ai/agentlys/commit/32230ed20e47f47f931eb3d60c12110d3d795d33))
+
 
 ## v0.3.11 (2024-12-15)
 
@@ -713,6 +785,7 @@ And add small CONTRIBUTE.md file
 - Bump version to 0.3.11
   ([`c3e7063`](https://github.com/myriade-ai/agentlys/commit/c3e7063bd9f06c2f463450cf9eaa34b623d72773))
 
+
 ## v0.3.10 (2024-12-15)
 
 ### Bug Fixes
@@ -725,6 +798,7 @@ And add small CONTRIBUTE.md file
 - Bump version to 0.3.10
   ([`b77bb13`](https://github.com/myriade-ai/agentlys/commit/b77bb1350f8b94d51bdd4590709017429eefbd45))
 
+
 ## v0.3.9 (2024-12-15)
 
 ### Bug Fixes
@@ -734,6 +808,7 @@ And add small CONTRIBUTE.md file
 
 - **readme**: Small fix for semantic release
   ([`1b01b09`](https://github.com/myriade-ai/agentlys/commit/1b01b09b9fde5558a383cc0214d07971f0ba1e3f))
+
 
 ## v0.0.1 (2024-12-14)
 
@@ -752,6 +827,7 @@ And add small CONTRIBUTE.md file
 
 - **github-action**: Try to make semantic release work
   ([`9fa9b4a`](https://github.com/myriade-ai/agentlys/commit/9fa9b4aade978d5124bc8b2ef812d8761b644ac7))
+
 
 ## v0.0.0 (2024-12-14)
 
