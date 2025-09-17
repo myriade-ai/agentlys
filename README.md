@@ -77,6 +77,10 @@ pip install 'agentlys[mcp]'
 
 ### Functions
 
+Turn regular Python functions into tools by using `add_function()`
+
+- Methods docstring, args and return type will be used to generate the tool description.
+
 ```python
 from agentlys import Agentlys
 
@@ -90,9 +94,23 @@ agent.ask("What's the weather in Tokyo?")
 
 ### Classes (the killer feature)
 
+Turn entire classes into tools by using `add_tool()`
+
+- Methods docstring, args and return type will be used to generate the tool description.
+- \_\_llm\_\_ method will be used to give AI the last state of the tool at each interaction.
+
 ```python
+import os
+
 class FileManager:
+    def __llm__(self):
+        return "Files:\n" + "\n".join(os.listdir(self.directory))
+
     def read_file(self, path: str) -> str:
+        """Read a file
+        Args:
+            path: Path is relative to the directory or absolute
+        """
         with open(path) as f:
             return f.read()
 
