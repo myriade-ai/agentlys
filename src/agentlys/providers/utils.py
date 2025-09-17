@@ -1,5 +1,5 @@
 import os
-from typing import Type
+from typing import Type, Union
 
 from agentlys.model import Message
 from agentlys.providers.base_provider import APIProvider, BaseProvider
@@ -18,7 +18,7 @@ class FunctionCallParsingError(Exception):
 def get_provider_and_model(  # TODO: get_provider_and_model ?
     # chat: Agentlys, # TODO: make AgentlysBase ?
     chat,
-    provider_name: str | Type[BaseProvider] = None,
+    provider_name: Union[str, Type[BaseProvider]] = None,
     model: str = None,
 ) -> list[str, BaseProvider]:  # TODO: rename
     """

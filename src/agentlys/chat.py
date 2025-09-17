@@ -10,7 +10,9 @@ import os
 import traceback
 import typing
 import warnings
-from typing import Type
+from typing import Type, Union
+
+from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message
@@ -22,7 +24,6 @@ from agentlys.utils import (
     inspect_schema,
     parse_chat_template,
 )
-from PIL import Image as PILImage
 
 AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
@@ -55,7 +56,7 @@ class Agentlys(AgentlysBase):
         context: str = None,
         max_interactions: int = 100,
         model=AGENTLYS_MODEL,
-        provider: str | Type[BaseProvider] = APIProvider.OPENAI,
+        provider: Union[str, Type[BaseProvider]] = APIProvider.OPENAI,
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
     ) -> None:
