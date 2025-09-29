@@ -71,7 +71,9 @@ class AnthropicProvider(BaseProvider):
     def __init__(self, chat: AgentlysBase, model: str):
         self.model = model
         self.client = anthropic.Anthropic(
-            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+            default_headers={
+                "anthropic-beta": "prompt-caching-2024-07-31,context-1m-2025-08-07"
+            },
             base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
         )
         self.chat = chat
