@@ -27,7 +27,7 @@ from agentlys.utils import (
 
 AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
-OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 4000))
+OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
 
 class StopLoopException(Exception):
