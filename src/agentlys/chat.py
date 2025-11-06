@@ -283,13 +283,13 @@ class Agentlys(AgentlysBase):
                         formatted_content.append(str(item))
                     else:
                         raise ValueError(f"Invalid item type: {type(item)}")
-            formatted_content = "\n".join(formatted_content)
-            # Limit the size of the content
-            if len(formatted_content) > OUTPUT_SIZE_LIMIT:
-                formatted_content = (
-                    formatted_content[:OUTPUT_SIZE_LIMIT]
-                    + f"\n... ({len(formatted_content)} characters)"
-                )
+                formatted_content = "\n".join(formatted_content)
+                # Limit the size of the content
+                if len(formatted_content) > OUTPUT_SIZE_LIMIT:
+                    formatted_content = (
+                        formatted_content[:OUTPUT_SIZE_LIMIT]
+                        + f"\n... ({len(formatted_content)} characters)"
+                    )
         elif isinstance(content, dict):
             content_dump = json.dumps(content)
             if len(content_dump) > OUTPUT_SIZE_LIMIT:
