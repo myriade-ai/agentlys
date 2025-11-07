@@ -1,14 +1,76 @@
 # CHANGELOG
 
 
-## v0.19.2 (2025-09-17)
+## v0.19.2 (2025-11-07)
 
 ### Bug Fixes
 
 - Build
   ([`3c74e88`](https://github.com/myriade-ai/agentlys/commit/3c74e88035abf3b521a5e8c6c6ddcb8d2ee70896))
 
+- Csv callback format
+  ([`55d0056`](https://github.com/myriade-ai/agentlys/commit/55d005634c06b4c5cb1c93ae3833be5a2811df7e))
+
+- Make autochat python 3.9 compatible
+  ([`b0ac983`](https://github.com/myriade-ai/agentlys/commit/b0ac9839fbee31b0b4e2b5a06915638f1b8f3955))
+
 ### Build System
+
+- Change default for output size
+  ([`90ddeb4`](https://github.com/myriade-ai/agentlys/commit/90ddeb43b32323b98ef6e6ce7d96a7b02632eff0))
+
+It's almost 2026.
+
+- Clean pytest cmd
+  ([`9c2f181`](https://github.com/myriade-ai/agentlys/commit/9c2f181dfd414cd79595566f02a8da67e45efe4a))
+
+- **deps**: Bump anthropic from 0.64.0 to 0.67.0
+  ([`c6106f8`](https://github.com/myriade-ai/agentlys/commit/c6106f85d171350da5e34e5b0612fb8d3fce2fe3))
+
+Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.64.0 to 0.67.0. -
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.64.0...v0.67.0)
+
+--- updated-dependencies: - dependency-name: anthropic dependency-version: 0.67.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump anthropic from 0.68.0 to 0.68.1
+  ([`a57cd02`](https://github.com/myriade-ai/agentlys/commit/a57cd024f1993600a6a551b1a14c2f7e664c3249))
+
+Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.68.0 to 0.68.1. -
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.68.0...v0.68.1)
+
+--- updated-dependencies: - dependency-name: anthropic dependency-version: 0.68.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump anthropic from 0.68.1 to 0.71.0
+  ([`5d7885f`](https://github.com/myriade-ai/agentlys/commit/5d7885fb24526df7e762d0cdbaf371eef688e8da))
+
+Bumps [anthropic](https://github.com/anthropics/anthropic-sdk-python) from 0.68.1 to 0.71.0. -
+  [Release notes](https://github.com/anthropics/anthropic-sdk-python/releases) -
+  [Changelog](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/anthropics/anthropic-sdk-python/compare/v0.68.1...v0.71.0)
+
+--- updated-dependencies: - dependency-name: anthropic dependency-version: 0.71.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
 
 - **deps**: Bump build from 1.2.2.post1 to 1.3.0
   ([`e45baa0`](https://github.com/myriade-ai/agentlys/commit/e45baa009857fac75ff4d9054f599733e3249b8b))
@@ -26,6 +88,118 @@ update-type: version-update:semver-minor ...
 
 Signed-off-by: dependabot[bot] <support@github.com>
 
+- **deps**: Bump openai from 1.101.0 to 1.107.3
+  ([`8378d75`](https://github.com/myriade-ai/agentlys/commit/8378d7598ad26c280659da5c565708456ab10cdd))
+
+Bumps [openai](https://github.com/openai/openai-python) from 1.101.0 to 1.107.3. - [Release
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.101.0...v1.107.3)
+
+--- updated-dependencies: - dependency-name: openai dependency-version: 1.107.3
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump openai from 1.107.3 to 1.109.1
+  ([`d5d8c41`](https://github.com/myriade-ai/agentlys/commit/d5d8c41a10d1ca474be73950a49484a2348838d7))
+
+Bumps [openai](https://github.com/openai/openai-python) from 1.107.3 to 1.109.1. - [Release
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.107.3...v1.109.1)
+
+--- updated-dependencies: - dependency-name: openai dependency-version: 1.109.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump openai from 1.109.1 to 2.5.0
+  ([`e27249b`](https://github.com/myriade-ai/agentlys/commit/e27249ba9d2a99a2debab638c65a97480cd70eb4))
+
+Bumps [openai](https://github.com/openai/openai-python) from 1.109.1 to 2.5.0. - [Release
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v1.109.1...v2.5.0)
+
+--- updated-dependencies: - dependency-name: openai dependency-version: 2.5.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump openai from 2.5.0 to 2.6.1
+  ([`e9aac59`](https://github.com/myriade-ai/agentlys/commit/e9aac59371c0c2839ba30167dde19fd207e0a912))
+
+Bumps [openai](https://github.com/openai/openai-python) from 2.5.0 to 2.6.1. - [Release
+  notes](https://github.com/openai/openai-python/releases) -
+  [Changelog](https://github.com/openai/openai-python/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/openai/openai-python/compare/v2.5.0...v2.6.1)
+
+--- updated-dependencies: - dependency-name: openai dependency-version: 2.6.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pydantic from 2.11.7 to 2.11.9
+  ([`1b0c040`](https://github.com/myriade-ai/agentlys/commit/1b0c040f9b9dd590fac6fea8f983be8fb93d9643))
+
+Bumps [pydantic](https://github.com/pydantic/pydantic) from 2.11.7 to 2.11.9. - [Release
+  notes](https://github.com/pydantic/pydantic/releases) -
+  [Changelog](https://github.com/pydantic/pydantic/blob/v2.11.9/HISTORY.md) -
+  [Commits](https://github.com/pydantic/pydantic/compare/v2.11.7...v2.11.9)
+
+--- updated-dependencies: - dependency-name: pydantic dependency-version: 2.11.9
+
+dependency-type: direct:production
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pydantic from 2.11.9 to 2.12.3
+  ([`8018abf`](https://github.com/myriade-ai/agentlys/commit/8018abfdaddfbe2a86183c166d678dbeeb351732))
+
+Bumps [pydantic](https://github.com/pydantic/pydantic) from 2.11.9 to 2.12.3. - [Release
+  notes](https://github.com/pydantic/pydantic/releases) -
+  [Changelog](https://github.com/pydantic/pydantic/blob/main/HISTORY.md) -
+  [Commits](https://github.com/pydantic/pydantic/compare/v2.11.9...v2.12.3)
+
+--- updated-dependencies: - dependency-name: pydantic dependency-version: 2.12.3
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pytest from 8.4.1 to 8.4.2
+  ([`ca0818a`](https://github.com/myriade-ai/agentlys/commit/ca0818a1bc1094de05c1ab0f3f28d373e7fee09e))
+
+Bumps [pytest](https://github.com/pytest-dev/pytest) from 8.4.1 to 8.4.2. - [Release
+  notes](https://github.com/pytest-dev/pytest/releases) -
+  [Changelog](https://github.com/pytest-dev/pytest/blob/main/CHANGELOG.rst) -
+  [Commits](https://github.com/pytest-dev/pytest/compare/8.4.1...8.4.2)
+
+--- updated-dependencies: - dependency-name: pytest dependency-version: 8.4.2
+
+dependency-type: direct:production
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
 - **deps**: Bump pytest-asyncio from 0.26.0 to 1.1.0
   ([`9b3e527`](https://github.com/myriade-ai/agentlys/commit/9b3e52707311169f38810f23f801b6f3f7fb97d1))
 
@@ -40,6 +214,93 @@ dependency-type: direct:production
 update-type: version-update:semver-major ...
 
 Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pytest-asyncio from 1.1.0 to 1.2.0
+  ([`046d0e5`](https://github.com/myriade-ai/agentlys/commit/046d0e56a554e1409eb00adcd0d6a9c0f6a75374))
+
+Bumps [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) from 1.1.0 to 1.2.0. - [Release
+  notes](https://github.com/pytest-dev/pytest-asyncio/releases) -
+  [Commits](https://github.com/pytest-dev/pytest-asyncio/compare/v1.1.0...v1.2.0)
+
+--- updated-dependencies: - dependency-name: pytest-asyncio dependency-version: 1.2.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump ruff from 0.12.10 to 0.13.1
+  ([`6fec173`](https://github.com/myriade-ai/agentlys/commit/6fec1731e0c57e0668059848c7740fdd0124e354))
+
+Bumps [ruff](https://github.com/astral-sh/ruff) from 0.12.10 to 0.13.1. - [Release
+  notes](https://github.com/astral-sh/ruff/releases) -
+  [Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/astral-sh/ruff/compare/0.12.10...0.13.1)
+
+--- updated-dependencies: - dependency-name: ruff dependency-version: 0.13.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump ruff from 0.13.2 to 0.14.1
+  ([`4e19b64`](https://github.com/myriade-ai/agentlys/commit/4e19b64a53c0652f66130806320fa103ee426023))
+
+Bumps [ruff](https://github.com/astral-sh/ruff) from 0.13.2 to 0.14.1. - [Release
+  notes](https://github.com/astral-sh/ruff/releases) -
+  [Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/astral-sh/ruff/compare/0.13.2...0.14.1)
+
+--- updated-dependencies: - dependency-name: ruff dependency-version: 0.14.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump ruff from 0.14.1 to 0.14.2
+  ([`323aa57`](https://github.com/myriade-ai/agentlys/commit/323aa57a8ae5098b2325a35f8b7a24b8a74aefef))
+
+Bumps [ruff](https://github.com/astral-sh/ruff) from 0.14.1 to 0.14.2. - [Release
+  notes](https://github.com/astral-sh/ruff/releases) -
+  [Changelog](https://github.com/astral-sh/ruff/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/astral-sh/ruff/compare/0.14.1...0.14.2)
+
+--- updated-dependencies: - dependency-name: ruff dependency-version: 0.14.2
+
+dependency-type: direct:production
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump twine from 6.1.0 to 6.2.0
+  ([`b3fd175`](https://github.com/myriade-ai/agentlys/commit/b3fd1758284cae02995a1ad02bc23a31ff4d1a3d))
+
+Bumps [twine](https://github.com/pypa/twine) from 6.1.0 to 6.2.0. - [Release
+  notes](https://github.com/pypa/twine/releases) -
+  [Changelog](https://github.com/pypa/twine/blob/main/docs/changelog.rst) -
+  [Commits](https://github.com/pypa/twine/compare/6.1.0...6.2.0)
+
+--- updated-dependencies: - dependency-name: twine dependency-version: 6.2.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+### Documentation
+
+- Update
+  ([`14d01e4`](https://github.com/myriade-ai/agentlys/commit/14d01e4365b927aad395f598a9a9f44c3a2f2270))
+
+- Update README
+  ([`3a37000`](https://github.com/myriade-ai/agentlys/commit/3a370004d626c43ab538bf92ffe548a13bd0b91f))
 
 
 ## v0.19.1 (2025-08-30)
