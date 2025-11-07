@@ -1,7 +1,7 @@
 [project]
 name = "agentlys"
-version = "0.19.2"
-description = "Small OpenAI/Anthropic library to support chat templates, and function calls."
+version = "0.20.1"
+description = "Lightweight AI agent library. Turn Python functions/classes into AI tools instantly."
 authors = [
     {name = "Benjamin Derville", email = "benderville@gmail.com"}
 ]
@@ -28,6 +28,9 @@ all = [
     "openai>=1.63.2",
     "mcp>=1.6.0; python_version >= '3.10'",
 ]
+build = [
+    "uv~=0.9.5",
+]
 
 [tool.semantic_release]
 version_source = "commit"
@@ -37,10 +40,14 @@ version_toml = [
 branch = "master"
 upload_to_pypi = false
 upload_to_release = true
-build_command = "pip install build && python -m build"
+build_command = """
+    uv lock --upgrade-package "$PACKAGE_NAME"
+    git add uv.lock
+"""
 changelog_file = "CHANGELOG.md"
 dist_path = "dist/"
 commit_message = "chore(release): bump version to {version}"
+
 
 [tool.uv.sources]
 agentlys = { workspace = true }
