@@ -67,14 +67,20 @@ def message_to_anthropic_dict(message: Message) -> dict:
     return res
 
 
+DEFAULT_MAX_TOKENS = int(os.getenv("ANTHROPIC_MAX_TOKENS", "10000"))
+
+
 class AnthropicProvider(BaseProvider):
-    def __init__(self, chat: AgentlysBase, model: str):
+    def __init__(
+        self, chat: AgentlysBase, model: str, max_tokens: int | None = None
+    ):
         self.model = model
         self.client = anthropic.Anthropic(
             default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
             base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
         )
         self.chat = chat
+        self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
 
     async def fetch_async(self, **kwargs):
         messages = self.prepare_messages(
@@ -203,7 +209,7 @@ class AnthropicProvider(BaseProvider):
             model=self.model,
             messages=messages,
             tools=tools,
-            max_tokens=10000,
+            max_tokens=self.max_tokens,
             **kwargs,
         )
         res_dict = res.to_dict()
