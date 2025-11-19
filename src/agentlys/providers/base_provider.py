@@ -11,6 +11,7 @@ class APIProvider(Enum):
     OPENAI_FUNCTION_LEGACY = "openai_function_legacy"
     OPENAI_FUNCTION_SHIM = "openai_function_shim"
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
     DEFAULT = "default"
 
 
