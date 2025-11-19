@@ -45,6 +45,13 @@ from agentlys.providers.gemini import (
     parts_to_gemini_dict,
 )
 
+# Helper for AsyncMock if not available (e.g. older Python/unittest.mock)
+if not hasattr(MagicMock, "assert_awaited_once"):
+
+    class AsyncMock(MagicMock):
+        async def __call__(self, *args, **kwargs):
+            return super(AsyncMock, self).__call__(*args, **kwargs)
+
 
 @pytest.fixture
 def mock_chat_base(tmp_path):
@@ -538,57 +545,3 @@ async def test_fetch_async_no_candidates(
         "HARM_CATEGORY_SEXUAL: BLOCK_LOW_AND_ABOVE" in result_message.content
     )  # Check for enum names
     assert result_message.id is not None
-
-
-# Helper for AsyncMock if not available (e.g. older Python/unittest.mock)
-if not hasattr(MagicMock, "assert_awaited_once"):
-
-    class AsyncMock(MagicMock):
-        async def __call__(self, *args, **kwargs):
-            return super(AsyncMock, self).__call__(*args, **kwargs)
-
-# This is a basic structure. More detailed assertions and edge cases can be added.
-# For example, testing different combinations of parameters for GenerationConfig,
-# more complex schema conversions, and different orderings of parts in Gemini responses.
-# Also, the mocking of google.generativeai.types might need to be more precise
-# if the SUT relies on specific attributes or methods of those type instances beyond basic data holding.
-# For instance, if `GeminiSchema` objects created by `_agentlys_schema_to_gemini_schema`
-# were then used in some logic that calls their methods, those methods would also need mocking on the mock `GeminiSchema`.
-# However, here they are primarily data containers passed to `FunctionDeclaration`.
-
-# To make GeminiSDKType.OBJECT etc. work, they need to be proper enum members.
-# Actual google.generativeai.types.Type might be an enum.
-# For the purpose of this test, we can mock them if direct comparison is needed,
-# or ensure that the SUT code uses them correctly (e.g. by checking the string value if that's what's used).
-# The current _agentlys_schema_to_gemini_schema uses getattr(GeminiSDKType, gemini_type_str.upper(), ...),
-# so the mock needs to support that, or we use real GeminiSDKType if available and simple.
-# For the test, `GeminiSDKType.STRING` etc. are used directly, assuming they are valid references.
-# If `GeminiSDKType` is an enum, `GeminiSDKType.STRING` is an enum member, not a string "STRING".
-# The test `test_agentlys_schema_to_gemini_object` checks `gemini_schema.properties["location"].type == GeminiSDKType.STRING`
-# This implies GeminiSDKType.STRING should be the actual enum member, not a string.
-# The `google.generativeai.types` are imported, so this should work if they behave like enums or comparable constants.
-
-# Correcting mock for GeminiSDKType if it's an enum
-# If GeminiSDKType is an enum:
-# GeminiSDKType.STRING would be something like <Type.STRING: 1>
-# The SUT uses getattr(GeminiSDKType, gemini_type_str.upper(), ...)
-# This means GeminiSDKType needs to have attributes STRING, OBJECT etc.
-# The actual `google.generativeai.types.Type` is indeed an enum.
-
-# For PromptFeedback.BlockReason.SAFETY and HarmCategory / HarmBlockThreshold,
-# using the actual enum members from the library is best.
-# The mocks are defined as:
-# mock_prompt_feedback.block_reason = PromptFeedback.BlockReason.SAFETY (Correct)
-# mock_prompt_feedback.safety_ratings = [Mock(category=HarmCategory.HARM_CATEGORY_SEXUAL, probability=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE)] (Correct)
-# The assertion checks for their .name attribute, which is standard for enums.
-# `hasattr(..., 'name')` is a good check for robustly getting the name.
-
-# AsyncMock for older Python versions
-# For Python 3.8+, unittest.mock.AsyncMock is standard.
-# If tests are run in older environments, a custom AsyncMock or a library like `asyncmock` might be needed.
-# The provided snippet for AsyncMock is a simple version.
-# For this solution, assuming Python 3.8+ where AsyncMock is available.
-# If `unittest.mock.AsyncMock` is not found, the custom one will be used.
-# The provided `AsyncMock` is a simple version for older Python versions.
-# If using Python 3.8+, `from unittest.mock import AsyncMock` is preferred.
-# Let's assume the testing environment has `unittest.mock.AsyncMock`.
