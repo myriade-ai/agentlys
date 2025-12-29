@@ -75,8 +75,7 @@ class AnthropicProvider(BaseProvider):
         self, chat: AgentlysBase, model: str, max_tokens: int | None = None
     ):
         self.model = model
-        self.client = anthropic.Anthropic(
-            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+        self.client = anthropic.AsyncAnthropic(
             base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
         )
         self.chat = chat
@@ -205,7 +204,7 @@ class AnthropicProvider(BaseProvider):
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = {"type": "any"}
 
-        res = self.client.messages.create(
+        res = await self.client.messages.create(
             model=self.model,
             messages=messages,
             tools=tools,

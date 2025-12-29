@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentlys import Agentlys, APIProvider, Message
 
@@ -51,12 +51,13 @@ class TestAnthropic(unittest.TestCase):
             content="test",
         )
 
-        with patch.object(
-            agent.provider.client.messages, "create", return_value=return_value
-        ):
-            agent.provider.fetch()
-            self.mock_anthropic_client.messages.create.assert_called_once()
-            call_args = self.mock_anthropic_client.messages.create.call_args
+        mock_create = AsyncMock(return_value=return_value)
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(agent.provider.fetch_async())
+            mock_create.assert_called_once()
+            call_args = mock_create.call_args
             actual_messages = call_args.kwargs["messages"]
 
             self.assertEqual(actual_messages, expected_output)

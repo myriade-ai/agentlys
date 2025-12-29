@@ -98,7 +98,7 @@ class TestToolRepr(unittest.TestCase):
         tool_id = agent.add_tool(mock_tool)
 
         # Mock the client.messages.create method
-        def mock_create(*args, **kwargs):
+        async def mock_create(*args, **kwargs):
             # Check if the tool representation is in the system message
             system_messages = kwargs.get("system", [])
             # Verify the last_tools_states is in the system message last content
