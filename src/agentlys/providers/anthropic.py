@@ -1,10 +1,14 @@
+import logging
 import os
+import warnings
 
 import anthropic
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
 from agentlys.providers.utils import add_empty_function_result
+
+logger = logging.getLogger("agentlys")
 
 AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
@@ -52,6 +56,17 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "tool_use_id": part.function_call_id,
             "content": part.content,
         }
+    elif part.type == "thinking":
+        if part.is_redacted:
+            return {
+                "type": "redacted_thinking",
+                "data": part.thinking_signature,
+            }
+        return {
+            "type": "thinking",
+            "thinking": part.thinking,
+            "signature": part.thinking_signature,
+        }
     raise ValueError(f"Unknown part type: {part.type}")
 
 
@@ -71,9 +86,7 @@ DEFAULT_MAX_TOKENS = int(os.getenv("ANTHROPIC_MAX_TOKENS", "10000"))
 
 
 class AnthropicProvider(BaseProvider):
-    def __init__(
-        self, chat: AgentlysBase, model: str, max_tokens: int | None = None
-    ):
+    def __init__(self, chat: AgentlysBase, model: str, max_tokens: int | None = None):
         self.model = model
         self.client = anthropic.AsyncAnthropic(
             base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
@@ -147,36 +160,21 @@ class AnthropicProvider(BaseProvider):
                 tool["description"] = "No description provided"
 
         # === Add cache_controls ===
-        # Messages: Find the last message with an index multiple of 10
-        last_message_index = next(
-            (i for i in reversed(range(len(messages))) if i % 10 == 0),
-            None,
-        )
+        # Strategy: tools → system → messages (in that order)
+        # - Tools: cache all tool definitions (breakpoint 1)
+        # - System: cache static instruction only (breakpoint 2)
+        # - Messages: inject dynamic last_tools_states into last message,
+        #   then cache for incremental conversation caching (breakpoint 3)
+        #
+        # By putting last_tools_states in the last message instead of system,
+        # the backward sequential checking can still find cache hits for
+        # previous messages even when tool state changes.
 
-        if last_message_index is not None:
-            # Only try to modify the cache control if there are messages and content
-            if (
-                messages
-                and isinstance(messages[last_message_index]["content"], list)
-                and len(messages[last_message_index]["content"]) > 0
-                and isinstance(messages[last_message_index]["content"][-1], dict)
-            ):
-                messages[last_message_index]["content"][-1]["cache_control"] = {
-                    "type": "ephemeral"
-                }
-            elif isinstance(messages[last_message_index]["content"], str):
-                messages[last_message_index]["content"] = [
-                    {
-                        "type": "text",
-                        "text": messages[last_message_index]["content"],
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
         # Tools: Add cache_control to the last tool function
         if tools:
             tools[-1]["cache_control"] = {"type": "ephemeral"}
 
-        # System: add cache_control to the system message
+        # System: add cache_control to the static instruction only
         system_messages = []
         if system is not None:
             system_messages.append(
@@ -187,22 +185,56 @@ class AnthropicProvider(BaseProvider):
                 }
             )
 
-        if self.chat.last_tools_states:
-            # add to system message
-            system_messages.append(
-                {
+        # Messages: Inject last_tools_states into the last message, then add cache_control
+        if messages:
+            last_msg = messages[-1]
+
+            # Ensure content is a list
+            if isinstance(last_msg["content"], str):
+                last_msg["content"] = [{"type": "text", "text": last_msg["content"]}]
+
+            # Add cache_control to the last content block BEFORE appending tools_state
+            # This way the cached prefix doesn't include tools_state, so previous
+            # messages can be matched by backward sequential checking even when
+            # tools_state changes between turns
+            if last_msg["content"]:
+                last_msg["content"][-1]["cache_control"] = {"type": "ephemeral"}
+
+            # Append last_tools_states AFTER the cache_control block (if any)
+            # It's included in the request but NOT in the cache key
+            if self.chat.last_tools_states:
+                tools_state_block = {
                     "type": "text",
                     "text": self.chat.last_tools_states,
                 }
-            )
+                last_msg["content"].append(tools_state_block)
 
         # === End of cache_control ===
 
         if system_messages:
             kwargs["system"] = system_messages
 
+        # Check if thinking is enabled (from kwargs or class-level config)
+        thinking_enabled = kwargs.get("thinking") or getattr(
+            self.chat, "thinking", None
+        )
+
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
-            kwargs["tool_choice"] = {"type": "any"}
+            if thinking_enabled:
+                # Warn user that tool_choice=any is incompatible with thinking
+                warnings.warn(
+                    "use_tools_only with thinking enabled is not supported. "
+                    "Using tool_choice='auto' instead of 'any'. "
+                    "Claude may respond without using tools.",
+                    UserWarning,
+                )
+                # Leave tool_choice as default (auto)
+            else:
+                kwargs["tool_choice"] = {"type": "any"}
+
+        # Add thinking config if set at class level and not already in kwargs
+        if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
+            kwargs["thinking"] = self.chat.thinking
 
         res = await self.client.messages.create(
             model=self.model,
@@ -211,6 +243,15 @@ class AnthropicProvider(BaseProvider):
             max_tokens=self.max_tokens,
             **kwargs,
         )
+
+        # Log cache usage for debugging
+        usage = res.usage
+        logger.debug(
+            f"Anthropic cache stats: "
+            f"cache_creation={getattr(usage, 'cache_creation_input_tokens', 0)}, "
+            f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)}, "
+        )
+
         res_dict = res.to_dict()
         return Message.from_anthropic_dict(
             role=res_dict["role"],
