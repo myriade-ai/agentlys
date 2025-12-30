@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 
 import anthropic
 from agentlys.base import AgentlysBase
@@ -54,6 +55,17 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "type": "tool_result",
             "tool_use_id": part.function_call_id,
             "content": part.content,
+        }
+    elif part.type == "thinking":
+        if part.is_redacted:
+            return {
+                "type": "redacted_thinking",
+                "data": part.thinking_signature,
+            }
+        return {
+            "type": "thinking",
+            "thinking": part.thinking,
+            "signature": part.thinking_signature,
         }
     raise ValueError(f"Unknown part type: {part.type}")
 
@@ -202,8 +214,27 @@ class AnthropicProvider(BaseProvider):
         if system_messages:
             kwargs["system"] = system_messages
 
+        # Check if thinking is enabled (from kwargs or class-level config)
+        thinking_enabled = kwargs.get("thinking") or getattr(
+            self.chat, "thinking", None
+        )
+
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
-            kwargs["tool_choice"] = {"type": "any"}
+            if thinking_enabled:
+                # Warn user that tool_choice=any is incompatible with thinking
+                warnings.warn(
+                    "use_tools_only with thinking enabled is not supported. "
+                    "Using tool_choice='auto' instead of 'any'. "
+                    "Claude may respond without using tools.",
+                    UserWarning,
+                )
+                # Leave tool_choice as default (auto)
+            else:
+                kwargs["tool_choice"] = {"type": "any"}
+
+        # Add thinking config if set at class level and not already in kwargs
+        if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
+            kwargs["thinking"] = self.chat.thinking
 
         res = await self.client.messages.create(
             model=self.model,
