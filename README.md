@@ -4,8 +4,6 @@
 [![image](https://img.shields.io/github/license/myriade-ai/agentlys)](https://github.com/myriade-ai/agentlys/blob/master/LICENSE)
 [![Actions status](https://github.com/myriade-ai/agentlys/actions/workflows/test.yml/badge.svg)](https://github.com/myriade-ai/agentlys/actions)
 
-# Agentlys
-
 **Turn any Python class into an AI tool. Instantly.**
 
 Async-native • MCP support • Multi-providers • ~500 lines of core code
