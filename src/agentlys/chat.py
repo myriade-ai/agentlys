@@ -440,6 +440,89 @@ class Agentlys(AgentlysBase):
                     yield response
                 yield message
 
+    async def ask_stream_async(
+        self,
+        message: typing.Union[Message, str, None] = None,
+        **kwargs,
+    ) -> typing.AsyncGenerator[dict, None]:
+        """Async streaming version of ask method.
+
+        Yields:
+            - {"type": "text", "content": str} - text chunks as they arrive
+            - {"type": "message", "message": Message} - final complete message
+        """
+        if message:
+            if isinstance(message, str):
+                message = Message(role="user", content=message)
+            self.messages.append(message)
+
+        final_message = None
+        async for chunk in self.provider.fetch_stream_async(**kwargs):
+            if chunk["type"] == "message":
+                final_message = chunk["message"]
+                self.messages.append(final_message)
+            yield chunk
+
+        if final_message is None:
+            raise RuntimeError("Stream ended without final message")
+
+    async def run_conversation_stream_async(
+        self,
+        question: typing.Union[str, Message, None] = None,
+    ) -> typing.AsyncGenerator[dict, None]:
+        """Run conversation with streaming text responses.
+
+        Yields:
+            - {"type": "user", "message": Message} - user message
+            - {"type": "text", "content": str} - text chunks as they stream
+            - {"type": "assistant", "message": Message} - complete assistant message
+            - {"type": "function", "message": Message} - function result message
+        """
+        # Handle initial question
+        if isinstance(question, str):
+            message = Message(role="user", content=question)
+            yield {"type": "user", "message": message}
+        else:
+            message = question
+
+        for _ in range(self.max_interactions):
+            # Stream the LLM response
+            response = None
+            async for chunk in self.ask_stream_async(message):
+                if chunk["type"] == "text":
+                    yield chunk
+                elif chunk["type"] == "message":
+                    response = chunk["message"]
+
+            if response is None:
+                raise RuntimeError("Stream ended without response")
+
+            # Locate a function_call part in the assistant's response
+            function_call_part = next(
+                (p for p in response.parts if p.type == "function_call"), None
+            )
+
+            if not function_call_part:
+                yield {"type": "assistant", "message": response}
+                try:
+                    message = self.simple_response_callback(response)
+                except StopLoopException:
+                    return
+            else:
+                name = function_call_part.function_call["name"]
+                args = function_call_part.function_call["arguments"]
+
+                yield {"type": "assistant", "message": response}
+
+                try:
+                    message = await self._call_function_and_build_message(
+                        name, args, response
+                    )
+                except StopLoopException:
+                    return
+
+                yield {"type": "function", "message": message}
+
     def run_conversation(self, question: typing.Union[str, Message, None] = None):
         # For backward compatibility, use run_until_complete to execute the async method
         loop = get_event_loop_or_create()

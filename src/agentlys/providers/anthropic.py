@@ -71,9 +71,7 @@ DEFAULT_MAX_TOKENS = int(os.getenv("ANTHROPIC_MAX_TOKENS", "10000"))
 
 
 class AnthropicProvider(BaseProvider):
-    def __init__(
-        self, chat: AgentlysBase, model: str, max_tokens: int | None = None
-    ):
+    def __init__(self, chat: AgentlysBase, model: str, max_tokens: int | None = None):
         self.model = model
         self.client = anthropic.AsyncAnthropic(
             base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
@@ -81,7 +79,8 @@ class AnthropicProvider(BaseProvider):
         self.chat = chat
         self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
 
-    async def fetch_async(self, **kwargs):
+    def _prepare_request_params(self, **kwargs):
+        """Prepare messages, tools, and kwargs for Anthropic API request."""
         messages = self.prepare_messages(
             transform_function=lambda m: message_to_anthropic_dict(m),
             transform_list_function=add_empty_function_result,
@@ -204,6 +203,11 @@ class AnthropicProvider(BaseProvider):
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = {"type": "any"}
 
+        return messages, tools, kwargs
+
+    async def fetch_async(self, **kwargs):
+        messages, tools, kwargs = self._prepare_request_params(**kwargs)
+
         res = await self.client.messages.create(
             model=self.model,
             messages=messages,
@@ -216,3 +220,30 @@ class AnthropicProvider(BaseProvider):
             role=res_dict["role"],
             content=res_dict["content"],
         )
+
+    async def fetch_stream_async(self, **kwargs):
+        """Stream response tokens from Anthropic.
+
+        Yields text chunks as they arrive. Returns the final Message
+        (with potential tool calls) after streaming completes.
+        """
+        messages, tools, kwargs = self._prepare_request_params(**kwargs)
+
+        async with self.client.messages.stream(
+            model=self.model,
+            messages=messages,
+            tools=tools if tools else anthropic.NOT_GIVEN,
+            max_tokens=self.max_tokens,
+            **kwargs,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield {"type": "text", "content": text}
+
+            # Get final message for tool handling
+            response = await stream.get_final_message()
+            res_dict = response.to_dict()
+            final_message = Message.from_anthropic_dict(
+                role=res_dict["role"],
+                content=res_dict["content"],
+            )
+            yield {"type": "message", "message": final_message}

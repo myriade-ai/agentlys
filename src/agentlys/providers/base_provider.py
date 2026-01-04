@@ -54,3 +54,21 @@ class BaseProvider(ABC):
         # For backward compatibility, use run_until_complete to execute the async method
         loop = get_event_loop_or_create()
         return loop.run_until_complete(self.fetch_async(**kwargs))
+
+    async def fetch_stream_async(self, **kwargs) -> typing.AsyncGenerator[dict, None]:
+        """
+        Async streaming version of fetch method.
+        Yields chunks as they arrive from the LLM.
+
+        Yields:
+            - {"type": "text", "content": str} - text chunks as they arrive
+            - {"type": "message", "message": Message} - final complete message
+
+        Note: Subclasses should override this method to provide streaming support.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support streaming. "
+            "Please implement fetch_stream_async or use a provider that supports streaming."
+        )
+        # This yield is needed to make this a generator function
+        yield  # type: ignore  # pragma: no cover
