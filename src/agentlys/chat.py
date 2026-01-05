@@ -489,10 +489,11 @@ class Agentlys(AgentlysBase):
             # Stream the LLM response
             response = None
             async for chunk in self.ask_stream_async(message):
-                if chunk["type"] == "text":
-                    yield chunk
-                elif chunk["type"] == "message":
+                if chunk["type"] == "message":
                     response = chunk["message"]
+                else:
+                    # Forward all other events (text, tool_started, tool_delta, etc.)
+                    yield chunk
 
             if response is None:
                 raise RuntimeError("Stream ended without response")
