@@ -59,6 +59,7 @@ class Agentlys(AgentlysBase):
         provider: Union[str, Type[BaseProvider]] = APIProvider.OPENAI,
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
+        thinking: typing.Optional[dict] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -66,6 +67,9 @@ class Agentlys(AgentlysBase):
             use_tools_only: bool = False,
                 If True, the chat will only use tools and not the LLM.
                 This is a beta feature and may change in the future.
+            thinking: Optional[dict] = None,
+                Extended thinking configuration for Anthropic models.
+                Example: {"type": "enabled", "budget_tokens": 10000}
         """
         self.provider, self.model = get_provider_and_model(
             self, provider, model
@@ -91,6 +95,7 @@ class Agentlys(AgentlysBase):
 
         self.context = context
         self.max_interactions = max_interactions
+        self.thinking = thinking
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
@@ -236,6 +241,10 @@ class Agentlys(AgentlysBase):
                     content=message,
                 )
             self.messages.append(message)  # Add the question to the history
+
+        # Merge class-level thinking with any kwargs override
+        if self.thinking and "thinking" not in kwargs:
+            kwargs["thinking"] = self.thinking
 
         # Call the async strategy
         response = await self.provider.fetch_async(**kwargs)
