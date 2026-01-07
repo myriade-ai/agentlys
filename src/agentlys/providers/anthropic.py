@@ -52,6 +52,17 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "tool_use_id": part.function_call_id,
             "content": part.content,
         }
+    elif part.type == "thinking":
+        if part.is_redacted:
+            return {
+                "type": "redacted_thinking",
+                "data": part.thinking_signature,
+            }
+        return {
+            "type": "thinking",
+            "thinking": part.thinking,
+            "signature": part.thinking_signature,
+        }
     raise ValueError(f"Unknown part type: {part.type}")
 
 
@@ -203,6 +214,10 @@ class AnthropicProvider(BaseProvider):
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = {"type": "any"}
 
+        # Add thinking config if set at class level and not already in kwargs
+        if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
+            kwargs["thinking"] = self.chat.thinking
+
         return messages, tools, kwargs
 
     async def fetch_async(self, **kwargs):
@@ -236,8 +251,12 @@ class AnthropicProvider(BaseProvider):
             max_tokens=self.max_tokens,
             **kwargs,
         ) as stream:
-            async for text in stream.text_stream:
-                yield {"type": "text", "content": text}
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    if event.delta.type == "thinking_delta":
+                        yield {"type": "thinking", "content": event.delta.thinking}
+                    elif event.delta.type == "text_delta":
+                        yield {"type": "text", "content": event.delta.text}
 
             # Get final message for tool handling
             response = await stream.get_final_message()

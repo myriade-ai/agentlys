@@ -52,18 +52,25 @@ class MessagePart:
         self,
         # TODO: function_result should be named "tool_result" ?
         type: Literal[
-            "text", "image", "function_call", "function_result", "function_result_image"
+            "text", "image", "function_call", "function_result", "function_result_image",
+            "thinking"
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
         function_call: typing.Optional[dict] = None,
         function_call_id: typing.Optional[str] = None,
+        thinking: typing.Optional[str] = None,
+        thinking_signature: typing.Optional[str] = None,
+        is_redacted: bool = False,
     ) -> None:
         self.type = type
         self.content = content
         self.image = Image(image) if image else None
         self.function_call = function_call
         self.function_call_id = function_call_id
+        self.thinking = thinking
+        self.thinking_signature = thinking_signature
+        self.is_redacted = is_redacted
 
 
 class Message:
@@ -237,6 +244,17 @@ class Message:
         # 3. return the result
         return image_parts[0]
 
+    @property
+    def thinking(self) -> typing.Optional[str]:
+        """Return thinking content from thinking blocks, if any."""
+        thinking_parts = [
+            part.thinking for part in self.parts
+            if part.type == "thinking" and part.thinking
+        ]
+        if not thinking_parts:
+            return None
+        return "\n".join(thinking_parts)
+
     @classmethod
     def from_anthropic_dict(cls, **kwargs):
         role = kwargs.get("role")
@@ -246,12 +264,29 @@ class Message:
             return cls(role=role, content=content)
 
         elif isinstance(content, list):
+            parts = []
             text_content = None
             function_call = None
+            function_call_id = None
 
             for item in content:
                 if item["type"] == "text":
                     text_content = item["text"]
+                    parts.append(MessagePart(type="text", content=item["text"]))
+                elif item["type"] == "thinking":
+                    parts.append(MessagePart(
+                        type="thinking",
+                        thinking=item.get("thinking"),
+                        thinking_signature=item.get("signature"),
+                        is_redacted=False,
+                    ))
+                elif item["type"] == "redacted_thinking":
+                    parts.append(MessagePart(
+                        type="thinking",
+                        thinking=None,
+                        thinking_signature=item.get("data"),
+                        is_redacted=True,
+                    ))
                 elif item["type"] == "tool_use":
                     function_call = {
                         "name": item["name"],
@@ -259,6 +294,12 @@ class Message:
                         "id": item.get("id"),
                         "function_call_id": item.get("id"),
                     }
+                    function_call_id = item.get("id")
+                    parts.append(MessagePart(
+                        type="function_call",
+                        function_call=function_call,
+                        function_call_id=function_call_id,
+                    ))
                 elif item["type"] == "tool_result":
                     return cls(
                         role="function",
@@ -267,12 +308,16 @@ class Message:
                         function_call_id=item.get("tool_use_id"),
                     )
 
-            if function_call:
+            # If we collected parts (including thinking blocks), use parts-based construction
+            if parts:
+                return cls(role=role, parts=parts)
+            # Fallback for backward compatibility
+            elif function_call:
                 return cls(
                     role=role,
                     content=text_content,
                     function_call=function_call,
-                    function_call_id=function_call["id"],
+                    function_call_id=function_call_id,
                 )
             else:
                 return cls(role=role, content=text_content, function_call_id=None)
