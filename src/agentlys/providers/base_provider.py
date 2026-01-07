@@ -1,3 +1,4 @@
+import copy
 import typing
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -21,7 +22,8 @@ class BaseProvider(ABC):
         transform_list_function: typing.Callable = lambda x: x,
     ) -> list[dict]:
         """Prepare messages for API requests using a transformation function."""
-        first_message = self.chat.messages[0]
+        # Deep copy to avoid mutating original messages (critical for cache matching)
+        first_message = copy.deepcopy(self.chat.messages[0])
 
         # Add combined context to the first message if it exists
         if self.chat.context:
