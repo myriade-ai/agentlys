@@ -1,6 +1,6 @@
 [project]
 name = "agentlys"
-version = "1.2.0"
+version = "1.3.0"
 description = "Lightweight AI agent library. Turn Python functions/classes into AI tools instantly."
 authors = [
     {name = "Benjamin Derville", email = "benderville@gmail.com"}
