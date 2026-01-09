@@ -217,6 +217,10 @@ class AnthropicProvider(BaseProvider):
         # Add thinking config if set at class level and not already in kwargs
         if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
             kwargs["thinking"] = self.chat.thinking
+            kwargs["tool_choice"] = {
+                "type": "auto",
+                "disable_parallel_tool_use": True,
+            }
 
         return messages, tools, kwargs
 
