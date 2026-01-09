@@ -217,6 +217,12 @@ class AnthropicProvider(BaseProvider):
         # Add thinking config if set at class level and not already in kwargs
         if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
             kwargs["thinking"] = self.chat.thinking
+            # Disable parallel tool use for now
+            # Since we don't have a good way to handle multiple tool calls in Agentlys yet
+            kwargs["tool_choice"] = {
+                "type": "auto",
+                "disable_parallel_tool_use": True,
+            }
 
         return messages, tools, kwargs
 
