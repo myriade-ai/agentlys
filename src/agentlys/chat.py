@@ -522,14 +522,14 @@ class Agentlys(AgentlysBase):
                 name = function_call_part.function_call["name"]
                 args = function_call_part.function_call["arguments"]
 
-                yield {"type": "assistant", "message": response}
-
                 try:
                     message = await self._call_function_and_build_message(
                         name, args, response
                     )
                 except StopLoopException:
                     return
+                finally:
+                    yield {"type": "assistant", "message": response}
 
                 yield {"type": "function", "message": message}
 
