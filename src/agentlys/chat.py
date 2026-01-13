@@ -439,20 +439,14 @@ class Agentlys(AgentlysBase):
                 name = function_call_part.function_call["name"]
                 args = function_call_part.function_call["arguments"]
 
-                message = None
-                stop_loop = False
                 try:
                     message = await self._call_function_and_build_message(
                         name, args, response
                     )
                 except StopLoopException:
-                    stop_loop = True
-
-                yield response
-
-                if stop_loop:
                     return
-
+                finally:
+                    yield response
                 yield message
 
     async def ask_stream_async(
@@ -528,19 +522,14 @@ class Agentlys(AgentlysBase):
                 name = function_call_part.function_call["name"]
                 args = function_call_part.function_call["arguments"]
 
-                message = None
-                stop_loop = False
                 try:
                     message = await self._call_function_and_build_message(
                         name, args, response
                     )
                 except StopLoopException:
-                    stop_loop = True
-
-                yield {"type": "assistant", "message": response}
-
-                if stop_loop:
                     return
+                finally:
+                    yield {"type": "assistant", "message": response}
 
                 yield {"type": "function", "message": message}
 
