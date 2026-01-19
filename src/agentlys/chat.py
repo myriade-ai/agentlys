@@ -460,6 +460,7 @@ class Agentlys(AgentlysBase):
 
         # Build combined message with all tool results
         parts = []
+        formatted_messages = []
         for i, result in enumerate(results):
             if isinstance(result, StopLoopException):
                 raise result
@@ -485,10 +486,16 @@ class Agentlys(AgentlysBase):
                 content=content,
                 image=image,
             )
+            formatted_messages.append(formatted_msg)
             # Extract parts from formatted message
             parts.extend(formatted_msg.parts)
 
-        # Create single message with all results
+        # For single function call, return the formatted message directly
+        # to preserve the name attribute (important for OpenAI compatibility)
+        if len(formatted_messages) == 1 and len(parts) == len(formatted_messages[0].parts):
+            return formatted_messages[0]
+
+        # Create single message with all results for multiple tools
         return Message(role="function", parts=parts)
 
     async def _stream_functions_parallel(
