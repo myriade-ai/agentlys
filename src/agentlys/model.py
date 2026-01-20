@@ -153,12 +153,15 @@ class Message:
     def content(self) -> str:
         """
         Sugar syntax for content.
-        Returns first text/function_result content if multiple exist.
+        If multiple parts text, then throw an error
         """
         if self.role == "function":
             results = [
                 part.content for part in self.parts if part.type == "function_result"
             ]
+            assert len(results) <= 1, (
+                "Function messages should have at most one function_result part"
+            )
             return results[0] if results else None
 
         # 1. get all text parts
@@ -202,16 +205,20 @@ class Message:
         # 2. return the first result (backward compatible, no longer raises error)
         if not function_call_parts:
             return None
-        if len(function_call_parts) > 1:
-            # We throw an explicit error for this sugar syntax
-            raise ValueError("Message has multiple function_call parts")
         return function_call_parts[0]
+
+    @property
+    def function_call_parts(self) -> list[MessagePart]:
+        """
+        Return all function_call MessagePart objects.
+        Used for parallel tool execution in chat.py.
+        """
+        return [part for part in self.parts if part.type == "function_call"]
 
     @property
     def function_call_id(self) -> typing.Optional[str]:
         """
         Sugar syntax for single function call ID.
-        Returns first function_call_id if multiple exist (for backward compatibility).
         """
         function_call_parts = [
             part.function_call_id
