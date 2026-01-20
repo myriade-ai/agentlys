@@ -202,32 +202,10 @@ class Message:
         # 2. return the first result (backward compatible, no longer raises error)
         if not function_call_parts:
             return None
+        if len(function_call_parts) > 1:
+            # We throw an explicit error for this sugar syntax
+            raise ValueError("Message has multiple function_call parts")
         return function_call_parts[0]
-
-    @property
-    def function_calls(self) -> list[dict]:
-        """
-        Return all function_call parts as a list of dicts.
-        Each dict contains: name, arguments, id.
-        Used for parallel tool call handling.
-        """
-        return [
-            {
-                "name": part.function_call["name"],
-                "arguments": part.function_call["arguments"],
-                "id": part.function_call_id,
-            }
-            for part in self.parts
-            if part.type == "function_call"
-        ]
-
-    @property
-    def function_call_parts(self) -> list[MessagePart]:
-        """
-        Return all function_call MessagePart objects.
-        Used for parallel tool execution in chat.py.
-        """
-        return [part for part in self.parts if part.type == "function_call"]
 
     @property
     def function_call_id(self) -> typing.Optional[str]:
@@ -243,6 +221,9 @@ class Message:
         ]
         if not function_call_parts:
             return None
+        if len(function_call_parts) > 1:
+            # We throw an explicit error for this sugar syntax
+            raise ValueError("Message has multiple function_call parts")
         return function_call_parts[0]
 
     @property
