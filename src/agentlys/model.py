@@ -52,8 +52,12 @@ class MessagePart:
         self,
         # TODO: function_result should be named "tool_result" ?
         type: Literal[
-            "text", "image", "function_call", "function_result", "function_result_image",
-            "thinking"
+            "text",
+            "image",
+            "function_call",
+            "function_result",
+            "function_result_image",
+            "thinking",
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
@@ -148,8 +152,8 @@ class Message:
     @property
     def content(self) -> str:
         """
-        If one part text, then provide the sugar syntax
-        # If multiple parts text, then throw an error
+        Sugar syntax for content.
+        If multiple parts text, then throw an error
         """
         if self.role == "function":
             results = [
@@ -191,38 +195,47 @@ class Message:
     @property
     def function_call(self) -> typing.Optional[dict]:
         """
-        If one part, then provide the sugar syntax
+        Sugar syntax for single function call.
+        Raises ValueError if message has multiple function_call parts.
+        Use function_call_parts for parallel tool calls.
         """
         # 1. get all function_call parts
         function_call_parts = [
             part.function_call for part in self.parts if part.type == "function_call"
         ]
-        # 2. verify that there is only one function_call part
+        # 2. verify there's at most one
         if not function_call_parts:
             return None
         if len(function_call_parts) > 1:
-            raise ValueError("Message has multiple function_call parts")
-        # 3. return the result
+            raise ValueError(
+                "Message has multiple function_call parts. Use function_call_parts instead."
+            )
         return function_call_parts[0]
+
+    @property
+    def function_call_parts(self) -> list[MessagePart]:
+        """
+        Return all function_call MessagePart objects.
+        Used for parallel tool execution in chat.py.
+        """
+        return [part for part in self.parts if part.type == "function_call"]
 
     @property
     def function_call_id(self) -> typing.Optional[str]:
         """
-        If one part, then provide the sugar syntax
+        Sugar syntax for single function call ID.
         """
-        # 1. get all function_call_id parts
         function_call_parts = [
             part.function_call_id
             for part in self.parts
             if part.type
             in ["function_call", "function_result", "function_result_image"]
         ]
-        # 2. verify that there is only one function_call_id part
         if not function_call_parts:
             return None
         if len(function_call_parts) > 1:
+            # We throw an explicit error for this sugar syntax
             raise ValueError("Message has multiple function_call parts")
-        # 3. return the result
         return function_call_parts[0]
 
     @property
@@ -248,7 +261,8 @@ class Message:
     def thinking(self) -> typing.Optional[str]:
         """Return thinking content from thinking blocks, if any."""
         thinking_parts = [
-            part.thinking for part in self.parts
+            part.thinking
+            for part in self.parts
             if part.type == "thinking" and part.thinking
         ]
         if not thinking_parts:
@@ -274,19 +288,23 @@ class Message:
                     text_content = item["text"]
                     parts.append(MessagePart(type="text", content=item["text"]))
                 elif item["type"] == "thinking":
-                    parts.append(MessagePart(
-                        type="thinking",
-                        thinking=item.get("thinking"),
-                        thinking_signature=item.get("signature"),
-                        is_redacted=False,
-                    ))
+                    parts.append(
+                        MessagePart(
+                            type="thinking",
+                            thinking=item.get("thinking"),
+                            thinking_signature=item.get("signature"),
+                            is_redacted=False,
+                        )
+                    )
                 elif item["type"] == "redacted_thinking":
-                    parts.append(MessagePart(
-                        type="thinking",
-                        thinking=None,
-                        thinking_signature=item.get("data"),
-                        is_redacted=True,
-                    ))
+                    parts.append(
+                        MessagePart(
+                            type="thinking",
+                            thinking=None,
+                            thinking_signature=item.get("data"),
+                            is_redacted=True,
+                        )
+                    )
                 elif item["type"] == "tool_use":
                     function_call = {
                         "name": item["name"],
@@ -295,11 +313,13 @@ class Message:
                         "function_call_id": item.get("id"),
                     }
                     function_call_id = item.get("id")
-                    parts.append(MessagePart(
-                        type="function_call",
-                        function_call=function_call,
-                        function_call_id=function_call_id,
-                    ))
+                    parts.append(
+                        MessagePart(
+                            type="function_call",
+                            function_call=function_call,
+                            function_call_id=function_call_id,
+                        )
+                    )
                 elif item["type"] == "tool_result":
                     return cls(
                         role="function",

@@ -2,6 +2,7 @@
 
 __version__ = "0.4.1"
 
+import asyncio
 import inspect
 import io
 import json
@@ -15,7 +16,7 @@ from typing import Type, Union
 from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
-from agentlys.model import Message
+from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider, BaseProvider
 from agentlys.providers.utils import get_provider_and_model
 from agentlys.utils import (
@@ -371,6 +372,20 @@ class Agentlys(AgentlysBase):
         else:
             return result
 
+    async def _resolve_and_call_function(
+        self, name: str, args: dict, response: Message
+    ) -> typing.Any:
+        """Resolve function/tool by name and call it with args."""
+        if name.startswith("tool-"):
+            tool_id, method_name = name.split("__")
+            tool = self.tools[tool_id]
+            method = getattr(tool, method_name)
+            return await self._call_with_signature(method, response, **args)
+        else:
+            return await self._call_with_signature(
+                self.functions[name], response, **args
+            )
+
     async def _call_function_and_build_message(
         self, function_name, function_arguments, response
     ):
@@ -382,17 +397,9 @@ class Agentlys(AgentlysBase):
         image = None
 
         try:
-            if function_name.startswith("tool-"):
-                tool_id, method_name = function_name.split("__")
-                tool = self.tools[tool_id]
-                method = getattr(tool, method_name)
-                content = await self._call_with_signature(
-                    method, response, **function_arguments
-                )
-            else:
-                content = await self._call_with_signature(
-                    self.functions[function_name], response, **function_arguments
-                )
+            content = await self._resolve_and_call_function(
+                function_name, function_arguments, response
+            )
         except StopLoopException:
             raise
         except Exception as e:
@@ -406,11 +413,150 @@ class Agentlys(AgentlysBase):
             image=image,
         )
 
+    async def _execute_single_tool(
+        self,
+        part: MessagePart,
+        response: Message,
+    ) -> tuple[str, str, typing.Any, typing.Any]:
+        """Execute one tool and return (function_call_id, function_name, content, image)."""
+        name = part.function_call["name"]
+        args = part.function_call["arguments"]
+        function_call_id = part.function_call_id
+
+        content = None
+        image = None
+
+        try:
+            content = await self._resolve_and_call_function(name, args, response)
+            # Handle functions that return (content, image) tuples
+            if isinstance(content, tuple):
+                content, image = content
+        except StopLoopException:
+            raise  # Propagate to stop the loop
+        except Exception as e:
+            content = self._format_exception(e)
+
+        return (function_call_id, name, content, image)
+
+    async def _call_functions_parallel(
+        self,
+        function_call_parts: list[MessagePart],
+        response: Message,
+    ) -> Message:
+        """
+        Execute multiple tool calls in parallel and build a combined result message.
+
+        Per Anthropic API requirements, all tool_results must be in a SINGLE user message.
+        Uses asyncio.gather with return_exceptions=True to collect all results even if some fail.
+        """
+        # Execute all tools in parallel
+        results = await asyncio.gather(
+            *[
+                self._execute_single_tool(part, response)
+                for part in function_call_parts
+            ],
+            return_exceptions=True,  # Don't fail fast - collect all results
+        )
+
+        # Build combined message with all tool results
+        parts = []
+        formatted_messages = []
+        for i, result in enumerate(results):
+            if isinstance(result, StopLoopException):
+                raise result
+            # _execute_single_tool handles its own exceptions,
+            # so this path is rare (e.g., task-level failures)
+            if isinstance(result, Exception):
+                function_call_id = function_call_parts[i].function_call_id
+                function_name = function_call_parts[i].function_call["name"]
+                error_content = self._format_exception(result)
+                parts.append(
+                    MessagePart(
+                        type="function_result",
+                        content=error_content,
+                        function_call_id=function_call_id,
+                    )
+                )
+                continue
+
+            function_call_id, function_name, content, image = result
+            formatted_msg = self._format_callback_message(
+                function_name=function_name,
+                function_call_part_id=function_call_id,
+                content=content,
+                image=image,
+            )
+            formatted_messages.append(formatted_msg)
+            # Extract parts from formatted message
+            parts.extend(formatted_msg.parts)
+
+        # For single function call, return the formatted message directly
+        # to preserve the name attribute (important for OpenAI compatibility)
+        if len(formatted_messages) == 1 and len(parts) == len(
+            formatted_messages[0].parts
+        ):
+            return formatted_messages[0]
+
+        # Create single message with all results for multiple tools
+        return Message(role="function", parts=parts)
+
+    async def _stream_functions_parallel(
+        self,
+        function_call_parts: list[MessagePart],
+        response: Message,
+    ) -> typing.AsyncGenerator[tuple[str, str, Message], None]:
+        """
+        Execute multiple tool calls in parallel, yielding results as each completes.
+
+        Yields tuples of (function_call_id, function_name, result_message) as each tool finishes.
+        This allows streaming individual results to the UI while tools execute in parallel.
+        """
+        # Create tasks - store as a list for asyncio.wait
+        tasks = [
+            asyncio.create_task(self._execute_single_tool(part, response))
+            for part in function_call_parts
+        ]
+
+        # Use asyncio.wait with FIRST_COMPLETED to yield results as they finish
+        pending = set(tasks)
+        while pending:
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in done:
+                try:
+                    result = task.result()
+                except StopLoopException:
+                    # Cancel remaining tasks and await them before raising
+                    for t in pending:
+                        t.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+                    raise
+                except Exception as e:
+                    # Handle unexpected exceptions - _execute_single_tool handles
+                    # its own exceptions, so this path is rare
+                    error_msg = Message(
+                        role="function",
+                        content=self._format_exception(e),
+                        function_call_id=None,
+                    )
+                    yield (None, "unknown", error_msg)
+                    continue
+
+                function_call_id, function_name, content, image = result
+                formatted_msg = self._format_callback_message(
+                    function_name=function_name,
+                    function_call_part_id=function_call_id,
+                    content=content,
+                    image=image,
+                )
+                yield (function_call_id, function_name, formatted_msg)
+
     async def run_conversation_async(
         self,
         question: typing.Union[str, Message, None] = None,
     ) -> typing.AsyncGenerator[Message, None]:
-        """Async version of run_conversation"""
+        """Async version of run_conversation with parallel tool execution support."""
         # If there's an initial question, emit it:
         if isinstance(question, str):
             message = Message(
@@ -425,28 +571,26 @@ class Agentlys(AgentlysBase):
             # Ask the LLM with the current message (if any)
             response = await self.ask_async(message)
 
-            # Locate a function_call part in the assistant's response
-            function_call_part = next(
-                (p for p in response.parts if p.type == "function_call"), None
-            )
-            if not function_call_part:
+            # Get ALL function_call parts (supports parallel tool calls)
+            function_call_parts = response.function_call_parts
+
+            if not function_call_parts:
                 yield response
                 try:
                     message = self.simple_response_callback(response)
                 except StopLoopException:
                     return
             else:
-                name = function_call_part.function_call["name"]
-                args = function_call_part.function_call["arguments"]
+                yield response
 
                 try:
-                    message = await self._call_function_and_build_message(
-                        name, args, response
+                    # Execute all tools in parallel
+                    message = await self._call_functions_parallel(
+                        function_call_parts, response
                     )
                 except StopLoopException:
                     return
-                finally:
-                    yield response
+
                 yield message
 
     async def ask_stream_async(
@@ -479,13 +623,15 @@ class Agentlys(AgentlysBase):
         self,
         question: typing.Union[str, Message, None] = None,
     ) -> typing.AsyncGenerator[dict, None]:
-        """Run conversation with streaming text responses.
+        """Run conversation with streaming text responses and parallel tool execution.
 
         Yields:
             - {"type": "user", "message": Message} - user message
             - {"type": "text", "content": str} - text chunks as they stream
             - {"type": "assistant", "message": Message} - complete assistant message
-            - {"type": "function", "message": Message} - function result message
+            - {"type": "tools_executing", "data": dict} - signal parallel tool execution start
+            - {"type": "tool_result", "data": dict} - individual tool result as it completes
+            - {"type": "function", "message": Message} - combined function results message
         """
         # Handle initial question
         if isinstance(question, str):
@@ -507,30 +653,68 @@ class Agentlys(AgentlysBase):
             if response is None:
                 raise RuntimeError("Stream ended without response")
 
-            # Locate a function_call part in the assistant's response
-            function_call_part = next(
-                (p for p in response.parts if p.type == "function_call"), None
-            )
+            # Get ALL function_call parts (supports parallel tool calls)
+            function_call_parts = response.function_call_parts
 
-            if not function_call_part:
+            if not function_call_parts:
                 yield {"type": "assistant", "message": response}
                 try:
                     message = self.simple_response_callback(response)
                 except StopLoopException:
                     return
             else:
-                name = function_call_part.function_call["name"]
-                args = function_call_part.function_call["arguments"]
+                # Yield assistant message with all tool calls
+                yield {"type": "assistant", "message": response}
+
+                # Signal start of parallel execution
+                yield {
+                    "type": "tools_executing",
+                    "data": {
+                        "count": len(function_call_parts),
+                        "tools": [
+                            {
+                                "name": p.function_call["name"],
+                                "id": p.function_call_id,
+                            }
+                            for p in function_call_parts
+                        ],
+                    },
+                }
 
                 try:
-                    message = await self._call_function_and_build_message(
-                        name, args, response
-                    )
+                    # Execute tools in parallel, streaming results as they complete
+                    all_parts = []
+                    result_messages = []
+                    async for (
+                        function_call_id,
+                        function_name,
+                        result_msg,
+                    ) in self._stream_functions_parallel(function_call_parts, response):
+                        # Yield individual result for UI streaming
+                        yield {
+                            "type": "tool_result",
+                            "data": {
+                                "function_call_id": function_call_id,
+                                "function_name": function_name,
+                                "message": result_msg,
+                            },
+                        }
+                        # Collect for combined message
+                        result_messages.append(result_msg)
+                        all_parts.extend(result_msg.parts)
+
+                    # Build combined message for conversation history
+                    # For single function call, use the formatted message directly
+                    # to preserve the name attribute (important for OpenAI legacy)
+                    if len(result_messages) == 1:
+                        message = result_messages[0]
+                    else:
+                        message = Message(role="function", parts=all_parts)
+
                 except StopLoopException:
                     return
-                finally:
-                    yield {"type": "assistant", "message": response}
 
+                # Yield combined function results (for consumers that expect it)
                 yield {"type": "function", "message": message}
 
     def run_conversation(self, question: typing.Union[str, Message, None] = None):
