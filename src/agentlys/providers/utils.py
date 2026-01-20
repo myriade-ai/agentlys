@@ -1,7 +1,7 @@
 import os
 from typing import Type, Union
 
-from agentlys.model import Message
+from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider, BaseProvider
 
 
@@ -98,8 +98,6 @@ def add_empty_function_result(messages: list[Message]) -> list[Message]:
             and not messages[i].role == "function"
         ):
             # Insert empty function results for all function calls
-            from agentlys.model import Message as MessageModel, MessagePart
-
             empty_result_parts = [
                 MessagePart(
                     type="function_result",
@@ -110,7 +108,7 @@ def add_empty_function_result(messages: list[Message]) -> list[Message]:
             ]
             messages.insert(
                 i,
-                MessageModel(
+                Message(
                     role="function",
                     parts=empty_result_parts,
                 ),

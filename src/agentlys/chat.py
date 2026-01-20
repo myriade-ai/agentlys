@@ -492,7 +492,9 @@ class Agentlys(AgentlysBase):
 
         # For single function call, return the formatted message directly
         # to preserve the name attribute (important for OpenAI compatibility)
-        if len(formatted_messages) == 1 and len(parts) == len(formatted_messages[0].parts):
+        if len(formatted_messages) == 1 and len(parts) == len(
+            formatted_messages[0].parts
+        ):
             return formatted_messages[0]
 
         # Create single message with all results for multiple tools
@@ -682,6 +684,7 @@ class Agentlys(AgentlysBase):
                 try:
                     # Execute tools in parallel, streaming results as they complete
                     all_parts = []
+                    result_messages = []
                     async for (
                         function_call_id,
                         function_name,
@@ -696,11 +699,17 @@ class Agentlys(AgentlysBase):
                                 "message": result_msg,
                             },
                         }
-                        # Collect parts for combined message
+                        # Collect for combined message
+                        result_messages.append(result_msg)
                         all_parts.extend(result_msg.parts)
 
                     # Build combined message for conversation history
-                    message = Message(role="function", parts=all_parts)
+                    # For single function call, use the formatted message directly
+                    # to preserve the name attribute (important for OpenAI legacy)
+                    if len(result_messages) == 1:
+                        message = result_messages[0]
+                    else:
+                        message = Message(role="function", parts=all_parts)
 
                 except StopLoopException:
                     return
