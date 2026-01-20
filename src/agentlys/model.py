@@ -196,15 +196,20 @@ class Message:
     def function_call(self) -> typing.Optional[dict]:
         """
         Sugar syntax for single function call.
-        Returns first function call if multiple exist (for backward compatibility).
+        Raises ValueError if message has multiple function_call parts.
+        Use function_call_parts for parallel tool calls.
         """
         # 1. get all function_call parts
         function_call_parts = [
             part.function_call for part in self.parts if part.type == "function_call"
         ]
-        # 2. return the first result (backward compatible, no longer raises error)
+        # 2. verify there's at most one
         if not function_call_parts:
             return None
+        if len(function_call_parts) > 1:
+            raise ValueError(
+                "Message has multiple function_call parts. Use function_call_parts instead."
+            )
         return function_call_parts[0]
 
     @property

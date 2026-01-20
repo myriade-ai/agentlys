@@ -88,21 +88,31 @@ def add_empty_function_result(messages: list[Message]) -> list[Message]:
 
     - Second case (unchanged): a message with `role="assistant"` containing a `function_call`, followed by a non-`function` message.
       We insert an empty message with `role="function"`.
+      Supports parallel tool calls by inserting empty results for all function calls.
     """
     for i in range(len(messages) - 1, 0, -1):
+        function_call_parts = messages[i - 1].function_call_parts
         if (
             messages[i - 1].role == "assistant"
-            and messages[i - 1].function_call
+            and function_call_parts
             and not messages[i].role == "function"
         ):
-            # Insert an empty function result
+            # Insert empty function results for all function calls
+            from agentlys.model import Message as MessageModel, MessagePart
+
+            empty_result_parts = [
+                MessagePart(
+                    type="function_result",
+                    content="",
+                    function_call_id=part.function_call_id,
+                )
+                for part in function_call_parts
+            ]
             messages.insert(
                 i,
-                Message(
+                MessageModel(
                     role="function",
-                    name=messages[i - 1].function_call["name"],
-                    content="",
-                    function_call_id=messages[i - 1].function_call_id,
+                    parts=empty_result_parts,
                 ),
             )
     return messages
