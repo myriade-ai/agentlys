@@ -31,6 +31,14 @@ AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
 
+def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
+    """Truncate text to limit and add warning if truncated."""
+    if len(text) > limit:
+        logging.warning(f"Output truncated from {len(text)} to {limit} characters")
+        return text[:limit] + f"\n[Warning: Output truncated from {len(text)} to {limit} characters]"
+    return text
+
+
 class StopLoopException(Exception):
     pass
 
@@ -138,15 +146,17 @@ class Agentlys(AgentlysBase):
         for tool_id, tool in self.tools.items():
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
             if hasattr(tool, "__llm__"):
-                tool_reprs.append(f"### {tool_name}\n{tool.__llm__()}")
+                tool_output = tool.__llm__()
             elif hasattr(tool, "__repr__"):
-                tool_reprs.append(f"### {tool_name}\n{repr(tool)}")
+                tool_output = repr(tool)
             elif hasattr(tool, "__str__"):
-                tool_reprs.append(f"### {tool_name}\n{tool}")
+                tool_output = str(tool)
             else:
                 raise ValueError(
                     f"Tool {tool_name} has no __llm__, __repr__ or __str__ method"
                 )
+            tool_output = _truncate_with_warning(tool_output)
+            tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
 
         """
