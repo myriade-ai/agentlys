@@ -10,6 +10,26 @@ import warnings
 from PIL import Image as PILImage
 
 
+class ToolResult:
+    """Optional wrapper for tool returns that need metadata.
+
+    Use this when a tool needs to return both content and metadata
+    (e.g., query_id, chart_id) that should be preserved on the MessagePart.
+
+    Example:
+        async def sql_query(self, query: str) -> ToolResult:
+            _query = Query(...)
+            return ToolResult(
+                content=result_string,
+                metadata={"query_id": str(_query.id)}
+            )
+    """
+
+    def __init__(self, content: typing.Any, metadata: typing.Optional[dict] = None):
+        self.content = content
+        self.metadata = metadata or {}
+
+
 class Image:
     def __init__(self, image: PILImage.Image):
         if not isinstance(image, PILImage.Image):
@@ -67,6 +87,7 @@ class MessagePart:
         thinking: typing.Optional[str] = None,
         thinking_signature: typing.Optional[str] = None,
         is_redacted: bool = False,
+        metadata: typing.Optional[dict] = None,
     ) -> None:
         self.type = type
         self.content = content
@@ -76,6 +97,7 @@ class MessagePart:
         self.thinking = thinking
         self.thinking_signature = thinking_signature
         self.is_redacted = is_redacted
+        self.metadata = metadata or {}
 
 
 class Message:
@@ -93,7 +115,7 @@ class Message:
         id: typing.Optional[int] = None,
         function_call_id: typing.Optional[str] = None,
         image: typing.Optional[PILImage.Image] = None,
-        parts: typing.Optional[list[MessagePart]] = [],
+        parts: typing.Optional[list[MessagePart]] = None,
     ) -> None:
         self.role = role
         self.name = name
@@ -236,23 +258,21 @@ class Message:
         Returns the first ID if multiple exist (for backward compatibility).
         Use function_call_parts for explicit parallel tool call handling.
         """
-
-        function_call_parts = [
+        function_call_ids = [
             part.function_call_id
             for part in self.parts
-            if part.type
-            in ["function_call", "function_result", "function_result_image"]
+            if part.type == "function_call"
         ]
-        if not function_call_parts:
+        if not function_call_ids:
             return None
-        if len(function_call_parts) > 1:
+        if len(function_call_ids) > 1:
             warnings.warn(
                 "Message has multiple function_call parts. "
                 "function_call_id returns only the first. Use function_call_parts instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return function_call_parts[0]
+        return function_call_ids[0]
 
     @property
     def image(self) -> typing.Optional[PILImage.Image]:

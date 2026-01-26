@@ -16,7 +16,7 @@ from typing import Type, Union
 from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
-from agentlys.model import Message, MessagePart
+from agentlys.model import Message, MessagePart, ToolResult
 from agentlys.providers.base_provider import APIProvider, BaseProvider
 from agentlys.providers.utils import get_provider_and_model
 from agentlys.utils import (
@@ -35,7 +35,10 @@ def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
     """Truncate text to limit and add warning if truncated."""
     if len(text) > limit:
         logging.warning(f"Output truncated from {len(text)} to {limit} characters")
-        return text[:limit] + f"\n[Warning: Output truncated from {len(text)} to {limit} characters]"
+        return (
+            text[:limit]
+            + f"\n[Warning: Output truncated from {len(text)} to {limit} characters]"
+        )
     return text
 
 
@@ -272,13 +275,13 @@ class Agentlys(AgentlysBase):
         return loop.run_until_complete(self.ask_async(message, **kwargs))
 
     def _format_callback_message(
-        self, function_name, function_call_part_id, content, image
+        self, function_name, function_call_id, content, image, metadata=None
     ):
         if isinstance(content, Message):
             message = content
             # TODO: Add name and function_call_id to the message
             # message.name = function_name
-            # message.function_call_id = function_call_part_id
+            # message.function_call_id = function_call_id
             return message
 
         # We format the function_call response to be used as a next message
@@ -347,14 +350,27 @@ class Agentlys(AgentlysBase):
         else:
             raise ValueError(f"Invalid content type: {type(content)}")
 
-        # Build a function response message
-        return Message(
-            name=function_name,
-            role="function",
-            content=formatted_content,
-            image=image,
-            function_call_id=function_call_part_id,
-        )
+        # Build a function response message with metadata on the part
+        # If there's an image, create a single function_result_image part that includes
+        # both the text content and the image. This ensures we have exactly ONE tool_result
+        # per tool_use_id.
+        if image:
+            part = MessagePart(
+                type="function_result_image",
+                content=formatted_content,  # Include text content in the image part
+                image=image,
+                function_call_id=function_call_id,
+                metadata=metadata,
+            )
+        else:
+            part = MessagePart(
+                type="function_result",
+                content=formatted_content,
+                function_call_id=function_call_id,
+                metadata=metadata,
+            )
+
+        return Message(name=function_name, role="function", parts=[part])
 
     def _format_exception(self, e):
         # We clean the traceback to remove frames from __init__.py
@@ -396,6 +412,33 @@ class Agentlys(AgentlysBase):
                 self.functions[name], response, **args
             )
 
+    def _process_tool_result(
+        self, result: typing.Any
+    ) -> tuple[typing.Any, typing.Any, typing.Optional[dict]]:
+        """Process tool result, handle ToolResult wrapper and tuple unpacking.
+
+        Returns:
+            Tuple of (content, image, metadata)
+        """
+        content = None
+        image = None
+        metadata = None
+
+        if isinstance(result, ToolResult):
+            metadata = result.metadata
+            # Check if content is a (content, image) tuple
+            if isinstance(result.content, tuple) and len(result.content) == 2:
+                content, image = result.content
+            else:
+                content = result.content
+        # Handle functions that return (content, image) tuples
+        elif isinstance(result, tuple):
+            content, image = result
+        else:
+            content = result
+
+        return content, image, metadata
+
     async def _call_function_and_build_message(
         self, function_name, function_arguments, response
     ):
@@ -405,11 +448,13 @@ class Agentlys(AgentlysBase):
         """
         content = None
         image = None
+        metadata = None
 
         try:
-            content = await self._resolve_and_call_function(
+            result = await self._resolve_and_call_function(
                 function_name, function_arguments, response
             )
+            content, image, metadata = self._process_tool_result(result)
         except StopLoopException:
             raise
         except Exception as e:
@@ -418,35 +463,35 @@ class Agentlys(AgentlysBase):
         # Build next message
         return self._format_callback_message(
             function_name=function_name,
-            function_call_part_id=response.function_call_id,
+            function_call_id=response.function_call_id,
             content=content,
             image=image,
+            metadata=metadata,
         )
 
     async def _execute_single_tool(
         self,
         part: MessagePart,
         response: Message,
-    ) -> tuple[str, str, typing.Any, typing.Any]:
-        """Execute one tool and return (function_call_id, function_name, content, image)."""
+    ) -> tuple[str, str, typing.Any, typing.Any, typing.Optional[dict]]:
+        """Execute one tool and return (function_call_id, function_name, content, image, metadata)."""
         name = part.function_call["name"]
         args = part.function_call["arguments"]
         function_call_id = part.function_call_id
 
         content = None
         image = None
+        metadata = None
 
         try:
-            content = await self._resolve_and_call_function(name, args, response)
-            # Handle functions that return (content, image) tuples
-            if isinstance(content, tuple):
-                content, image = content
+            result = await self._resolve_and_call_function(name, args, response)
+            content, image, metadata = self._process_tool_result(result)
         except StopLoopException:
             raise  # Propagate to stop the loop
         except Exception as e:
             content = self._format_exception(e)
 
-        return (function_call_id, name, content, image)
+        return (function_call_id, name, content, image, metadata)
 
     async def _call_functions_parallel(
         self,
@@ -489,12 +534,13 @@ class Agentlys(AgentlysBase):
                 )
                 continue
 
-            function_call_id, function_name, content, image = result
+            function_call_id, function_name, content, image, metadata = result
             formatted_msg = self._format_callback_message(
                 function_name=function_name,
-                function_call_part_id=function_call_id,
+                function_call_id=function_call_id,
                 content=content,
                 image=image,
+                metadata=metadata,
             )
             formatted_messages.append(formatted_msg)
             # Extract parts from formatted message
@@ -553,12 +599,13 @@ class Agentlys(AgentlysBase):
                     yield (None, "unknown", error_msg)
                     continue
 
-                function_call_id, function_name, content, image = result
+                function_call_id, function_name, content, image, metadata = result
                 formatted_msg = self._format_callback_message(
                     function_name=function_name,
-                    function_call_part_id=function_call_id,
+                    function_call_id=function_call_id,
                     content=content,
                     image=image,
+                    metadata=metadata,
                 )
                 yield (function_call_id, function_name, formatted_msg)
 
