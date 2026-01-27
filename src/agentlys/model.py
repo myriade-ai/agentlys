@@ -5,6 +5,7 @@ import typing
 import uuid
 from io import BytesIO
 from typing import Literal
+import warnings
 
 from PIL import Image as PILImage
 
@@ -153,15 +154,21 @@ class Message:
     def content(self) -> str:
         """
         Sugar syntax for content.
-        If multiple parts text, then throw an error
+        If multiple parts text, then throw an error.
+        For function messages with multiple results, returns the first result.
         """
+
         if self.role == "function":
             results = [
                 part.content for part in self.parts if part.type == "function_result"
             ]
-            assert len(results) <= 1, (
-                "Function messages should have at most one function_result part"
-            )
+            if len(results) > 1:
+                warnings.warn(
+                    "Function message has multiple function_result parts. "
+                    "content returns only the first. Use parts to access all results.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             return results[0] if results else None
 
         # 1. get all text parts
@@ -196,19 +203,21 @@ class Message:
     def function_call(self) -> typing.Optional[dict]:
         """
         Sugar syntax for single function call.
-        Raises ValueError if message has multiple function_call parts.
-        Use function_call_parts for parallel tool calls.
+        Returns the first function call if multiple exist (for backward compatibility).
+        Use function_call_parts for explicit parallel tool call handling.
         """
-        # 1. get all function_call parts
+
         function_call_parts = [
             part.function_call for part in self.parts if part.type == "function_call"
         ]
-        # 2. verify there's at most one
         if not function_call_parts:
             return None
         if len(function_call_parts) > 1:
-            raise ValueError(
-                "Message has multiple function_call parts. Use function_call_parts instead."
+            warnings.warn(
+                "Message has multiple function_call parts. "
+                "function_call returns only the first. Use function_call_parts instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
         return function_call_parts[0]
 
@@ -224,7 +233,10 @@ class Message:
     def function_call_id(self) -> typing.Optional[str]:
         """
         Sugar syntax for single function call ID.
+        Returns the first ID if multiple exist (for backward compatibility).
+        Use function_call_parts for explicit parallel tool call handling.
         """
+
         function_call_parts = [
             part.function_call_id
             for part in self.parts
@@ -234,8 +246,12 @@ class Message:
         if not function_call_parts:
             return None
         if len(function_call_parts) > 1:
-            # We throw an explicit error for this sugar syntax
-            raise ValueError("Message has multiple function_call parts")
+            warnings.warn(
+                "Message has multiple function_call parts. "
+                "function_call_id returns only the first. Use function_call_parts instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return function_call_parts[0]
 
     @property
