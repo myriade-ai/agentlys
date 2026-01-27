@@ -93,7 +93,7 @@ class Message:
         id: typing.Optional[int] = None,
         function_call_id: typing.Optional[str] = None,
         image: typing.Optional[PILImage.Image] = None,
-        parts: typing.Optional[list[MessagePart]] = [],
+        parts: typing.Optional[list[MessagePart]] = None,
     ) -> None:
         self.role = role
         self.name = name
@@ -236,23 +236,22 @@ class Message:
         Returns the first ID if multiple exist (for backward compatibility).
         Use function_call_parts for explicit parallel tool call handling.
         """
-
-        function_call_parts = [
+        function_call_ids = [
             part.function_call_id
             for part in self.parts
             if part.type
             in ["function_call", "function_result", "function_result_image"]
         ]
-        if not function_call_parts:
+        if not function_call_ids:
             return None
-        if len(function_call_parts) > 1:
+        if len(function_call_ids) > 1:
             warnings.warn(
                 "Message has multiple function_call parts. "
                 "function_call_id returns only the first. Use function_call_parts instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return function_call_parts[0]
+        return function_call_ids[0]
 
     @property
     def image(self) -> typing.Optional[PILImage.Image]:

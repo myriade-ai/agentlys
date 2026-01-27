@@ -16,6 +16,8 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "text": part.content,
         }
     elif part.type == "image":
+        if part.image is None:
+            raise ValueError("Image part must have an image")
         return {
             "type": "image",
             "source": {
@@ -32,18 +34,26 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "input": part.function_call["arguments"],
         }
     elif part.type == "function_result_image":
+        if part.image is None:
+            raise ValueError("Function result image part must have an image")
+        # Build content blocks: include text content if present, then image
+        content_blocks = []
+        if part.content:
+            content_blocks.append({
+                "type": "text",
+                "text": part.content,
+            })
+        content_blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": part.image.format,
+                "data": part.image.to_base64(),
+            },
+        })
         return {
             "type": "tool_result",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": part.image.format,
-                        "data": part.image.to_base64(),
-                    },
-                }
-            ],
+            "content": content_blocks,
             "tool_use_id": part.function_call_id,
         }
     elif part.type == "function_result":
@@ -123,19 +133,37 @@ class AnthropicProvider(BaseProvider):
             merged_messages = []
             for message in messages:
                 if merged_messages and merged_messages[-1]["role"] == message["role"]:
+                    # Convert string content to list format for merging
                     if isinstance(merged_messages[-1]["content"], str):
-                        merged_messages[-1]["content"].append(
+                        merged_messages[-1]["content"] = [
                             {
                                 "type": "text",
                                 "text": merged_messages[-1]["content"],
                             }
-                        )
-                    elif isinstance(merged_messages[-1]["content"], list):
-                        merged_messages[-1]["content"].extend(message["content"])
-                    else:
+                        ]
+
+                    if not isinstance(merged_messages[-1]["content"], list):
                         raise ValueError(
                             f"Invalid content type: {type(merged_messages[-1]['content'])}"
                         )
+
+                    # Track existing tool_use_ids to prevent duplicates
+                    existing_tool_use_ids = {
+                        c.get("tool_use_id")
+                        for c in merged_messages[-1]["content"]
+                        if isinstance(c, dict) and c.get("type") == "tool_result"
+                    }
+                    # Only add content blocks that aren't duplicate tool_results
+                    for content_block in message["content"]:
+                        if (
+                            isinstance(content_block, dict)
+                            and content_block.get("type") == "tool_result"
+                        ):
+                            tool_use_id = content_block.get("tool_use_id")
+                            if tool_use_id in existing_tool_use_ids:
+                                continue
+                            existing_tool_use_ids.add(tool_use_id)
+                        merged_messages[-1]["content"].append(content_block)
                 else:
                     merged_messages.append(message)
             return merged_messages
@@ -157,7 +185,9 @@ class AnthropicProvider(BaseProvider):
                 tool["description"] = "No description provided"
 
         # === Add cache_controls ===
-        # Messages: Find the last message with an index multiple of 10
+        # Anthropic's prompt caching allows caching message prefixes to reduce costs and latency.
+        # We add cache breakpoints at every 10th message to balance cache hit rates with granularity.
+        # Finding the LAST message at a multiple of 10 ensures we cache the largest stable prefix.
         last_message_index = next(
             (i for i in reversed(range(len(messages))) if i % 10 == 0),
             None,
