@@ -81,7 +81,8 @@ class Agentlys(AgentlysBase):
                 This is a beta feature and may change in the future.
             thinking: Optional[dict] = None,
                 Extended thinking configuration for Anthropic models.
-                Example: {"type": "enabled", "budget_tokens": 10000}
+                Example (adaptive, recommended for Opus 4.6): {"type": "adaptive"}
+                Example (manual, for older models): {"type": "enabled", "budget_tokens": 10000}
         """
         self.provider, self.model = get_provider_and_model(
             self, provider, model

@@ -248,6 +248,10 @@ class AnthropicProvider(BaseProvider):
         if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
             kwargs["thinking"] = self.chat.thinking
 
+        # Auto-set effort to max when thinking is enabled
+        if "thinking" in kwargs and "output_config" not in kwargs:
+            kwargs["output_config"] = {"effort": "max"}
+
         return messages, tools, kwargs
 
     async def fetch_async(self, **kwargs):
