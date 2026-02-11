@@ -186,12 +186,9 @@ class AnthropicProvider(BaseProvider):
 
         # === Add cache_controls ===
         # Anthropic's prompt caching allows caching message prefixes to reduce costs and latency.
-        # We add cache breakpoints at every 10th message to balance cache hit rates with granularity.
-        # Finding the LAST message at a multiple of 10 ensures we cache the largest stable prefix.
-        last_message_index = next(
-            (i for i in reversed(range(len(messages))) if i % 10 == 0),
-            None,
-        )
+        # We place a cache breakpoint on the last message so the entire conversation prefix is cached.
+        # This uses 3 of 4 allowed breakpoints: tools[-1], system[0], and messages[-1].
+        last_message_index = len(messages) - 1 if messages else None
 
         if last_message_index is not None:
             # Only try to modify the cache control if there are messages and content
@@ -261,6 +258,8 @@ class AnthropicProvider(BaseProvider):
             **kwargs,
         )
         res_dict = res.to_dict()
+        if hasattr(self.chat, "_usage_log"):
+            self.chat._usage_log.append(res_dict.get("usage", {}))
         return Message.from_anthropic_dict(
             role=res_dict["role"],
             content=res_dict["content"],
@@ -291,6 +290,8 @@ class AnthropicProvider(BaseProvider):
             # Get final message for tool handling
             response = await stream.get_final_message()
             res_dict = response.to_dict()
+            if hasattr(self.chat, "_usage_log"):
+                self.chat._usage_log.append(res_dict.get("usage", {}))
             final_message = Message.from_anthropic_dict(
                 role=res_dict["role"],
                 content=res_dict["content"],

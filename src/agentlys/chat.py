@@ -108,9 +108,11 @@ class Agentlys(AgentlysBase):
         self.context = context
         self.max_interactions = max_interactions
         self.thinking = thinking
+        self._frozen_tools_states = None
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._usage_log = []
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -142,6 +144,8 @@ class Agentlys(AgentlysBase):
     @property
     def last_tools_states(self) -> typing.Optional[str]:
         """We add the repr() of each tool to the system context"""
+        if self._frozen_tools_states is not None:
+            return self._frozen_tools_states
         # If there are no tools, return None
         if not self.tools:
             return None
@@ -609,6 +613,9 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
+        # Freeze tools states for cache consistency across API calls within this turn
+        self._frozen_tools_states = self.last_tools_states
+
         for _ in range(self.max_interactions):
             # Ask the LLM with the current message (if any)
             response = await self.ask_async(message)
@@ -681,6 +688,9 @@ class Agentlys(AgentlysBase):
             yield {"type": "user", "message": message}
         else:
             message = question
+
+        # Freeze tools states for cache consistency across API calls within this turn
+        self._frozen_tools_states = self.last_tools_states
 
         for _ in range(self.max_interactions):
             # Stream the LLM response
