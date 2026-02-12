@@ -116,25 +116,28 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-      "text", "text": "What is the weather and time in Paris? Use both tools.", "cache_control":
-      {"type": "ephemeral"}}]}, {"role": "assistant", "content": [{"type": "text",
-      "text": "I''ll get both the weather and time information for Paris using both
-      tools."}, {"type": "tool_use", "id": "toolu_01M1njc5mmV1vM2xjekZsAGX", "name":
-      "get_weather", "input": {"city": "Paris"}}, {"type": "tool_use", "id": "toolu_013Fzn3MBimmzAehCxVS3VCQ",
-      "name": "get_time", "input": {"city": "Paris"}}]}, {"role": "user", "content":
-      [{"type": "tool_result", "tool_use_id": "toolu_01M1njc5mmV1vM2xjekZsAGX", "content":
-      "Sunny, 22\u00b0C"}, {"type": "tool_result", "tool_use_id": "toolu_013Fzn3MBimmzAehCxVS3VCQ",
-      "content": "14:00 CET"}]}], "model": "claude-sonnet-4-20250514", "system": [{"type":
-      "text", "text": "You are a helpful assistant. When asked for multiple pieces
-      of information, call all relevant tools in parallel in a single response.",
-      "cache_control": {"type": "ephemeral"}}], "tools": [{"name": "get_weather",
-      "description": "Get the current weather for a city.", "input_schema": {"properties":
-      {"city": {"title": "City", "type": "string"}}, "required": ["city"], "title":
-      "Input for `get_weather`", "type": "object"}}, {"name": "get_time", "description":
-      "Get the current time for a city.", "input_schema": {"properties": {"city":
-      {"title": "City", "type": "string"}}, "required": ["city"], "title": "Input
-      for `get_time`", "type": "object"}, "cache_control": {"type": "ephemeral"}}]}'
+    body: "{\"max_tokens\": 10000, \"messages\": [{\"role\": \"user\", \"content\":
+      [{\"type\": \"text\", \"text\": \"What is the weather and time in Paris? Use
+      both tools.\"}]}, {\"role\": \"assistant\", \"content\": [{\"type\": \"text\",
+      \"text\": \"I'll get both the weather and time information for Paris using both
+      tools.\"}, {\"type\": \"tool_use\", \"id\": \"toolu_01M1njc5mmV1vM2xjekZsAGX\",
+      \"name\": \"get_weather\", \"input\": {\"city\": \"Paris\"}}, {\"type\": \"tool_use\",
+      \"id\": \"toolu_013Fzn3MBimmzAehCxVS3VCQ\", \"name\": \"get_time\", \"input\":
+      {\"city\": \"Paris\"}}]}, {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\",
+      \"tool_use_id\": \"toolu_01M1njc5mmV1vM2xjekZsAGX\", \"content\": \"Sunny, 22\xB0C\"},
+      {\"type\": \"tool_result\", \"tool_use_id\": \"toolu_013Fzn3MBimmzAehCxVS3VCQ\",
+      \"content\": \"14:00 CET\", \"cache_control\": {\"type\": \"ephemeral\"}}]}],
+      \"model\": \"claude-sonnet-4-20250514\", \"system\": [{\"type\": \"text\", \"text\":
+      \"You are a helpful assistant. When asked for multiple pieces of information,
+      call all relevant tools in parallel in a single response.\", \"cache_control\":
+      {\"type\": \"ephemeral\"}}], \"tools\": [{\"name\": \"get_weather\", \"description\":
+      \"Get the current weather for a city.\", \"input_schema\": {\"properties\":
+      {\"city\": {\"title\": \"City\", \"type\": \"string\"}}, \"required\": [\"city\"],
+      \"title\": \"Input for `get_weather`\", \"type\": \"object\"}}, {\"name\": \"get_time\",
+      \"description\": \"Get the current time for a city.\", \"input_schema\": {\"properties\":
+      {\"city\": {\"title\": \"City\", \"type\": \"string\"}}, \"required\": [\"city\"],
+      \"title\": \"Input for `get_time`\", \"type\": \"object\"}, \"cache_control\":
+      {\"type\": \"ephemeral\"}}]}"
     headers:
       accept:
       - application/json

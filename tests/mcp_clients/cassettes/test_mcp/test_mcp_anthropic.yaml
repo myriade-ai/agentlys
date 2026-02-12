@@ -45,8 +45,8 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens":10000,"messages":[{"role":"user","content":[{"type":"text","text":"Use
-      calculator to add 1 and 2","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
-      use the calculator to add 1 and 2 for you."},{"type":"tool_use","id":"toolu_01LAVLk2hVqSA8idAxjQ276g","name":"add","input":{"a":1,"b":2}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01LAVLk2hVqSA8idAxjQ276g","content":"3"}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
+      calculator to add 1 and 2"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
+      use the calculator to add 1 and 2 for you."},{"type":"tool_use","id":"toolu_01LAVLk2hVqSA8idAxjQ276g","name":"add","input":{"a":1,"b":2}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01LAVLk2hVqSA8idAxjQ276g","content":"3","cache_control":{"type":"ephemeral"}}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
       two numbers","input_schema":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}},{"name":"files__","description":"uri:files://","input_schema":{"properties":{},"required":[],"type":"object"}},{"name":"files__file_name","description":"uri:files://{file_name}\nGet
       a file","input_schema":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"},"cache_control":{"type":"ephemeral"}}]}'
     headers:
@@ -90,10 +90,10 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens":10000,"messages":[{"role":"user","content":[{"type":"text","text":"Use
-      calculator to add 1 and 2","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
+      calculator to add 1 and 2"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
       use the calculator to add 1 and 2 for you."},{"type":"tool_use","id":"toolu_01LAVLk2hVqSA8idAxjQ276g","name":"add","input":{"a":1,"b":2}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01LAVLk2hVqSA8idAxjQ276g","content":"3"}]},{"role":"assistant","content":[{"type":"text","text":"The
       result of adding 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
-      files and then get file1"}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
+      files and then get file1","cache_control":{"type":"ephemeral"}}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
       two numbers","input_schema":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}},{"name":"files__","description":"uri:files://","input_schema":{"properties":{},"required":[],"type":"object"}},{"name":"files__file_name","description":"uri:files://{file_name}\nGet
       a file","input_schema":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"},"cache_control":{"type":"ephemeral"}}]}'
     headers:
@@ -137,11 +137,11 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens":10000,"messages":[{"role":"user","content":[{"type":"text","text":"Use
-      calculator to add 1 and 2","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
+      calculator to add 1 and 2"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
       use the calculator to add 1 and 2 for you."},{"type":"tool_use","id":"toolu_01LAVLk2hVqSA8idAxjQ276g","name":"add","input":{"a":1,"b":2}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01LAVLk2hVqSA8idAxjQ276g","content":"3"}]},{"role":"assistant","content":[{"type":"text","text":"The
       result of adding 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
       files and then get file1"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
-      list the available files first and then get file1 for you."},{"type":"tool_use","id":"toolu_01G4HbM12XwaErkthLTXE2KQ","name":"files__","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01G4HbM12XwaErkthLTXE2KQ","content":"file1\nfile2"}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
+      list the available files first and then get file1 for you."},{"type":"tool_use","id":"toolu_01G4HbM12XwaErkthLTXE2KQ","name":"files__","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01G4HbM12XwaErkthLTXE2KQ","content":"file1\nfile2","cache_control":{"type":"ephemeral"}}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
       two numbers","input_schema":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}},{"name":"files__","description":"uri:files://","input_schema":{"properties":{},"required":[],"type":"object"}},{"name":"files__file_name","description":"uri:files://{file_name}\nGet
       a file","input_schema":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"},"cache_control":{"type":"ephemeral"}}]}'
     headers:
@@ -185,13 +185,13 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens":10000,"messages":[{"role":"user","content":[{"type":"text","text":"Use
-      calculator to add 1 and 2","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
+      calculator to add 1 and 2"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
       use the calculator to add 1 and 2 for you."},{"type":"tool_use","id":"toolu_01LAVLk2hVqSA8idAxjQ276g","name":"add","input":{"a":1,"b":2}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01LAVLk2hVqSA8idAxjQ276g","content":"3"}]},{"role":"assistant","content":[{"type":"text","text":"The
       result of adding 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
       files and then get file1"}]},{"role":"assistant","content":[{"type":"text","text":"I''ll
       list the available files first and then get file1 for you."},{"type":"tool_use","id":"toolu_01G4HbM12XwaErkthLTXE2KQ","name":"files__","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01G4HbM12XwaErkthLTXE2KQ","content":"file1\nfile2"}]},{"role":"assistant","content":[{"type":"text","text":"Now
       I''ll get the contents of file1:"},{"type":"tool_use","id":"toolu_01PEJ6zwodxnzY9iJBdH8WoT","name":"files__file_name","input":{"file_name":"file1"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01PEJ6zwodxnzY9iJBdH8WoT","content":"Hello
-      world"}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
+      world","cache_control":{"type":"ephemeral"}}]}],"model":"claude-3-7-sonnet-latest","tools":[{"name":"add","description":"Add
       two numbers","input_schema":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}},{"name":"files__","description":"uri:files://","input_schema":{"properties":{},"required":[],"type":"object"}},{"name":"files__file_name","description":"uri:files://{file_name}\nGet
       a file","input_schema":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"},"cache_control":{"type":"ephemeral"}}]}'
     headers:

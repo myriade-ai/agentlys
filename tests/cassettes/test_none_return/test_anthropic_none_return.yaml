@@ -1,110 +1,108 @@
 interactions:
-  - request:
-      body:
-        '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-        "text", "text": "Call the function_returning_none function", "cache_control":
-        {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest", "system": [{"type":
-        "text", "text": "You are a helpful assistant that can call functions.", "cache_control":
-        {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none", "description":
-        "A simple function that returns None.", "input_schema": {"properties": {}, "title":
-        "Input for `function_returning_none`", "type": "object"}, "cache_control": {"type":
-        "ephemeral"}}]}'
-      headers:
-        anthropic-beta:
-          - prompt-caching-2024-07-31
-        anthropic-version:
-          - "2023-06-01"
-        content-type:
-          - application/json
-        host:
-          - api.anthropic.com
-        x-stainless-read-timeout:
-          - "600"
-      method: POST
-      uri: https://api.anthropic.com/v1/messages
-    response:
-      body:
-        string: !!binary |
-          H4sIAAAAAAAAA3RQTUvDQBD9K2EuXjaSD6tmb2oRLPSiFUtFlnUzTUK3MzW7i5aQ/y6JlFrE0zDv
-          vXlvZjpoSpCwdZVK0ilWq6fPl/kmM/Xl7HZxP+V89Q4C/H6Hgwqd0xWCgJbtAGjnGuc1eRCw5RIt
-          SDBWhxLjPL6KHROhj7MkmyRZWoAAw+SRPMjX7mDq8WsYH4uEhzNrI6OtjXyN0TqQ8Q2TatGHlhqq
-          FDEd8WjNbbTncA69OBoyWxXcsOZ429AHlaSPs2VRNWmxuJvfPLv5dVhO8wsCAaS3w9w/YYMN7YIH
-          2fX9mwDneada1I7pNGwkHH4EJIMgKVgrIIwPk92Ph/K8QXIg82IiwGhTozIt6jH2VJEc+BZ1+Zfj
-          4H8jk6zvvwEAAP//AwD4ZDj1ywEAAA==
-      headers:
-        Connection:
-          - keep-alive
-        Content-Encoding:
-          - gzip
-        Content-Type:
-          - application/json
-        X-Robots-Tag:
-          - none
-        anthropic-organization-id:
-          - 61a15141-02df-4127-8350-1bd919d75ec8
-        request-id:
-          - req_01966jz6WzJM3dUbWiRVkFzH
-        transfer-encoding:
-          - chunked
-        via:
-          - 1.1 google
-      status:
-        code: 200
-        message: OK
-  - request:
-      body:
-        '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-        "text", "text": "Call the function_returning_none function", "cache_control":
-        {"type": "ephemeral"}}]}, {"role": "assistant", "content": [{"type": "text",
-        "text": "I''ll call the function_returning_none function for you."}, {"type":
-        "tool_use", "id": "toolu_01RJX9gi19TCMAUsM8uXD34n", "name": "function_returning_none",
-        "input": {}}]}, {"role": "user", "content": [{"type": "tool_result", "tool_use_id":
-        "toolu_01RJX9gi19TCMAUsM8uXD34n", "content": ""}]}], "model": "claude-3-7-sonnet-latest",
-        "system": [{"type": "text", "text": "You are a helpful assistant that can call
-        functions.", "cache_control": {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none",
-        "description": "A simple function that returns None.", "input_schema": {"properties":
-        {}, "title": "Input for `function_returning_none`", "type": "object"}, "cache_control":
-        {"type": "ephemeral"}}]}'
-      headers:
-        anthropic-beta:
-          - prompt-caching-2024-07-31
-        anthropic-version:
-          - "2023-06-01"
-        content-type:
-          - application/json
-        host:
-          - api.anthropic.com
-        x-stainless-read-timeout:
-          - "600"
-      method: POST
-      uri: https://api.anthropic.com/v1/messages
-    response:
-      body:
-        string: !!binary |
-          H4sIAAAAAAAAA2SQTUsDMRCG/0qYSy/Zst22FHMTpH4ciuJFFFlCMt0G08l2ZyJdSv+7bLVK8TTw
-          vs87XwcIHgxsuanLyePdYheWz9vm9unhZTl3r+v+ZpVBg/QtDhQy2wZBQ5fiIFjmwGJJQMM2eYxg
-          wEWbPRbTYlFwIkIpqrKal9XkCjS4RIIkYN4O56aC+yF+KgbuR5+oODuHzOscY6+cjRG9kg2qdSYn
-          IVHdoeSOAjU1JfrTx+qaFe5bdIJeX0SUD55Gor6TylKvUpY2i+JADlWQESuPHBoahqUzuEqEYzi+
-          a2BJbd2h5URgAMnXAwA/BuMuIzkEQzlGDfn0KHOAQG2WWtIHEoOZLSoNzroN1q5DezrmkijPfofW
-          //e+l/5VprPj8QsAAP//AwArfTY6wwEAAA==
-      headers:
-        Connection:
-          - keep-alive
-        Content-Encoding:
-          - gzip
-        Content-Type:
-          - application/json
-        X-Robots-Tag:
-          - none
-        anthropic-organization-id:
-          - 61a15141-02df-4127-8350-1bd919d75ec8
-        request-id:
-          - req_01TP6RR4S9sSeV8ATiyZE3cD
-        transfer-encoding:
-          - chunked
-        via:
-          - 1.1 google
-      status:
-        code: 200
-        message: OK
+- request:
+    body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
+      "text", "text": "Call the function_returning_none function", "cache_control":
+      {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest", "system": [{"type":
+      "text", "text": "You are a helpful assistant that can call functions.", "cache_control":
+      {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none", "description":
+      "A simple function that returns None.", "input_schema": {"properties": {}, "title":
+      "Input for `function_returning_none`", "type": "object"}, "cache_control": {"type":
+      "ephemeral"}}]}'
+    headers:
+      anthropic-beta:
+      - prompt-caching-2024-07-31
+      anthropic-version:
+      - '2023-06-01'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      x-stainless-read-timeout:
+      - '600'
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RQTUvDQBD9K2EuXjaSD6tmb2oRLPSiFUtFlnUzTUK3MzW7i5aQ/y6JlFrE0zDv
+        vXlvZjpoSpCwdZVK0ilWq6fPl/kmM/Xl7HZxP+V89Q4C/H6Hgwqd0xWCgJbtAGjnGuc1eRCw5RIt
+        SDBWhxLjPL6KHROhj7MkmyRZWoAAw+SRPMjX7mDq8WsYH4uEhzNrI6OtjXyN0TqQ8Q2TatGHlhqq
+        FDEd8WjNbbTncA69OBoyWxXcsOZ429AHlaSPs2VRNWmxuJvfPLv5dVhO8wsCAaS3w9w/YYMN7YIH
+        2fX9mwDneada1I7pNGwkHH4EJIMgKVgrIIwPk92Ph/K8QXIg82IiwGhTozIt6jH2VJEc+BZ1+Zfj
+        4H8jk6zvvwEAAP//AwD4ZDj1ywEAAA==
+    headers:
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      X-Robots-Tag:
+      - none
+      anthropic-organization-id:
+      - 61a15141-02df-4127-8350-1bd919d75ec8
+      request-id:
+      - req_01966jz6WzJM3dUbWiRVkFzH
+      transfer-encoding:
+      - chunked
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
+      "text", "text": "Call the function_returning_none function"}]}, {"role": "assistant",
+      "content": [{"type": "text", "text": "I''ll call the function_returning_none
+      function for you."}, {"type": "tool_use", "id": "toolu_01RJX9gi19TCMAUsM8uXD34n",
+      "name": "function_returning_none", "input": {}}]}, {"role": "user", "content":
+      [{"type": "tool_result", "tool_use_id": "toolu_01RJX9gi19TCMAUsM8uXD34n", "content":
+      "", "cache_control": {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest",
+      "system": [{"type": "text", "text": "You are a helpful assistant that can call
+      functions.", "cache_control": {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none",
+      "description": "A simple function that returns None.", "input_schema": {"properties":
+      {}, "title": "Input for `function_returning_none`", "type": "object"}, "cache_control":
+      {"type": "ephemeral"}}]}'
+    headers:
+      anthropic-beta:
+      - prompt-caching-2024-07-31
+      anthropic-version:
+      - '2023-06-01'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      x-stainless-read-timeout:
+      - '600'
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2SQTUsDMRCG/0qYSy/Zst22FHMTpH4ciuJFFFlCMt0G08l2ZyJdSv+7bLVK8TTw
+        vs87XwcIHgxsuanLyePdYheWz9vm9unhZTl3r+v+ZpVBg/QtDhQy2wZBQ5fiIFjmwGJJQMM2eYxg
+        wEWbPRbTYlFwIkIpqrKal9XkCjS4RIIkYN4O56aC+yF+KgbuR5+oODuHzOscY6+cjRG9kg2qdSYn
+        IVHdoeSOAjU1JfrTx+qaFe5bdIJeX0SUD55Gor6TylKvUpY2i+JADlWQESuPHBoahqUzuEqEYzi+
+        a2BJbd2h5URgAMnXAwA/BuMuIzkEQzlGDfn0KHOAQG2WWtIHEoOZLSoNzroN1q5DezrmkijPfofW
+        //e+l/5VprPj8QsAAP//AwArfTY6wwEAAA==
+    headers:
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      X-Robots-Tag:
+      - none
+      anthropic-organization-id:
+      - 61a15141-02df-4127-8350-1bd919d75ec8
+      request-id:
+      - req_01TP6RR4S9sSeV8ATiyZE3cD
+      transfer-encoding:
+      - chunked
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
 version: 1
