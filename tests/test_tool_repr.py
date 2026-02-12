@@ -17,31 +17,31 @@ class MockTool:
 
 
 class TestToolRepr(unittest.TestCase):
-    def test_tool_repr_in_last_tools_states(self):
+    def test_tool_repr_in_initial_tools_states(self):
         agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
         class_name = mock_tool.__class__.__name__
         tool_id = agent.add_tool(mock_tool)
 
-        last_tools_states = agent.last_tools_states
+        initial_tools_states = agent.initial_tools_states
 
         assert (
             f"### {class_name}-{tool_id}\nMockTool(name=TestTool, call_count=0)"
-            in last_tools_states
+            in initial_tools_states
         )
 
         # Increment the mock tool's call count
         agent.functions[f"MockTool-{tool_id}__increment"]()
 
-        last_tools_states = agent.last_tools_states
+        initial_tools_states = agent.initial_tools_states
         assert (
             f"### {class_name}-{tool_id}\nMockTool(name=TestTool, call_count=1)"
-            in last_tools_states
+            in initial_tools_states
         )
 
-    def test_last_tools_states_in_openai_system_last_message(self):
+    def test_initial_tools_states_in_openai_system_message(self):
         """
-        We want to check that the last_tools_states is in the system last_message
+        We want to check that the initial_tools_states is in the system message
         """
         agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
@@ -54,7 +54,7 @@ class TestToolRepr(unittest.TestCase):
             messages = kwargs.get("messages", [])
             system_messages = [msg for msg in messages if msg.get("role") == "system"]
 
-            # Verify the last_tools_states is in the system message content
+            # Verify the initial_tools_states is in the system message content
             tool_repr = (
                 f"### {class_name}-{tool_id}\nMockTool(name=TestTool, call_count=0)"
             )
@@ -88,9 +88,9 @@ class TestToolRepr(unittest.TestCase):
         agent.provider.client.chat.completions.create = mock_create
         agent.ask("Hello")
 
-    def test_last_tools_states_in_anthropic_system_last_message(self):
+    def test_initial_tools_states_in_anthropic_system_message(self):
         """
-        We want to check that the last_tools_states is in the system messages
+        We want to check that the initial_tools_states is in the system messages
         """
         agent = Agentlys(provider="anthropic")
         mock_tool = MockTool("TestTool")
@@ -101,7 +101,7 @@ class TestToolRepr(unittest.TestCase):
         async def mock_create(*args, **kwargs):
             # Check if the tool representation is in the system message
             system_messages = kwargs.get("system", [])
-            # Verify the last_tools_states is in the system message last content
+            # Verify the initial_tools_states is in the system message last content
             tool_repr = (
                 f"### {class_name}-{tool_id}\nMockTool(name=TestTool, call_count=0)"
             )

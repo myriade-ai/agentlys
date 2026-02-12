@@ -224,12 +224,12 @@ class AnthropicProvider(BaseProvider):
                 }
             )
 
-        if self.chat.last_tools_states:
+        if self.chat.initial_tools_states:
             # add to system message
             system_messages.append(
                 {
                     "type": "text",
-                    "text": self.chat.last_tools_states,
+                    "text": self.chat.initial_tools_states,
                 }
             )
 
@@ -258,8 +258,6 @@ class AnthropicProvider(BaseProvider):
             **kwargs,
         )
         res_dict = res.to_dict()
-        if hasattr(self.chat, "_usage_log"):
-            self.chat._usage_log.append(res_dict.get("usage", {}))
         return Message.from_anthropic_dict(
             role=res_dict["role"],
             content=res_dict["content"],
@@ -290,8 +288,6 @@ class AnthropicProvider(BaseProvider):
             # Get final message for tool handling
             response = await stream.get_final_message()
             res_dict = response.to_dict()
-            if hasattr(self.chat, "_usage_log"):
-                self.chat._usage_log.append(res_dict.get("usage", {}))
             final_message = Message.from_anthropic_dict(
                 role=res_dict["role"],
                 content=res_dict["content"],

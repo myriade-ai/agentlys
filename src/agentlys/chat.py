@@ -108,11 +108,10 @@ class Agentlys(AgentlysBase):
         self.context = context
         self.max_interactions = max_interactions
         self.thinking = thinking
-        self._frozen_tools_states = None
+        self._initial_tools_states = None
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
-        self._usage_log = []
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -134,7 +133,16 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
-        self._frozen_tools_states = None
+        self._initial_tools_states = None
+
+    def refresh_tools_states(self):
+        """Clear and re-capture tool states.
+
+        Useful when tools have mutated and you want to pick up the new state
+        without resetting the entire conversation.
+        """
+        self._initial_tools_states = None
+        self._initial_tools_states = self.initial_tools_states
 
     @property
     def last_message(self):
@@ -143,10 +151,16 @@ class Agentlys(AgentlysBase):
         return self.messages[-1].content
 
     @property
-    def last_tools_states(self) -> typing.Optional[str]:
-        """We add the repr() of each tool to the system context"""
-        if self._frozen_tools_states is not None:
-            return self._frozen_tools_states
+    def initial_tools_states(self) -> typing.Optional[str]:
+        """Captured tool states included in the system prompt.
+
+        Returns the cached snapshot if available, otherwise computes
+        from the current tools.  The value is captured once on the first
+        run_conversation call and stays static until reset() or
+        refresh_tools_states() is called.
+        """
+        if self._initial_tools_states is not None:
+            return self._initial_tools_states
         # If there are no tools, return None
         if not self.tools:
             return None
@@ -168,14 +182,14 @@ class Agentlys(AgentlysBase):
         tool_context = "\n".join(tool_reprs)
 
         """
-        ## Last Tools States
+        ## Initial Tools States
         ### Tool 1
         {state}
         ### Tool 2
         {state}
-        --- End of Last Tools States ---
+        --- End of Initial Tools States ---
         """
-        return f"## Last Tools States\n{tool_context}\n--- End of Last Tools States ---"
+        return f"## Initial Tools States\n{tool_context}\n--- End of Initial Tools States ---"
 
     def load_messages(self, messages: list[Message]):
         # Check order of messages (based on createdAt)
@@ -614,9 +628,9 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
-        # Reset then freeze tools states for cache consistency across API calls within this turn
-        self._frozen_tools_states = None
-        self._frozen_tools_states = self.last_tools_states
+        # Capture tool states once on first run; stays static across all subsequent runs
+        if self._initial_tools_states is None:
+            self._initial_tools_states = self.initial_tools_states
 
         for _ in range(self.max_interactions):
             # Ask the LLM with the current message (if any)
@@ -691,9 +705,9 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
-        # Reset then freeze tools states for cache consistency across API calls within this turn
-        self._frozen_tools_states = None
-        self._frozen_tools_states = self.last_tools_states
+        # Capture tool states once on first run; stays static across all subsequent runs
+        if self._initial_tools_states is None:
+            self._initial_tools_states = self.initial_tools_states
 
         for _ in range(self.max_interactions):
             # Stream the LLM response
