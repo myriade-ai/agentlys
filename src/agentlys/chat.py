@@ -134,6 +134,7 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._frozen_tools_states = None
 
     @property
     def last_message(self):
@@ -613,7 +614,8 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
-        # Freeze tools states for cache consistency across API calls within this turn
+        # Reset then freeze tools states for cache consistency across API calls within this turn
+        self._frozen_tools_states = None
         self._frozen_tools_states = self.last_tools_states
 
         for _ in range(self.max_interactions):
@@ -689,7 +691,8 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
-        # Freeze tools states for cache consistency across API calls within this turn
+        # Reset then freeze tools states for cache consistency across API calls within this turn
+        self._frozen_tools_states = None
         self._frozen_tools_states = self.last_tools_states
 
         for _ in range(self.max_interactions):
