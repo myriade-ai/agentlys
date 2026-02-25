@@ -39,18 +39,22 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
         # Build content blocks: include text content if present, then image
         content_blocks = []
         if part.content:
-            content_blocks.append({
-                "type": "text",
-                "text": part.content,
-            })
-        content_blocks.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": part.image.format,
-                "data": part.image.to_base64(),
-            },
-        })
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "text": part.content,
+                }
+            )
+        content_blocks.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": part.image.format,
+                    "data": part.image.to_base64(),
+                },
+            }
+        )
         return {
             "type": "tool_result",
             "content": content_blocks,
@@ -99,6 +103,48 @@ class AnthropicProvider(BaseProvider):
         )
         self.chat = chat
         self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
+
+    @staticmethod
+    def _strip_thinking_from_prior_turns(messages: list[dict]) -> list[dict]:
+        """Strip thinking/redacted_thinking blocks from all assistant messages
+        except the last one.
+
+        Anthropic's thinking signatures are tied to the model version that
+        generated them.  When the model is upgraded, old signatures become
+        invalid and the API returns 400.  The docs confirm it is safe to omit
+        thinking blocks from prior assistant turns.
+
+        We preserve the *last* assistant message's thinking because it may be
+        part of an active tool-use loop where the model needs continuity.
+
+        https://platform.claude.com/docs/en/build-with-claude/extended-thinking#preserving-thinking-blocks
+        """
+        # Find the index of the last assistant message
+        last_assistant_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "assistant":
+                last_assistant_idx = i
+                break
+
+        if last_assistant_idx is None:
+            return messages
+
+        result = []
+        for i, msg in enumerate(messages):
+            if (
+                msg.get("role") == "assistant"
+                and i != last_assistant_idx
+                and isinstance(msg.get("content"), list)
+            ):
+                filtered_content = [
+                    block
+                    for block in msg["content"]
+                    if block.get("type") not in ("thinking", "redacted_thinking")
+                ]
+                result.append({**msg, "content": filtered_content})
+            else:
+                result.append(msg)
+        return result
 
     def _prepare_request_params(self, **kwargs):
         """Prepare messages, tools, and kwargs for Anthropic API request."""
@@ -169,6 +215,7 @@ class AnthropicProvider(BaseProvider):
             return merged_messages
 
         messages = merge_messages(messages)
+        messages = self._strip_thinking_from_prior_turns(messages)
 
         # Need to map field "parameters" to "input_schema"
         tools = [
