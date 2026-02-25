@@ -63,5 +63,177 @@ class TestAnthropic(unittest.TestCase):
             self.assertEqual(actual_messages, expected_output)
 
 
+class TestStripThinkingFromPriorTurns(unittest.TestCase):
+    """Tests for AnthropicProvider._strip_thinking_from_prior_turns."""
+
+    def _call(self, messages):
+        from agentlys.providers.anthropic import AnthropicProvider
+
+        return AnthropicProvider._strip_thinking_from_prior_turns(messages)
+
+    def test_strips_thinking_from_all_assistants_without_tool_loop(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "old thought",
+                        "signature": "sig1",
+                    },
+                    {"type": "text", "text": "response 1"},
+                ],
+            },
+            {"role": "user", "content": "follow up"},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "new thought",
+                        "signature": "sig2",
+                    },
+                    {"type": "text", "text": "response 2"},
+                ],
+            },
+        ]
+        result = self._call(messages)
+        # Both assistants stripped — no tool_result follows the last one
+        self.assertEqual(
+            result[1]["content"],
+            [{"type": "text", "text": "response 1"}],
+        )
+        self.assertEqual(
+            result[3]["content"],
+            [{"type": "text", "text": "response 2"}],
+        )
+
+    def test_strips_last_assistant_thinking_when_no_tool_loop(self):
+        messages = [
+            {"role": "user", "content": "hi"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "my thought", "signature": "sig"},
+                    {"type": "text", "text": "answer"},
+                ],
+            },
+        ]
+        result = self._call(messages)
+        # Last assistant but no tool_result follows — thinking stripped
+        self.assertEqual(
+            result[1]["content"],
+            [{"type": "text", "text": "answer"}],
+        )
+
+    def test_preserves_last_assistant_thinking_in_tool_loop(self):
+        messages = [
+            {"role": "user", "content": "query the database"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "thought", "signature": "sig"},
+                    {"type": "text", "text": "I'll run a query"},
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "query",
+                        "input": {"sql": "SELECT 1"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "1"},
+                ],
+            },
+        ]
+        result = self._call(messages)
+        # Last assistant followed by tool_result — thinking preserved
+        self.assertEqual(result[1]["content"], messages[1]["content"])
+
+    def test_non_thinking_blocks_untouched(self):
+        messages = [
+            {"role": "user", "content": "do something"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll use a tool"},
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "query",
+                        "input": {},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "result"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "done"}],
+            },
+        ]
+        result = self._call(messages)
+        # First assistant has no thinking, should be unchanged
+        self.assertEqual(result[1]["content"], messages[1]["content"])
+        # User message unchanged
+        self.assertEqual(result[2], messages[2])
+        # Last assistant unchanged
+        self.assertEqual(result[3], messages[3])
+
+    def test_user_and_function_messages_untouched(self):
+        messages = [
+            {"role": "user", "content": "question"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "data"},
+                ],
+            },
+        ]
+        result = self._call(messages)
+        self.assertEqual(result, messages)
+
+    def test_strips_redacted_thinking(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "redacted_thinking", "data": "encrypted"},
+                    {"type": "text", "text": "response"},
+                ],
+            },
+            {"role": "user", "content": "more"},
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "final"}],
+            },
+        ]
+        result = self._call(messages)
+        # First assistant: redacted_thinking stripped
+        self.assertEqual(
+            result[1]["content"],
+            [{"type": "text", "text": "response"}],
+        )
+
+    def test_no_assistant_messages(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+        ]
+        result = self._call(messages)
+        self.assertEqual(result, messages)
+
+    def test_empty_messages(self):
+        self.assertEqual(self._call([]), [])
+
+
 if __name__ == "__main__":
     unittest.main()
