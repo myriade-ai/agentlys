@@ -71,7 +71,7 @@ class TestStripThinkingFromPriorTurns(unittest.TestCase):
 
         return AnthropicProvider._strip_thinking_from_prior_turns(messages)
 
-    def test_strips_thinking_from_prior_assistant_messages(self):
+    def test_strips_thinking_from_all_assistants_without_tool_loop(self):
         messages = [
             {"role": "user", "content": "hello"},
             {
@@ -99,21 +99,17 @@ class TestStripThinkingFromPriorTurns(unittest.TestCase):
             },
         ]
         result = self._call(messages)
-        # First assistant: thinking stripped
+        # Both assistants stripped — no tool_result follows the last one
         self.assertEqual(
             result[1]["content"],
             [{"type": "text", "text": "response 1"}],
         )
-        # Last assistant: thinking preserved
         self.assertEqual(
             result[3]["content"],
-            [
-                {"type": "thinking", "thinking": "new thought", "signature": "sig2"},
-                {"type": "text", "text": "response 2"},
-            ],
+            [{"type": "text", "text": "response 2"}],
         )
 
-    def test_preserves_last_assistant_thinking(self):
+    def test_strips_last_assistant_thinking_when_no_tool_loop(self):
         messages = [
             {"role": "user", "content": "hi"},
             {
@@ -125,7 +121,37 @@ class TestStripThinkingFromPriorTurns(unittest.TestCase):
             },
         ]
         result = self._call(messages)
-        # Only one assistant message — it's the last one, preserved
+        # Last assistant but no tool_result follows — thinking stripped
+        self.assertEqual(
+            result[1]["content"],
+            [{"type": "text", "text": "answer"}],
+        )
+
+    def test_preserves_last_assistant_thinking_in_tool_loop(self):
+        messages = [
+            {"role": "user", "content": "query the database"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "thought", "signature": "sig"},
+                    {"type": "text", "text": "I'll run a query"},
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "query",
+                        "input": {"sql": "SELECT 1"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "1"},
+                ],
+            },
+        ]
+        result = self._call(messages)
+        # Last assistant followed by tool_result — thinking preserved
         self.assertEqual(result[1]["content"], messages[1]["content"])
 
     def test_non_thinking_blocks_untouched(self):
