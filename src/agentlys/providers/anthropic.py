@@ -276,25 +276,21 @@ class AnthropicProvider(BaseProvider):
         if tools:
             tools[-1]["cache_control"] = {"type": "ephemeral"}
 
-        # System: add cache_control to the system message
+        # System: add cache_control to the LAST system block so the entire
+        # system section (instruction + tool states) is cached as a unit.
+        # Anthropic uses cumulative hashes — placing cache_control on
+        # system[0] while system[1] varies invalidates every downstream block.
         system_messages = []
         if system is not None:
-            system_messages.append(
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            )
+            system_messages.append({"type": "text", "text": system})
 
         if self.chat.initial_tools_states:
-            # add to system message
             system_messages.append(
-                {
-                    "type": "text",
-                    "text": self.chat.initial_tools_states,
-                }
+                {"type": "text", "text": self.chat.initial_tools_states}
             )
+
+        if system_messages:
+            system_messages[-1]["cache_control"] = {"type": "ephemeral"}
 
         # === End of cache_control ===
 
