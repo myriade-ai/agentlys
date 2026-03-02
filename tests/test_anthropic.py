@@ -235,5 +235,61 @@ class TestStripThinkingFromPriorTurns(unittest.TestCase):
         self.assertEqual(self._call([]), [])
 
 
+class TestCacheControlPlacement(unittest.TestCase):
+    """Tests that cache_control is placed on the last system block."""
+
+    def setUp(self):
+        self.mock_anthropic_client = MagicMock()
+
+    def _make_agent_and_call(self, instruction, initial_tools_states=None):
+        agent = Agentlys(instruction=instruction, provider=APIProvider.ANTHROPIC)
+        agent.messages = [Message(role="user", content="hello")]
+        if initial_tools_states is not None:
+            agent._initial_tools_states = initial_tools_states
+        agent.provider.client = self.mock_anthropic_client
+
+        class FakeAnthropicMessage:
+            def __init__(self, role, content):
+                self.role = role
+                self.content = content
+
+            def to_dict(self):
+                return {"role": self.role, "content": self.content}
+
+        mock_create = AsyncMock(
+            return_value=FakeAnthropicMessage(role="assistant", content="test")
+        )
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(agent.provider.fetch_async())
+
+        return mock_create.call_args.kwargs
+
+    def test_cache_control_on_last_system_block(self):
+        """When system has instruction + tool states, cache_control should be on system[-1]."""
+        kwargs = self._make_agent_and_call(
+            instruction="You are a data analyst.",
+            initial_tools_states="Tables: users, orders",
+        )
+        system = kwargs["system"]
+        self.assertEqual(len(system), 2)
+        # system[0] (instruction) should NOT have cache_control
+        self.assertNotIn("cache_control", system[0])
+        # system[-1] (tool states) should have cache_control
+        self.assertEqual(system[-1]["cache_control"], {"type": "ephemeral"})
+
+    def test_cache_control_on_sole_system_block(self):
+        """When system has only instruction (no tool states), cache_control should be on system[0]."""
+        kwargs = self._make_agent_and_call(
+            instruction="You are a data analyst.",
+            initial_tools_states=None,
+        )
+        system = kwargs["system"]
+        self.assertEqual(len(system), 1)
+        # The sole system block should have cache_control
+        self.assertEqual(system[0]["cache_control"], {"type": "ephemeral"})
+
+
 if __name__ == "__main__":
     unittest.main()
