@@ -23,17 +23,33 @@ class BaseProvider(ABC):
         """Prepare messages for API requests using a transformation function."""
         first_message = self.chat.messages[0]
 
-        # Add combined context to the first message if it exists
+        # Prepend context to the first message for the API request.
+        # IMPORTANT: build a new Message instead of mutating the original,
+        # because prepare_messages is called on every LLM round-trip within
+        # a tool loop.  Mutating in-place would accumulate context and
+        # invalidate the Anthropic prompt cache.
         if self.chat.context:
             if isinstance(first_message.content, str):
-                first_message.parts[0].content = (
-                    self.chat.context + "\n" + first_message.parts[0].content
+                first_message = Message(
+                    role=first_message.role,
+                    parts=[
+                        MessagePart(
+                            type=first_message.parts[0].type,
+                            content=self.chat.context
+                            + "\n"
+                            + first_message.parts[0].content,
+                        ),
+                        *first_message.parts[1:],
+                    ],
                 )
             elif isinstance(first_message.content, list):
-                first_message.content = [
-                    MessagePart(type="text", content=self.chat.context),
-                    *first_message.content,
-                ]
+                first_message = Message(
+                    role=first_message.role,
+                    parts=[
+                        MessagePart(type="text", content=self.chat.context),
+                        *first_message.parts,
+                    ],
+                )
 
         messages = self.chat.examples + [first_message] + self.chat.messages[1:]
         messages = transform_list_function(messages)
