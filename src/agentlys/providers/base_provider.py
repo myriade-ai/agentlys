@@ -32,12 +32,15 @@ class BaseProvider(ABC):
             if isinstance(first_message.content, str):
                 first_message = Message(
                     role=first_message.role,
+                    name=first_message.name,
+                    id=first_message.id,
                     parts=[
                         MessagePart(
                             type=first_message.parts[0].type,
                             content=self.chat.context
                             + "\n"
                             + first_message.parts[0].content,
+                            function_call_id=first_message.parts[0].function_call_id,
                         ),
                         *first_message.parts[1:],
                     ],
@@ -45,6 +48,8 @@ class BaseProvider(ABC):
             elif isinstance(first_message.content, list):
                 first_message = Message(
                     role=first_message.role,
+                    name=first_message.name,
+                    id=first_message.id,
                     parts=[
                         MessagePart(type="text", content=self.chat.context),
                         *first_message.parts,
