@@ -50,13 +50,13 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-      "text", "text": "First calculate 1 + 2, then process the result"}]}, {"role":
-      "assistant", "content": [{"type": "text", "text": "I''ll help you with this
-      task. You want to perform two operations sequentially: first calculate 1 + 2,
-      and then process the result.\n\nLet me start by calculating 1 + 2:"}, {"type":
-      "tool_use", "id": "toolu_019jQhsj6vvi41wpWhwofqWH", "name": "async_calculator",
-      "input": {"kwargs": {"operation": "add", "a": 1, "b": 2}}}]}, {"role": "user",
-      "content": [{"type": "tool_result", "tool_use_id": "toolu_019jQhsj6vvi41wpWhwofqWH",
+      "text", "text": "First calculate 1 + 2, then process the result", "cache_control":
+      {"type": "ephemeral"}}]}, {"role": "assistant", "content": [{"type": "text",
+      "text": "I''ll help you with this task. You want to perform two operations sequentially:
+      first calculate 1 + 2, and then process the result.\n\nLet me start by calculating
+      1 + 2:"}, {"type": "tool_use", "id": "toolu_019jQhsj6vvi41wpWhwofqWH", "name":
+      "async_calculator", "input": {"kwargs": {"operation": "add", "a": 1, "b": 2}}}]},
+      {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_019jQhsj6vvi41wpWhwofqWH",
       "content": "0", "cache_control": {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest",
       "tools": [{"name": "async_calculator", "description": "No description provided",
       "input_schema": {"properties": {"kwargs": {"title": "Kwargs"}}, "required":
@@ -111,10 +111,11 @@ interactions:
       "tool_use", "id": "toolu_019jQhsj6vvi41wpWhwofqWH", "name": "async_calculator",
       "input": {"kwargs": {"operation": "add", "a": 1, "b": 2}}}]}, {"role": "user",
       "content": [{"type": "tool_result", "tool_use_id": "toolu_019jQhsj6vvi41wpWhwofqWH",
-      "content": "0"}]}, {"role": "assistant", "content": [{"type": "text", "text":
-      "Now I''ll process the result (which is 3):"}, {"type": "tool_use", "id": "toolu_01KrkPpcKuhkCcXy7HL3w7t5",
-      "name": "async_data_processor", "input": {"kwargs": {"data": 3}}}]}, {"role":
-      "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_01KrkPpcKuhkCcXy7HL3w7t5",
+      "content": "0", "cache_control": {"type": "ephemeral"}}]}, {"role": "assistant",
+      "content": [{"type": "text", "text": "Now I''ll process the result (which is
+      3):"}, {"type": "tool_use", "id": "toolu_01KrkPpcKuhkCcXy7HL3w7t5", "name":
+      "async_data_processor", "input": {"kwargs": {"data": 3}}}]}, {"role": "user",
+      "content": [{"type": "tool_result", "tool_use_id": "toolu_01KrkPpcKuhkCcXy7HL3w7t5",
       "content": "{\"result\": \"processed data\"}", "cache_control": {"type": "ephemeral"}}]}],
       "model": "claude-3-7-sonnet-latest", "tools": [{"name": "async_calculator",
       "description": "No description provided", "input_schema": {"properties": {"kwargs":
