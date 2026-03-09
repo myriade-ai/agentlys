@@ -45,13 +45,13 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-      "text", "text": "Hello, read book ''the great gatsby''"}]}, {"role": "assistant",
-      "content": [{"type": "text", "text": "I''d be happy to read \"The Great Gatsby\"
-      for you. Let me get that book for you right away."}, {"type": "tool_use", "id":
-      "toolu_01Cu7tLpQ4zSCCJxGV2LyMBu", "name": "read_book", "input": {"book_name":
-      "the great gatsby"}}]}, {"role": "user", "content": [{"type": "tool_result",
-      "tool_use_id": "toolu_01Cu7tLpQ4zSCCJxGV2LyMBu", "content": "Traceback (most
-      recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_calls_function.py\",
+      "text", "text": "Hello, read book ''the great gatsby''", "cache_control": {"type":
+      "ephemeral"}}]}, {"role": "assistant", "content": [{"type": "text", "text":
+      "I''d be happy to read \"The Great Gatsby\" for you. Let me get that book for
+      you right away."}, {"type": "tool_use", "id": "toolu_01Cu7tLpQ4zSCCJxGV2LyMBu",
+      "name": "read_book", "input": {"book_name": "the great gatsby"}}]}, {"role":
+      "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_01Cu7tLpQ4zSCCJxGV2LyMBu",
+      "content": "Traceback (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_calls_function.py\",
       line 17, in read_book\n    return BOOKS[book_name]\n           ~~~~~^^^^^^^^^^^\n\nKeyError:
       ''the great gatsby''", "cache_control": {"type": "ephemeral"}}]}], "model":
       "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You are a helpful
@@ -108,16 +108,16 @@ interactions:
       "tool_use_id": "toolu_01Cu7tLpQ4zSCCJxGV2LyMBu", "content": "Traceback (most
       recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_calls_function.py\",
       line 17, in read_book\n    return BOOKS[book_name]\n           ~~~~~^^^^^^^^^^^\n\nKeyError:
-      ''the great gatsby''", "cache_control": {"type": "ephemeral"}}]}, {"role":
-      "assistant", "content": [{"type": "text", "text": "I apologize, but I couldn''t
-      find a book titled \"the great gatsby\" in our current collection. Let me check
-      what books are available for you."}, {"type": "tool_use", "id": "toolu_015ZuihAkQBWPNoJLrfAb8JE",
-      "name": "list_books", "input": {}}]}, {"role": "user", "content": [{"type": "tool_result",
-      "tool_use_id": "toolu_015ZuihAkQBWPNoJLrfAb8JE", "content": "The Great Gatsby\nTo
-      Kill a Mockingbird\n1984", "cache_control": {"type": "ephemeral"}}]}], "model":
-      "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You are a helpful
-      assistant that can read books.", "cache_control": {"type": "ephemeral"}}], "tools":
-      [{"name": "list_books", "description": "No description provided", "input_schema":
+      ''the great gatsby''", "cache_control": {"type": "ephemeral"}}]}, {"role": "assistant",
+      "content": [{"type": "text", "text": "I apologize, but I couldn''t find a book
+      titled \"the great gatsby\" in our current collection. Let me check what books
+      are available for you."}, {"type": "tool_use", "id": "toolu_015ZuihAkQBWPNoJLrfAb8JE",
+      "name": "list_books", "input": {}}]}, {"role": "user", "content": [{"type":
+      "tool_result", "tool_use_id": "toolu_015ZuihAkQBWPNoJLrfAb8JE", "content": "The
+      Great Gatsby\nTo Kill a Mockingbird\n1984", "cache_control": {"type": "ephemeral"}}]}],
+      "model": "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You
+      are a helpful assistant that can read books.", "cache_control": {"type": "ephemeral"}}],
+      "tools": [{"name": "list_books", "description": "No description provided", "input_schema":
       {"properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
       "read_book", "description": "No description provided", "input_schema": {"properties":
       {"book_name": {"title": "Book Name", "type": "string"}}, "required": ["book_name"],
@@ -176,22 +176,22 @@ interactions:
       {"type": "tool_use", "id": "toolu_015ZuihAkQBWPNoJLrfAb8JE", "name": "list_books",
       "input": {}}]}, {"role": "user", "content": [{"type": "tool_result", "tool_use_id":
       "toolu_015ZuihAkQBWPNoJLrfAb8JE", "content": "The Great Gatsby\nTo Kill a Mockingbird\n1984",
-      "cache_control": {"type": "ephemeral"}}]}, {"role": "assistant", "content": [{"type":
-      "text", "text": "I see the issue!
-      The book is available but with proper capitalization. Let me read \"The Great
-      Gatsby\" for you now:"}, {"type": "tool_use", "id": "toolu_012HCqfV5vReCUJg3w7eVWgW",
-      "name": "read_book", "input": {"book_name": "The Great Gatsby"}}]}, {"role":
-      "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_012HCqfV5vReCUJg3w7eVWgW",
-      "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
-      eiusmod tempor incididunt ut labore et dolore magna aliqua.", "cache_control":
-      {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest", "system": [{"type":
-      "text", "text": "You are a helpful assistant that can read books.", "cache_control":
-      {"type": "ephemeral"}}], "tools": [{"name": "list_books", "description": "No
-      description provided", "input_schema": {"properties": {}, "title": "Input for
-      `list_books`", "type": "object"}}, {"name": "read_book", "description": "No
-      description provided", "input_schema": {"properties": {"book_name": {"title":
-      "Book Name", "type": "string"}}, "required": ["book_name"], "title": "Input
-      for `read_book`", "type": "object"}, "cache_control": {"type": "ephemeral"}}]}'
+      "cache_control": {"type": "ephemeral"}}]}, {"role": "assistant", "content":
+      [{"type": "text", "text": "I see the issue! The book is available but with proper
+      capitalization. Let me read \"The Great Gatsby\" for you now:"}, {"type": "tool_use",
+      "id": "toolu_012HCqfV5vReCUJg3w7eVWgW", "name": "read_book", "input": {"book_name":
+      "The Great Gatsby"}}]}, {"role": "user", "content": [{"type": "tool_result",
+      "tool_use_id": "toolu_012HCqfV5vReCUJg3w7eVWgW", "content": "Lorem ipsum dolor
+      sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore
+      et dolore magna aliqua.", "cache_control": {"type": "ephemeral"}}]}], "model":
+      "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You are a helpful
+      assistant that can read books.", "cache_control": {"type": "ephemeral"}}], "tools":
+      [{"name": "list_books", "description": "No description provided", "input_schema":
+      {"properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
+      "read_book", "description": "No description provided", "input_schema": {"properties":
+      {"book_name": {"title": "Book Name", "type": "string"}}, "required": ["book_name"],
+      "title": "Input for `read_book`", "type": "object"}, "cache_control": {"type":
+      "ephemeral"}}]}'
     headers:
       anthropic-beta:
       - prompt-caching-2024-07-31

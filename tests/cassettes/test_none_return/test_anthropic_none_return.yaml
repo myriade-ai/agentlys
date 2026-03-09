@@ -52,17 +52,18 @@ interactions:
       message: OK
 - request:
     body: '{"max_tokens": 10000, "messages": [{"role": "user", "content": [{"type":
-      "text", "text": "Call the function_returning_none function"}]}, {"role": "assistant",
-      "content": [{"type": "text", "text": "I''ll call the function_returning_none
-      function for you."}, {"type": "tool_use", "id": "toolu_01RJX9gi19TCMAUsM8uXD34n",
-      "name": "function_returning_none", "input": {}}]}, {"role": "user", "content":
-      [{"type": "tool_result", "tool_use_id": "toolu_01RJX9gi19TCMAUsM8uXD34n", "content":
-      "", "cache_control": {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest",
-      "system": [{"type": "text", "text": "You are a helpful assistant that can call
-      functions.", "cache_control": {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none",
-      "description": "A simple function that returns None.", "input_schema": {"properties":
-      {}, "title": "Input for `function_returning_none`", "type": "object"}, "cache_control":
-      {"type": "ephemeral"}}]}'
+      "text", "text": "Call the function_returning_none function", "cache_control":
+      {"type": "ephemeral"}}]}, {"role": "assistant", "content": [{"type": "text",
+      "text": "I''ll call the function_returning_none function for you."}, {"type":
+      "tool_use", "id": "toolu_01RJX9gi19TCMAUsM8uXD34n", "name": "function_returning_none",
+      "input": {}}]}, {"role": "user", "content": [{"type": "tool_result", "tool_use_id":
+      "toolu_01RJX9gi19TCMAUsM8uXD34n", "content": "", "cache_control": {"type": "ephemeral"}}]}],
+      "model": "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You
+      are a helpful assistant that can call functions.", "cache_control": {"type":
+      "ephemeral"}}], "tools": [{"name": "function_returning_none", "description":
+      "A simple function that returns None.", "input_schema": {"properties": {}, "title":
+      "Input for `function_returning_none`", "type": "object"}, "cache_control": {"type":
+      "ephemeral"}}]}'
     headers:
       anthropic-beta:
       - prompt-caching-2024-07-31

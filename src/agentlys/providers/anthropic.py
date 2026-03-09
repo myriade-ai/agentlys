@@ -283,7 +283,7 @@ class AnthropicProvider(BaseProvider):
             # Breakpoint on messages[-3]: retains the previous iteration's
             # cache so Anthropic can read from it (cache_read) instead of
             # re-caching the entire prefix (cache_creation).
-            if len(messages) >= 4:
+            if len(messages) >= 3:
                 _set_cache_control(-3)
         # Tools: Add cache_control to the last tool function
         if tools:

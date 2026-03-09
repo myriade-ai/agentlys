@@ -557,7 +557,7 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
         self.assertIn(len(msgs) - 1, bp, "Should have breakpoint at messages[-1]")
 
     def test_no_messages_minus_3_when_too_few_messages(self):
-        """With fewer than 4 messages, only messages[-1] should have a breakpoint."""
+        """With fewer than 3 messages, only messages[-1] should have a breakpoint."""
         agent = self._make_agent()
         agent.messages = [Message(role="user", content="Hello")]
 
@@ -566,6 +566,32 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
         bp = self._find_message_breakpoints(msgs)
 
         self.assertEqual(bp, [len(msgs) - 1], "Only messages[-1] breakpoint expected")
+
+    def test_three_messages_gets_both_breakpoints(self):
+        """With exactly 3 messages (first tool-loop follow-up), both breakpoints should be set."""
+        agent = self._make_agent()
+        agent.messages = [
+            Message(role="user", content="Hello"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(type="text", content="Let me check."),
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "run_query", "arguments": {"sql": "SELECT 1"}},
+                        function_call_id="call_1",
+                    ),
+                ],
+            ),
+            Message(role="function", content="1", function_call_id="call_1"),
+        ]
+
+        kwargs = self._call_prepare(agent)
+        msgs = kwargs["messages"]
+        bp = self._find_message_breakpoints(msgs)
+
+        self.assertIn(0, bp, "messages[-3] (index 0) should have breakpoint")
+        self.assertIn(len(msgs) - 1, bp, "messages[-1] should have breakpoint")
 
     def test_parallel_tool_calls_add_two_messages(self):
         """Parallel tool calls (N tool_use + N tool_result) still produce 2 messages."""
