@@ -29,7 +29,7 @@ all = [
     "mcp>=1.6.0; python_version >= '3.10'",
 ]
 build = [
-    "uv~=0.9.5",
+    "uv>=0.9.5,<0.11.0",
 ]
 
 [tool.semantic_release]
