@@ -169,14 +169,16 @@ class Agentlys(AgentlysBase):
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
-            elif hasattr(tool, "__repr__"):
+            elif "__repr__" in type(tool).__dict__:
                 tool_output = repr(tool)
-            elif hasattr(tool, "__str__"):
+            elif "__str__" in type(tool).__dict__:
                 tool_output = str(tool)
             else:
-                raise ValueError(
-                    f"Tool {tool_name} has no __llm__, __repr__ or __str__ method"
-                )
+                # Fall back to the class docstring or empty string.
+                # Never use the default object.__repr__ — it contains
+                # the memory address which changes on every call and
+                # invalidates Anthropic's prompt cache.
+                tool_output = (tool.__class__.__doc__ or "").strip()
             tool_output = _truncate_with_warning(tool_output)
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
