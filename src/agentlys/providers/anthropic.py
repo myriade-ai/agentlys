@@ -248,30 +248,43 @@ class AnthropicProvider(BaseProvider):
                 tool["description"] = "No description provided"
 
         # === Add cache_controls ===
-        # Anthropic's prompt caching allows caching message prefixes to reduce costs and latency.
-        # We place a cache breakpoint on the last message so the entire conversation prefix is cached.
-        # This uses 3 of 4 allowed breakpoints: tools[-1], system[0], and messages[-1].
-        last_message_index = len(messages) - 1 if messages else None
+        # Anthropic's prompt caching uses up to 4 breakpoints per request.
+        # We use all 4: system[-1], tools[-1], messages[-3], messages[-1].
+        #
+        # Why messages[-3]?  Each tool-loop iteration appends exactly 2
+        # messages (1 assistant + 1 tool_result).  So messages[-3] in the
+        # current call corresponds to messages[-1] from the *previous* call,
+        # whose prefix was already cached.  By keeping a breakpoint there,
+        # Anthropic can serve that prefix from cache_read instead of
+        # re-caching the entire message history on every iteration.
 
-        if last_message_index is not None:
-            # Only try to modify the cache control if there are messages and content
+        def _set_cache_control(msg_index):
+            """Add cache_control to the last content block of messages[msg_index]."""
+            msg = messages[msg_index]
             if (
-                messages
-                and isinstance(messages[last_message_index]["content"], list)
-                and len(messages[last_message_index]["content"]) > 0
-                and isinstance(messages[last_message_index]["content"][-1], dict)
+                isinstance(msg["content"], list)
+                and len(msg["content"]) > 0
+                and isinstance(msg["content"][-1], dict)
             ):
-                messages[last_message_index]["content"][-1]["cache_control"] = {
-                    "type": "ephemeral"
-                }
-            elif isinstance(messages[last_message_index]["content"], str):
-                messages[last_message_index]["content"] = [
+                msg["content"][-1]["cache_control"] = {"type": "ephemeral"}
+            elif isinstance(msg["content"], str):
+                msg["content"] = [
                     {
                         "type": "text",
-                        "text": messages[last_message_index]["content"],
+                        "text": msg["content"],
                         "cache_control": {"type": "ephemeral"},
                     }
                 ]
+
+        if messages:
+            # Breakpoint on messages[-1]: caches the full conversation
+            _set_cache_control(-1)
+
+            # Breakpoint on messages[-3]: retains the previous iteration's
+            # cache so Anthropic can read from it (cache_read) instead of
+            # re-caching the entire prefix (cache_creation).
+            if len(messages) >= 4:
+                _set_cache_control(-3)
         # Tools: Add cache_control to the last tool function
         if tools:
             tools[-1]["cache_control"] = {"type": "ephemeral"}

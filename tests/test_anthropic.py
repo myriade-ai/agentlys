@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from agentlys import Agentlys, APIProvider, Message
+from agentlys import Agentlys, APIProvider, Message, MessagePart
 
 
 class TestAnthropic(unittest.TestCase):
@@ -391,6 +391,226 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
         self.assertIn(
             original_content, first_text, "Original content should be in the API output"
         )
+
+
+class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
+    """Tests that cache_control breakpoints are retained across tool loop iterations.
+
+    Bug: _prepare_request_params placed a single breakpoint on messages[-1].
+    In a tool loop, messages[-1] moves on every iteration (2 messages appended
+    per round: 1 assistant + 1 tool_result).  The previous breakpoint position
+    is lost, so Anthropic cannot find the cached prefix for messages — only
+    system + tools get cache hits (~10-14K tokens), while the full message
+    history (100K+) is re-cached (cache_creation) every call.
+
+    Fix: add a second message breakpoint on messages[-3], which corresponds
+    to messages[-1] from the previous iteration.  This uses 4 of 4 allowed
+    breakpoints: system[-1], tools[-1], messages[-3], messages[-1].
+    """
+
+    def setUp(self):
+        self.mock_anthropic_client = MagicMock()
+
+    def _make_agent(self):
+        agent = Agentlys(
+            instruction="You are a data analyst.",
+            provider=APIProvider.ANTHROPIC,
+            context="## Database\ntables: users, orders",
+        )
+        agent.provider.client = self.mock_anthropic_client
+        agent.functions_schema = [
+            {
+                "name": "run_query",
+                "description": "Run a SQL query",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"sql": {"type": "string"}},
+                },
+            }
+        ]
+        agent.functions = {"run_query": lambda sql: sql}
+        return agent
+
+    def _call_prepare(self, agent):
+        mock_create = AsyncMock(
+            return_value=_FakeAnthropicMessage(role="assistant", content="ok")
+        )
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            import asyncio
+
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(agent.provider.fetch_async())
+            finally:
+                loop.close()
+        return mock_create.call_args.kwargs
+
+    @staticmethod
+    def _find_message_breakpoints(messages):
+        """Return indices of messages that contain a cache_control marker."""
+        breakpoints = []
+        for i, msg in enumerate(messages):
+            content = msg.get("content", [])
+            if isinstance(content, str):
+                continue
+            for block in content:
+                if isinstance(block, dict) and "cache_control" in block:
+                    breakpoints.append(i)
+                    break
+        return breakpoints
+
+    def test_previous_breakpoint_retained(self):
+        """After appending 2 messages, Call 1's messages[-1] breakpoint
+        must still be present in Call 2 (now at messages[-3])."""
+        agent = self._make_agent()
+
+        loaded = [
+            Message(role="user", content="Show users"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(type="text", content="Querying."),
+                    MessagePart(
+                        type="function_call",
+                        function_call={
+                            "name": "run_query",
+                            "arguments": {"sql": "SELECT * FROM users"},
+                        },
+                        function_call_id="old_1",
+                    ),
+                ],
+            ),
+            Message(
+                role="function", content="Alice,Bob", function_call_id="old_1"
+            ),
+            Message(role="assistant", content="Here are the users."),
+        ]
+        question = Message(role="user", content="Count orders per user")
+
+        # Call 1
+        agent.messages = loaded + [question]
+        kwargs1 = self._call_prepare(agent)
+        bp1 = self._find_message_breakpoints(kwargs1["messages"])
+        call1_last_bp = bp1[-1]  # messages[-1] breakpoint
+
+        # Call 2: 2 new messages (assistant + tool_result)
+        agent.messages = loaded + [
+            question,
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(type="text", content="Counting."),
+                    MessagePart(
+                        type="function_call",
+                        function_call={
+                            "name": "run_query",
+                            "arguments": {"sql": "SELECT user_id, COUNT(*) FROM orders GROUP BY 1"},
+                        },
+                        function_call_id="call_1",
+                    ),
+                ],
+            ),
+            Message(
+                role="function",
+                content="1,10\n2,5",
+                function_call_id="call_1",
+            ),
+        ]
+        kwargs2 = self._call_prepare(agent)
+        bp2 = self._find_message_breakpoints(kwargs2["messages"])
+
+        self.assertIn(
+            call1_last_bp,
+            bp2,
+            f"Call 2 must retain a breakpoint at index {call1_last_bp} "
+            f"(Call 1's messages[-1]).  Got breakpoints at {bp2}.",
+        )
+
+    def test_two_message_breakpoints_present(self):
+        """Call 2+ should have breakpoints at messages[-3] and messages[-1]."""
+        agent = self._make_agent()
+
+        agent.messages = [
+            Message(role="user", content="Hello"),
+            Message(role="assistant", content="Hi!"),
+            Message(role="user", content="Query something"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={
+                            "name": "run_query",
+                            "arguments": {"sql": "SELECT 1"},
+                        },
+                        function_call_id="tc1",
+                    ),
+                ],
+            ),
+            Message(role="function", content="1", function_call_id="tc1"),
+        ]
+        kwargs = self._call_prepare(agent)
+        msgs = kwargs["messages"]
+        bp = self._find_message_breakpoints(msgs)
+
+        self.assertIn(len(msgs) - 3, bp, "Should have breakpoint at messages[-3]")
+        self.assertIn(len(msgs) - 1, bp, "Should have breakpoint at messages[-1]")
+
+    def test_no_messages_minus_3_when_too_few_messages(self):
+        """With fewer than 4 messages, only messages[-1] should have a breakpoint."""
+        agent = self._make_agent()
+        agent.messages = [Message(role="user", content="Hello")]
+
+        kwargs = self._call_prepare(agent)
+        msgs = kwargs["messages"]
+        bp = self._find_message_breakpoints(msgs)
+
+        self.assertEqual(bp, [len(msgs) - 1], "Only messages[-1] breakpoint expected")
+
+    def test_parallel_tool_calls_add_two_messages(self):
+        """Parallel tool calls (N tool_use + N tool_result) still produce 2 messages."""
+        base = [Message(role="user", content="Analyze data")]
+
+        assistant = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="text", content="Running queries."),
+                MessagePart(
+                    type="function_call",
+                    function_call={"name": "run_query", "arguments": {"sql": "Q1"}},
+                    function_call_id="p1",
+                ),
+                MessagePart(
+                    type="function_call",
+                    function_call={"name": "run_query", "arguments": {"sql": "Q2"}},
+                    function_call_id="p2",
+                ),
+            ],
+        )
+        results = Message(
+            role="function",
+            parts=[
+                MessagePart(type="function_result", content="R1", function_call_id="p1"),
+                MessagePart(type="function_result", content="R2", function_call_id="p2"),
+            ],
+        )
+
+        self.assertEqual(
+            len(base + [assistant, results]) - len(base),
+            2,
+            "Parallel tool calls must add exactly 2 messages",
+        )
+
+
+class _FakeAnthropicMessage:
+    """Shared fake for tests that call fetch_async."""
+
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+    def to_dict(self):
+        return {"role": self.role, "content": self.content}
 
 
 if __name__ == "__main__":
