@@ -87,6 +87,8 @@ def message_to_anthropic_dict(message: Message) -> dict:
     }
 
     for part in message.parts:
+        if part.type == "text" and (not part.content or not part.content.strip()):
+            continue
         res["content"].append(part_to_anthropic_dict(part))
 
     return res
