@@ -300,6 +300,8 @@ class Message:
 
             for item in content:
                 if item["type"] == "text":
+                    if not item["text"] or not item["text"].strip():
+                        continue
                     text_content = item["text"]
                     parts.append(MessagePart(type="text", content=item["text"]))
                 elif item["type"] == "thinking":
