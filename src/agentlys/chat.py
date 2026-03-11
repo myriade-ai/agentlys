@@ -112,6 +112,7 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._sub_agents = {}
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -133,6 +134,7 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._sub_agents = {}
         self._initial_tools_states = None
 
     def refresh_tools_states(self):
@@ -244,6 +246,99 @@ class Agentlys(AgentlysBase):
         self.functions = {
             name: func for name, func in self.functions.items() if name != tool_id
         }
+
+    def add_sub_agent(
+        self,
+        agent: "Agentlys",
+        name: typing.Optional[str] = None,
+        description: typing.Optional[str] = None,
+    ) -> str:
+        """Add a sub-agent that can be triggered by this agent.
+
+        The sub-agent runs its own conversation loop when called and only
+        returns its final response to this agent's context, keeping the
+        main context window clean.
+
+        Args:
+            agent: An Agentlys instance to use as a sub-agent.
+            name: Override name for the sub-agent tool. Defaults to agent.name.
+            description: Description shown to the LLM. Defaults to agent.instruction.
+
+        Returns:
+            The registered function name (e.g. "sub_agent__researcher").
+        """
+        sub_agent_name = name or agent.name
+        if not sub_agent_name:
+            raise ValueError(
+                "Sub-agent must have a name. Set agent.name or pass name= to add_sub_agent()."
+            )
+
+        func_name = f"sub_agent__{sub_agent_name}"
+
+        if func_name in self._sub_agents:
+            raise ValueError(
+                f"Sub-agent with name '{sub_agent_name}' is already registered."
+            )
+
+        async def _invoke_sub_agent(prompt: str) -> str:
+            """Run the sub-agent with the given prompt and return its response."""
+            # Reset messages for stateless execution
+            agent.messages = []
+
+            messages = []
+            async for message in agent.run_conversation_async(prompt):
+                messages.append(message)
+
+            # Return only the final assistant response
+            assistant_messages = [m for m in messages if m.role == "assistant"]
+            if not assistant_messages:
+                return "Sub-agent produced no response."
+
+            return assistant_messages[-1].content or "Sub-agent produced no text response."
+
+        func_description = (
+            description
+            or agent.instruction
+            or f"Delegate a task to the {sub_agent_name} sub-agent."
+        )
+
+        function_schema = {
+            "name": func_name,
+            "description": func_description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "The task or question to send to this sub-agent.",
+                    }
+                },
+                "required": ["prompt"],
+            },
+        }
+
+        self.add_function(_invoke_sub_agent, function_schema)
+        self._sub_agents[func_name] = agent
+
+        return func_name
+
+    def remove_sub_agent(self, name: str):
+        """Remove a sub-agent by name.
+
+        Args:
+            name: The sub-agent name (without the 'sub_agent__' prefix).
+        """
+        func_name = f"sub_agent__{name}"
+        if func_name not in self._sub_agents:
+            raise ValueError(f"No sub-agent with name '{name}' found.")
+
+        del self._sub_agents[func_name]
+        self.functions.pop(func_name, None)
+        self.functions_schema = [
+            schema
+            for schema in self.functions_schema
+            if schema["name"] != func_name
+        ]
 
     async def add_mcp_server(self, mcp_server):
         """
