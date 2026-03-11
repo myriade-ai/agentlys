@@ -59,6 +59,7 @@ class MessagePart:
             "function_result",
             "function_result_image",
             "thinking",
+            "compaction",
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
@@ -284,6 +285,11 @@ class Message:
             return None
         return "\n".join(thinking_parts)
 
+    @property
+    def has_compaction(self) -> bool:
+        """Check if message contains a compaction summary block."""
+        return any(part.type == "compaction" for part in self.parts)
+
     @classmethod
     def from_anthropic_dict(cls, **kwargs):
         role = kwargs.get("role")
@@ -320,6 +326,13 @@ class Message:
                             thinking=None,
                             thinking_signature=item.get("data"),
                             is_redacted=True,
+                        )
+                    )
+                elif item["type"] == "compaction":
+                    parts.append(
+                        MessagePart(
+                            type="compaction",
+                            content=item.get("content", ""),
                         )
                     )
                 elif item["type"] == "tool_use":

@@ -77,6 +77,11 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "thinking": part.thinking,
             "signature": part.thinking_signature,
         }
+    elif part.type == "compaction":
+        return {
+            "type": "text",
+            "text": f"[Previous conversation summary]\n{part.content}",
+        }
     raise ValueError(f"Unknown part type: {part.type}")
 
 

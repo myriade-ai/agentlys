@@ -72,6 +72,7 @@ class Agentlys(AgentlysBase):
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
+        compaction: typing.Optional[object] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -108,6 +109,7 @@ class Agentlys(AgentlysBase):
         self.context = context
         self.max_interactions = max_interactions
         self.thinking = thinking
+        self.compaction = compaction
         self._initial_tools_states = None
         self.functions_schema = []
         self.functions = {}
@@ -278,6 +280,11 @@ class Agentlys(AgentlysBase):
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
             kwargs["thinking"] = self.thinking
+
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                await self.compaction.compact(self)
 
         # Call the async strategy
         response = await self.provider.fetch_async(**kwargs)
@@ -673,6 +680,11 @@ class Agentlys(AgentlysBase):
             if isinstance(message, str):
                 message = Message(role="user", content=message)
             self.messages.append(message)
+
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                await self.compaction.compact(self)
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
