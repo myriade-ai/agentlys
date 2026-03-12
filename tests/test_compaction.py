@@ -271,21 +271,21 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Third response"),
         ]
 
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "<summary>Conversation summary here</summary>"
         mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text="<summary>Conversation summary here</summary>")
-        ]
+        mock_response.content = [mock_text_block]
 
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.create = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_instance
+        # compact() reuses provider.client, so mock that instead of AsyncAnthropic
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
 
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(compaction.compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
 
         # Should have: 1 compaction message + 2 preserved messages
         self.assertEqual(len(agent.messages), 3)
@@ -330,19 +330,20 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Response 2"),
         ]
 
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "Plain summary without tags"
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Plain summary without tags")]
+        mock_response.content = [mock_text_block]
 
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.create = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_instance
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
 
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(compaction.compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
 
         self.assertEqual(
             agent.messages[0].parts[0].content, "Plain summary without tags"
@@ -363,25 +364,27 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Response 2"),
         ]
 
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "<summary>Code preserved</summary>"
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="<summary>Code preserved</summary>")]
+        mock_response.content = [mock_text_block]
 
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.create = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_instance
+        mock_create = AsyncMock(return_value=mock_response)
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = mock_create
 
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(compaction.compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
 
-            # Verify custom prompt was used
-            call_args = mock_instance.messages.create.call_args
-            user_content = call_args.kwargs["messages"][0]["content"]
-            self.assertIn(custom_prompt, user_content)
-            self.assertNotIn(DEFAULT_COMPACTION_PROMPT, user_content)
+        # Verify custom prompt was used
+        call_args = mock_create.call_args
+        user_content = call_args.kwargs["messages"][0]["content"]
+        self.assertIn(custom_prompt, user_content)
+        self.assertNotIn(DEFAULT_COMPACTION_PROMPT, user_content)
 
 
 class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
