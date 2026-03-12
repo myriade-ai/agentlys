@@ -62,12 +62,19 @@ class TokenThresholdCompaction:
     async def should_compact(self, chat: AgentlysBase) -> bool:
         """Check if compaction is needed based on the last API response's token usage.
 
-        Each assistant Message from the provider carries a ``usage`` dict with
-        ``input_tokens`` — the total input token count for that request.
+        Each assistant Message from the provider carries a ``usage`` dict.
+        Total input tokens includes cached tokens (cache_creation_input_tokens,
+        cache_read_input_tokens) which are separate from input_tokens when
+        prompt caching is enabled.
         """
         for msg in reversed(chat.messages):
             if msg.usage and "input_tokens" in msg.usage:
-                return msg.usage["input_tokens"] > self.token_threshold
+                total = (
+                    msg.usage["input_tokens"]
+                    + msg.usage.get("cache_creation_input_tokens", 0)
+                    + msg.usage.get("cache_read_input_tokens", 0)
+                )
+                return total > self.token_threshold
         return False
 
     async def compact(self, chat: AgentlysBase) -> None:
@@ -93,11 +100,11 @@ class TokenThresholdCompaction:
         prompt = self.instructions or DEFAULT_COMPACTION_PROMPT
 
         provider = chat.provider
-        client = anthropic_sdk.AsyncAnthropic(
-            base_url=provider.client._base_url
-            if hasattr(provider, "client")
-            else None,
-        )
+        # Reuse the provider's client so proxy auth / custom base_url work
+        if hasattr(provider, "client"):
+            client = provider.client
+        else:
+            client = anthropic_sdk.AsyncAnthropic()
 
         summary_messages = [
             {
@@ -114,6 +121,10 @@ class TokenThresholdCompaction:
         if chat.instruction:
             kwargs["system"] = chat.instruction
 
+        # If the provider exposes auth headers (e.g. proxy), inject them
+        if hasattr(provider, "_get_auth_headers"):
+            kwargs["extra_headers"] = await provider._get_auth_headers()
+
         response = await client.messages.create(
             model=self.summary_model,
             messages=summary_messages,
@@ -121,8 +132,13 @@ class TokenThresholdCompaction:
             **kwargs,
         )
 
-        # Extract summary text
-        summary_text = response.content[0].text
+        # Extract summary text (skip ThinkingBlocks when extended thinking is enabled)
+        text_block = next(
+            (block for block in response.content if block.type == "text"), None
+        )
+        if text_block is None:
+            raise RuntimeError("Compaction response contained no text block")
+        summary_text = text_block.text
 
         # Try to extract from <summary> tags if present
         match = re.search(r"<summary>(.*?)</summary>", summary_text, re.DOTALL)

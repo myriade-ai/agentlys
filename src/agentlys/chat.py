@@ -194,10 +194,17 @@ class Agentlys(AgentlysBase):
         return f"## Initial Tools States\n{tool_context}\n--- End of Initial Tools States ---"
 
     def load_messages(self, messages: list[Message]):
-        # Check order of messages (based on createdAt)
-        # Oldest first (createdAt ASC)
-        # messages = sorted(messages, key=lambda x: x.createdAt)
-        self.messages = messages  # [message for message in messages]
+        # If compaction checkpoints exist, only load from the latest one onward
+        # (older messages were already summarized into the compaction message)
+        latest_compaction_idx = None
+        for i, msg in enumerate(messages):
+            if any(p.type == "compaction" for p in (msg.parts or [])):
+                latest_compaction_idx = i
+
+        if latest_compaction_idx is not None:
+            self.messages = messages[latest_compaction_idx:]
+        else:
+            self.messages = messages
 
     def add_function(
         self,
@@ -684,7 +691,10 @@ class Agentlys(AgentlysBase):
         # Run compaction if configured and threshold is exceeded
         if self.compaction and hasattr(self.compaction, "should_compact"):
             if await self.compaction.should_compact(self):
+                yield {"type": "compacting"}
                 await self.compaction.compact(self)
+                # Yield the compaction summary message so callers can persist it
+                yield {"type": "compaction_message", "message": self.messages[0]}
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
