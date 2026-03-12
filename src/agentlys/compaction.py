@@ -42,9 +42,10 @@ DEFAULT_COMPACTION_PROMPT = (
 class TokenThresholdCompaction:
     """Client-side compaction using a cheap model for summarization.
 
-    Counts tokens via Anthropic's /v1/messages/count_tokens endpoint.
-    When threshold is exceeded, summarizes older messages using summary_model
-    and replaces them with a compaction message, preserving the last N messages.
+    Checks the most recent API response's ``usage.input_tokens`` against a
+    configurable threshold. When exceeded, summarizes older messages using
+    ``summary_model`` and replaces them with a compaction message, preserving
+    the last N messages verbatim.
 
     Args:
         token_threshold: Trigger compaction when input tokens exceed this value.
@@ -59,61 +60,15 @@ class TokenThresholdCompaction:
     instructions: Optional[str] = None
 
     async def should_compact(self, chat: AgentlysBase) -> bool:
-        """Check if compaction is needed by counting input tokens."""
-        import anthropic as anthropic_sdk
+        """Check if compaction is needed based on the last API response's token usage.
 
-        from agentlys.providers.anthropic import message_to_anthropic_dict
-        from agentlys.providers.utils import add_empty_function_result
-
-        provider = chat.provider
-        client = anthropic_sdk.AsyncAnthropic(
-            base_url=provider.client._base_url
-            if hasattr(provider, "client")
-            else None,
-        )
-
-        messages = provider.prepare_messages(
-            transform_function=lambda m: message_to_anthropic_dict(m),
-            transform_list_function=add_empty_function_result,
-        )
-
-        # Build system messages (same logic as _prepare_request_params)
-        system_messages = []
-        if chat.instruction:
-            system_messages.append({"type": "text", "text": chat.instruction})
-        if chat.initial_tools_states:
-            system_messages.append(
-                {"type": "text", "text": chat.initial_tools_states}
-            )
-
-        tools = [
-            {
-                "name": s["name"],
-                "description": s["description"] or "No description provided",
-                "input_schema": s["parameters"],
-            }
-            for s in chat.functions_schema
-        ]
-
-        kwargs = {}
-        if system_messages:
-            kwargs["system"] = system_messages
-        if tools:
-            kwargs["tools"] = tools
-
-        try:
-            result = await client.messages.count_tokens(
-                model=provider.model,
-                messages=messages,
-                **kwargs,
-            )
-            return result.input_tokens > self.token_threshold
-        except Exception:
-            # Fallback: use message count heuristic if token counting fails
-            logger.warning(
-                "Token counting failed, falling back to message count heuristic"
-            )
-            return len(chat.messages) > 40
+        Each assistant Message from the provider carries a ``usage`` dict with
+        ``input_tokens`` — the total input token count for that request.
+        """
+        for msg in reversed(chat.messages):
+            if msg.usage and "input_tokens" in msg.usage:
+                return msg.usage["input_tokens"] > self.token_threshold
+        return False
 
     async def compact(self, chat: AgentlysBase) -> None:
         """Summarize older messages and replace them with a compaction message."""

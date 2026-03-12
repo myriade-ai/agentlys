@@ -78,36 +78,77 @@ class TestCompactionSerialization(unittest.TestCase):
         self.assertIn("Conversation summary", result["content"][0]["text"])
 
 
-class TestTokenThresholdCompactionShouldCompact(unittest.TestCase):
-    """Tests for TokenThresholdCompaction.should_compact."""
+class TestMessageUsage(unittest.TestCase):
+    """Tests for Message.usage tracking."""
 
-    def setUp(self):
-        self.mock_anthropic_client = MagicMock()
+    def test_usage_default_none(self):
+        msg = Message(role="user", content="Hello")
+        self.assertIsNone(msg.usage)
+
+    def test_usage_set_on_construction(self):
+        msg = Message(
+            role="assistant",
+            content="Hi",
+            usage={"input_tokens": 500, "output_tokens": 100},
+        )
+        self.assertEqual(msg.usage["input_tokens"], 500)
+        self.assertEqual(msg.usage["output_tokens"], 100)
+
+    def test_usage_set_after_construction(self):
+        msg = Message(role="assistant", content="Hi")
+        msg.usage = {"input_tokens": 1000, "output_tokens": 200}
+        self.assertEqual(msg.usage["input_tokens"], 1000)
+
+    def test_usage_set_from_anthropic_provider(self):
+        """Verify fetch_async extracts usage from the API response."""
+        mock_client = MagicMock()
+        agent = Agentlys(instruction="Test", provider=APIProvider.ANTHROPIC)
+        agent.messages = [Message(role="user", content="Hello")]
+        agent.provider.client = mock_client
+
+        class FakeResponse:
+            def to_dict(self):
+                return {
+                    "role": "assistant",
+                    "content": "Hi there",
+                    "usage": {"input_tokens": 42000, "output_tokens": 500},
+                }
+
+        mock_create = AsyncMock(return_value=FakeResponse())
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            loop = asyncio.new_event_loop()
+            try:
+                response = loop.run_until_complete(agent.ask_async("Hello"))
+            finally:
+                loop.close()
+
+        self.assertIsNotNone(response.usage)
+        self.assertEqual(response.usage["input_tokens"], 42000)
+        self.assertEqual(response.usage["output_tokens"], 500)
+
+
+class TestTokenThresholdCompactionShouldCompact(unittest.TestCase):
+    """Tests for TokenThresholdCompaction.should_compact using message usage."""
 
     def test_should_compact_true_when_over_threshold(self):
         compaction = TokenThresholdCompaction(token_threshold=1000)
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
-        agent.messages = [Message(role="user", content="Hello")]
-        agent.provider.client = self.mock_anthropic_client
+        agent.messages = [
+            Message(role="user", content="Hello"),
+            Message(
+                role="assistant",
+                content="Hi",
+                usage={"input_tokens": 1500, "output_tokens": 100},
+            ),
+        ]
 
-        # Mock count_tokens to return a value above threshold
-        mock_count_result = MagicMock()
-        mock_count_result.input_tokens = 1500
-
-        mock_count = AsyncMock(return_value=mock_count_result)
-
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.count_tokens = mock_count
-            mock_client_cls.return_value = mock_instance
-
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(compaction.should_compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
 
         self.assertTrue(result)
 
@@ -116,51 +157,65 @@ class TestTokenThresholdCompactionShouldCompact(unittest.TestCase):
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
-        agent.messages = [Message(role="user", content="Hello")]
-        agent.provider.client = self.mock_anthropic_client
+        agent.messages = [
+            Message(role="user", content="Hello"),
+            Message(
+                role="assistant",
+                content="Hi",
+                usage={"input_tokens": 500, "output_tokens": 50},
+            ),
+        ]
 
-        mock_count_result = MagicMock()
-        mock_count_result.input_tokens = 500
-
-        mock_count = AsyncMock(return_value=mock_count_result)
-
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.count_tokens = mock_count
-            mock_client_cls.return_value = mock_instance
-
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(compaction.should_compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
 
         self.assertFalse(result)
 
-    def test_should_compact_falls_back_to_message_count(self):
-        """When token counting fails, fall back to message count heuristic."""
+    def test_should_compact_false_when_no_usage(self):
+        """When no message has usage data (e.g. first call), return False."""
         compaction = TokenThresholdCompaction(token_threshold=1000)
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
-        # Add enough messages to exceed the 40-message fallback threshold
+        agent.messages = [Message(role="user", content="Hello")]
+
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
+
+        self.assertFalse(result)
+
+    def test_should_compact_uses_most_recent_usage(self):
+        """should_compact checks the most recent message with usage, not the first."""
+        compaction = TokenThresholdCompaction(token_threshold=5000)
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
         agent.messages = [
-            Message(role="user", content=f"Message {i}") for i in range(45)
+            Message(role="user", content="Hello"),
+            Message(
+                role="assistant",
+                content="Hi",
+                usage={"input_tokens": 1000, "output_tokens": 50},
+            ),
+            Message(role="user", content="More context..."),
+            Message(
+                role="assistant",
+                content="Response",
+                usage={"input_tokens": 8000, "output_tokens": 200},
+            ),
         ]
-        agent.provider.client = self.mock_anthropic_client
 
-        with patch("anthropic.AsyncAnthropic") as mock_client_cls:
-            mock_instance = MagicMock()
-            mock_instance.messages.count_tokens = AsyncMock(
-                side_effect=Exception("API error")
-            )
-            mock_client_cls.return_value = mock_instance
-
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(compaction.should_compact(agent))
-            finally:
-                loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
 
         self.assertTrue(result)
 
@@ -182,9 +237,10 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Third response"),
         ]
 
-        # Mock the summary API call
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="<summary>Conversation summary here</summary>")]
+        mock_response.content = [
+            MagicMock(text="<summary>Conversation summary here</summary>")
+        ]
 
         with patch("anthropic.AsyncAnthropic") as mock_client_cls:
             mock_instance = MagicMock()
@@ -200,7 +256,9 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
         # Should have: 1 compaction message + 2 preserved messages
         self.assertEqual(len(agent.messages), 3)
         self.assertTrue(agent.messages[0].has_compaction)
-        self.assertEqual(agent.messages[0].parts[0].content, "Conversation summary here")
+        self.assertEqual(
+            agent.messages[0].parts[0].content, "Conversation summary here"
+        )
         self.assertEqual(agent.messages[1].content, "Third message")
         self.assertEqual(agent.messages[2].content, "Third response")
 
@@ -223,7 +281,6 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             finally:
                 loop.close()
 
-        # Messages should be unchanged
         self.assertEqual(len(agent.messages), len(original_messages))
 
     def test_compact_extracts_summary_without_tags(self):
@@ -253,7 +310,9 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             finally:
                 loop.close()
 
-        self.assertEqual(agent.messages[0].parts[0].content, "Plain summary without tags")
+        self.assertEqual(
+            agent.messages[0].parts[0].content, "Plain summary without tags"
+        )
 
     def test_compact_uses_custom_instructions(self):
         custom_prompt = "Preserve all code snippets verbatim."
@@ -297,6 +356,20 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
     def setUp(self):
         self.mock_anthropic_client = MagicMock()
 
+    def _make_fake_response(self, content="Hi there", input_tokens=100):
+        class FakeResponse:
+            def to_dict(self_inner):
+                return {
+                    "role": "assistant",
+                    "content": content,
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": 50,
+                    },
+                }
+
+        return FakeResponse()
+
     def test_compaction_triggered_in_ask_async(self):
         """When should_compact returns True, compact is called before the LLM call."""
         mock_compaction = MagicMock()
@@ -311,15 +384,7 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
         agent.messages = [Message(role="user", content="Hello")]
         agent.provider.client = self.mock_anthropic_client
 
-        class FakeAnthropicMessage:
-            def __init__(self):
-                self.role = "assistant"
-                self.content = "Hi there"
-
-            def to_dict(self):
-                return {"role": self.role, "content": self.content}
-
-        mock_create = AsyncMock(return_value=FakeAnthropicMessage())
+        mock_create = AsyncMock(return_value=self._make_fake_response())
         with patch.object(agent.provider.client.messages, "create", mock_create):
             loop = asyncio.new_event_loop()
             try:
@@ -344,15 +409,7 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
         agent.messages = [Message(role="user", content="Hello")]
         agent.provider.client = self.mock_anthropic_client
 
-        class FakeAnthropicMessage:
-            def __init__(self):
-                self.role = "assistant"
-                self.content = "Hi"
-
-            def to_dict(self):
-                return {"role": self.role, "content": self.content}
-
-        mock_create = AsyncMock(return_value=FakeAnthropicMessage())
+        mock_create = AsyncMock(return_value=self._make_fake_response())
         with patch.object(agent.provider.client.messages, "create", mock_create):
             loop = asyncio.new_event_loop()
             try:
@@ -372,15 +429,7 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
         agent.messages = [Message(role="user", content="Hello")]
         agent.provider.client = self.mock_anthropic_client
 
-        class FakeAnthropicMessage:
-            def __init__(self):
-                self.role = "assistant"
-                self.content = "Hi"
-
-            def to_dict(self):
-                return {"role": self.role, "content": self.content}
-
-        mock_create = AsyncMock(return_value=FakeAnthropicMessage())
+        mock_create = AsyncMock(return_value=self._make_fake_response())
         with patch.object(agent.provider.client.messages, "create", mock_create):
             loop = asyncio.new_event_loop()
             try:
@@ -388,8 +437,29 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
             finally:
                 loop.close()
 
-        # Should succeed without errors
-        self.assertEqual(result.content, "Hi")
+        self.assertEqual(result.content, "Hi there")
+
+    def test_usage_available_on_response_message(self):
+        """After ask_async, the response Message should carry usage data."""
+        agent = Agentlys(
+            instruction="Test",
+            provider=APIProvider.ANTHROPIC,
+        )
+        agent.messages = [Message(role="user", content="Hello")]
+        agent.provider.client = self.mock_anthropic_client
+
+        mock_create = AsyncMock(
+            return_value=self._make_fake_response(input_tokens=42000)
+        )
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(agent.ask_async("Hello"))
+            finally:
+                loop.close()
+
+        self.assertIsNotNone(result.usage)
+        self.assertEqual(result.usage["input_tokens"], 42000)
 
 
 class TestCustomCompactionHandler(unittest.TestCase):
@@ -406,7 +476,9 @@ class TestCustomCompactionHandler(unittest.TestCase):
                 chat.messages = [
                     Message(
                         role="user",
-                        parts=[MessagePart(type="compaction", content="Custom summary")],
+                        parts=[
+                            MessagePart(type="compaction", content="Custom summary")
+                        ],
                     )
                 ] + chat.messages[-2:]
 

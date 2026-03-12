@@ -95,10 +95,12 @@ class Message:
         function_call_id: typing.Optional[str] = None,
         image: typing.Optional[PILImage.Image] = None,
         parts: typing.Optional[list[MessagePart]] = None,
+        usage: typing.Optional[dict] = None,
     ) -> None:
         self.role = role
         self.name = name
         self.id = id
+        self.usage = usage
 
         # Can't have both parts and content/image/function_call
         if parts and (content or image or function_call):

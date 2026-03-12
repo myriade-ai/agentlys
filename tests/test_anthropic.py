@@ -44,6 +44,7 @@ class TestAnthropic(unittest.TestCase):
                 return {
                     "role": self.role,
                     "content": self.content,
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
                 }
 
         return_value = FakeAnthropicMessage(
@@ -254,7 +255,7 @@ class TestCacheControlPlacement(unittest.TestCase):
                 self.content = content
 
             def to_dict(self):
-                return {"role": self.role, "content": self.content}
+                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
 
         mock_create = AsyncMock(
             return_value=FakeAnthropicMessage(role="assistant", content="test")
@@ -325,7 +326,7 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
                 self.content = content
 
             def to_dict(self):
-                return {"role": self.role, "content": self.content}
+                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
 
         mock_create = AsyncMock(
             return_value=FakeAnthropicMessage(role="assistant", content="ok")
@@ -636,7 +637,11 @@ class _FakeAnthropicMessage:
         self.content = content
 
     def to_dict(self):
-        return {"role": self.role, "content": self.content}
+        return {
+            "role": self.role,
+            "content": self.content,
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
 
 
 class TestEmptyTextBlockFiltering(unittest.TestCase):
