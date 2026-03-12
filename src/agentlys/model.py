@@ -398,6 +398,8 @@ class Message:
             elif part.type == "image":
                 image_data_url = f"data:image/png;base64,{part.image.to_base64()}"
                 text += f"> Image: ![Image]({image_data_url})\n"
+            elif part.type == "compaction":
+                text += f"> [Previous conversation summary]\n{part.content}\n"
         if not self.parts:
             raise ValueError("Message should have at least one part")
         return text
@@ -450,6 +452,8 @@ class Message:
 
                     # Add test standard URL and local file URL
                     text += f"Image {file_url}\n"
+            elif part.type == "compaction":
+                text += f"> [Previous conversation summary]\n{part.content}\n"
 
         if not self.parts:
             raise ValueError("Message should have at least one part")

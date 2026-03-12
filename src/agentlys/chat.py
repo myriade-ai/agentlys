@@ -693,8 +693,11 @@ class Agentlys(AgentlysBase):
             if await self.compaction.should_compact(self):
                 yield {"type": "compacting"}
                 await self.compaction.compact(self)
-                # Yield the compaction summary message so callers can persist it
-                yield {"type": "compaction_message", "message": self.messages[0]}
+                # Yield the compaction summary message so callers can persist it.
+                # Only emit when compact() actually produced a summary (it can
+                # be a no-op when there are too few messages to compact).
+                if self.messages[0].has_compaction:
+                    yield {"type": "compaction_message", "message": self.messages[0]}
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):

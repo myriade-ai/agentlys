@@ -52,6 +52,40 @@ class TestCompactionMessagePart(unittest.TestCase):
         self.assertEqual(msg.parts[0].content, "")
 
 
+class TestCompactionRendering(unittest.TestCase):
+    """Tests for rendering compaction parts in to_markdown() and to_terminal()."""
+
+    def test_to_markdown_includes_compaction(self):
+        msg = Message(
+            role="user",
+            parts=[MessagePart(type="compaction", content="Summary of conversation")],
+        )
+        md = msg.to_markdown()
+        self.assertIn("[Previous conversation summary]", md)
+        self.assertIn("Summary of conversation", md)
+
+    def test_to_markdown_mixed_compaction_and_text(self):
+        msg = Message(
+            role="user",
+            parts=[
+                MessagePart(type="compaction", content="Earlier discussion summary"),
+                MessagePart(type="text", content="New question here"),
+            ],
+        )
+        md = msg.to_markdown()
+        self.assertIn("Earlier discussion summary", md)
+        self.assertIn("New question here", md)
+
+    def test_to_terminal_includes_compaction(self):
+        msg = Message(
+            role="user",
+            parts=[MessagePart(type="compaction", content="Terminal summary test")],
+        )
+        term = msg.to_terminal()
+        self.assertIn("[Previous conversation summary]", term)
+        self.assertIn("Terminal summary test", term)
+
+
 class TestCompactionSerialization(unittest.TestCase):
     """Tests for serializing compaction parts to Anthropic API format."""
 

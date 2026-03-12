@@ -55,6 +55,18 @@ class BaseProvider(ABC):
                         *first_message.parts,
                     ],
                 )
+            else:
+                # content is None (e.g. compaction-only message).
+                # Prepend context as a new text part.
+                first_message = Message(
+                    role=first_message.role,
+                    name=first_message.name,
+                    id=first_message.id,
+                    parts=[
+                        MessagePart(type="text", content=self.chat.context),
+                        *first_message.parts,
+                    ],
+                )
 
         messages = self.chat.examples + [first_message] + self.chat.messages[1:]
         messages = transform_list_function(messages)
