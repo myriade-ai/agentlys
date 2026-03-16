@@ -96,6 +96,28 @@ calc = Calculator()
 agent.add_tool(calc, "Calculator")
 ```
 
+### Sub-Agent Management
+
+#### add_sub_agent(agent, name=None, description=None) -> str
+
+Register a sub-agent that can be triggered by this agent. The sub-agent runs its own conversation loop and returns only its final response.
+
+```python
+researcher = Agentlys(name="researcher", instruction="You research topics.", provider="anthropic")
+parent.add_sub_agent(researcher)
+# Returns: "sub_agent__researcher"
+```
+
+#### remove_sub_agent(name)
+
+Remove a sub-agent by name (without the `sub_agent__` prefix).
+
+```python
+parent.remove_sub_agent("researcher")
+```
+
+See [Sub-Agents](sub-agents.md) for full documentation.
+
 ### Template Methods
 
 #### from_template(file_path) -> Agentlys

@@ -144,6 +144,7 @@ agent = Agentlys(model="gpt-4o")
 ## More
 
 - [API Reference](docs/api-reference.md)
+- [Sub-Agents](docs/sub-agents.md)
 - [Examples](examples/)
 - [MCP Integration](docs/mcp.md)
 
