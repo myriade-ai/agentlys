@@ -8,7 +8,7 @@ class MockTool:
         self.name = name
         self.call_count = 0
 
-    def __repr__(self):
+    def __llm__(self):
         return f"MockTool(name={self.name}, call_count={self.call_count})"
 
     def increment(self):
@@ -134,32 +134,9 @@ class ToolWithoutLlm:
         return "done"
 
 
-class ToolWithCustomRepr:
-    def __repr__(self):
-        return "CUSTOM_REPR"
-
-    def do_stuff(self):
-        return "done"
-
-
-class BaseToolWithRepr:
-    """Base tool with a custom repr."""
-
-    def __repr__(self):
-        return "INHERITED_REPR"
-
-
-class DerivedTool(BaseToolWithRepr):
-    """Derived tool that inherits __repr__ from its parent."""
-
-    def do_stuff(self):
-        return "done"
-
-
-class TestToolReprFallback(unittest.TestCase):
-    def test_no_llm_no_custom_repr_uses_docstring(self):
-        """Tools without __llm__ or custom __repr__ should use the class docstring,
-        never the default object.__repr__ (which contains memory addresses)."""
+class TestToolFallback(unittest.TestCase):
+    def test_no_llm_uses_docstring(self):
+        """Tools without __llm__ should use the class docstring."""
         agent = Agentlys(provider="openai")
         tool = ToolWithoutLlm()
         agent.add_tool(tool)
@@ -168,24 +145,25 @@ class TestToolReprFallback(unittest.TestCase):
         self.assertIn("A helpful tool.", states)
         self.assertNotIn("object at 0x", states)
 
-    def test_inherited_repr_is_used(self):
-        """Tools that inherit __repr__ from a base class should still use it."""
+    def test_repr_is_ignored_without_llm(self):
+        """Tools with __repr__ but no __llm__ should use docstring, not repr."""
+
+        class ToolWithReprOnly:
+            """Docstring wins."""
+
+            def __repr__(self):
+                return "SHOULD_NOT_APPEAR"
+
+            def do_stuff(self):
+                return "done"
+
         agent = Agentlys(provider="openai")
-        tool = DerivedTool()
+        tool = ToolWithReprOnly()
         agent.add_tool(tool)
 
         states = agent.initial_tools_states
-        self.assertIn("INHERITED_REPR", states)
-        self.assertNotIn("object at 0x", states)
-
-    def test_custom_repr_is_used(self):
-        """Tools with an explicit __repr__ should still use it."""
-        agent = Agentlys(provider="openai")
-        tool = ToolWithCustomRepr()
-        agent.add_tool(tool)
-
-        states = agent.initial_tools_states
-        self.assertIn("CUSTOM_REPR", states)
+        self.assertIn("Docstring wins.", states)
+        self.assertNotIn("SHOULD_NOT_APPEAR", states)
 
 
 if __name__ == "__main__":
