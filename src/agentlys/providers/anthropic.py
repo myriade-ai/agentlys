@@ -77,6 +77,11 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "thinking": part.thinking,
             "signature": part.thinking_signature,
         }
+    elif part.type == "compaction":
+        return {
+            "type": "text",
+            "text": f"[Previous conversation summary]\n{part.content}",
+        }
     raise ValueError(f"Unknown part type: {part.type}")
 
 
@@ -87,6 +92,8 @@ def message_to_anthropic_dict(message: Message) -> dict:
     }
 
     for part in message.parts:
+        if part.type == "text" and (not part.content or not part.content.strip()):
+            continue
         res["content"].append(part_to_anthropic_dict(part))
 
     return res
@@ -330,10 +337,12 @@ class AnthropicProvider(BaseProvider):
             **kwargs,
         )
         res_dict = res.to_dict()
-        return Message.from_anthropic_dict(
+        msg = Message.from_anthropic_dict(
             role=res_dict["role"],
             content=res_dict["content"],
         )
+        msg.usage = res_dict.get("usage")
+        return msg
 
     async def fetch_stream_async(self, **kwargs):
         """Stream response tokens from Anthropic.
@@ -364,4 +373,5 @@ class AnthropicProvider(BaseProvider):
                 role=res_dict["role"],
                 content=res_dict["content"],
             )
+            final_message.usage = res_dict.get("usage")
             yield {"type": "message", "message": final_message}

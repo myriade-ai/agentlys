@@ -1,6 +1,6 @@
 [project]
 name = "agentlys"
-version = "1.6.6"
+version = "1.7.0"
 description = "Lightweight AI agent library. Turn Python functions/classes into AI tools instantly."
 authors = [
     {name = "Benjamin Derville", email = "benderville@gmail.com"}
@@ -29,7 +29,7 @@ all = [
     "mcp>=1.6.0; python_version >= '3.10'",
 ]
 build = [
-    "uv~=0.9.5",
+    "uv>=0.9.5,<0.11.0",
 ]
 
 [tool.semantic_release]

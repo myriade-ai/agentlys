@@ -59,6 +59,7 @@ class MessagePart:
             "function_result",
             "function_result_image",
             "thinking",
+            "compaction",
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
@@ -94,10 +95,12 @@ class Message:
         function_call_id: typing.Optional[str] = None,
         image: typing.Optional[PILImage.Image] = None,
         parts: typing.Optional[list[MessagePart]] = None,
+        usage: typing.Optional[dict] = None,
     ) -> None:
         self.role = role
         self.name = name
         self.id = id
+        self.usage = usage
 
         # Can't have both parts and content/image/function_call
         if parts and (content or image or function_call):
@@ -284,6 +287,11 @@ class Message:
             return None
         return "\n".join(thinking_parts)
 
+    @property
+    def has_compaction(self) -> bool:
+        """Check if message contains a compaction summary block."""
+        return any(part.type == "compaction" for part in self.parts)
+
     @classmethod
     def from_anthropic_dict(cls, **kwargs):
         role = kwargs.get("role")
@@ -300,6 +308,8 @@ class Message:
 
             for item in content:
                 if item["type"] == "text":
+                    if not item["text"] or not item["text"].strip():
+                        continue
                     text_content = item["text"]
                     parts.append(MessagePart(type="text", content=item["text"]))
                 elif item["type"] == "thinking":
@@ -318,6 +328,13 @@ class Message:
                             thinking=None,
                             thinking_signature=item.get("data"),
                             is_redacted=True,
+                        )
+                    )
+                elif item["type"] == "compaction":
+                    parts.append(
+                        MessagePart(
+                            type="compaction",
+                            content=item.get("content", ""),
                         )
                     )
                 elif item["type"] == "tool_use":
@@ -381,6 +398,8 @@ class Message:
             elif part.type == "image":
                 image_data_url = f"data:image/png;base64,{part.image.to_base64()}"
                 text += f"> Image: ![Image]({image_data_url})\n"
+            elif part.type == "compaction":
+                text += f"> [Previous conversation summary]\n{part.content}\n"
         if not self.parts:
             raise ValueError("Message should have at least one part")
         return text
@@ -433,6 +452,8 @@ class Message:
 
                     # Add test standard URL and local file URL
                     text += f"Image {file_url}\n"
+            elif part.type == "compaction":
+                text += f"> [Previous conversation summary]\n{part.content}\n"
 
         if not self.parts:
             raise ValueError("Message should have at least one part")

@@ -44,6 +44,7 @@ class TestAnthropic(unittest.TestCase):
                 return {
                     "role": self.role,
                     "content": self.content,
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
                 }
 
         return_value = FakeAnthropicMessage(
@@ -254,7 +255,7 @@ class TestCacheControlPlacement(unittest.TestCase):
                 self.content = content
 
             def to_dict(self):
-                return {"role": self.role, "content": self.content}
+                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
 
         mock_create = AsyncMock(
             return_value=FakeAnthropicMessage(role="assistant", content="test")
@@ -325,7 +326,7 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
                 self.content = content
 
             def to_dict(self):
-                return {"role": self.role, "content": self.content}
+                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
 
         mock_create = AsyncMock(
             return_value=FakeAnthropicMessage(role="assistant", content="ok")
@@ -374,6 +375,44 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
             original_content,
             "prepare_messages mutated the original message in-place",
         )
+
+    def test_context_prepended_to_compaction_only_message(self):
+        """When messages[0] is compaction-only (content is None), context should be prepended."""
+        context = "## Project\nname: test_db"
+        agent = self._make_agent(context=context)
+        agent.messages = [
+            Message(
+                role="user",
+                parts=[MessagePart(type="compaction", content="Prior conversation summary")],
+            ),
+            Message(role="user", content="Follow-up question"),
+        ]
+
+        # Verify content is None for the compaction-only message
+        self.assertIsNone(agent.messages[0].content)
+
+        msgs1 = self._call_prepare(agent)
+
+        # First API message should contain both context and compaction summary
+        first_content = msgs1[0]["content"]
+        texts = [b["text"] for b in first_content if b.get("type") == "text"]
+        combined = "\n".join(texts)
+        self.assertIn(context, combined, "Context should be present in API output")
+        self.assertIn(
+            "Prior conversation summary",
+            combined,
+            "Compaction summary should be present in API output",
+        )
+
+        # Original message must not be mutated
+        self.assertEqual(len(agent.messages[0].parts), 1)
+        self.assertEqual(agent.messages[0].parts[0].type, "compaction")
+
+        # Repeated calls must not accumulate context
+        msgs2 = self._call_prepare(agent)
+        first_content2 = msgs2[0]["content"]
+        texts2 = [b["text"] for b in first_content2 if b.get("type") == "text"]
+        self.assertEqual(texts, texts2, "Context was accumulated on 2nd call")
 
     def test_context_is_present_in_output(self):
         """Context should still be prepended in the API output (just not mutated in-place)."""
@@ -636,7 +675,116 @@ class _FakeAnthropicMessage:
         self.content = content
 
     def to_dict(self):
-        return {"role": self.role, "content": self.content}
+        return {
+            "role": self.role,
+            "content": self.content,
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+
+class TestEmptyTextBlockFiltering(unittest.TestCase):
+    """Tests that empty text content blocks are filtered on deserialization and serialization."""
+
+    def test_from_anthropic_dict_skips_empty_text(self):
+        """Empty text blocks in API responses should be skipped during deserialization."""
+        msg = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "text", "text": ""},
+                {"type": "text", "text": "hello"},
+            ],
+        )
+        self.assertEqual(len(msg.parts), 1)
+        self.assertEqual(msg.parts[0].content, "hello")
+
+    def test_from_anthropic_dict_skips_whitespace_only_text(self):
+        """Whitespace-only text blocks should be skipped during deserialization."""
+        msg = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "text", "text": "   \n\t  "},
+                {"type": "text", "text": "real content"},
+            ],
+        )
+        self.assertEqual(len(msg.parts), 1)
+        self.assertEqual(msg.parts[0].content, "real content")
+
+    def test_from_anthropic_dict_preserves_tool_use_with_empty_text(self):
+        """A message with empty text + tool_use should preserve the tool_use part."""
+        msg = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "text", "text": ""},
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "query",
+                    "input": {"sql": "SELECT 1"},
+                },
+            ],
+        )
+        self.assertEqual(len(msg.parts), 1)
+        self.assertEqual(msg.parts[0].type, "function_call")
+
+    def test_message_to_anthropic_dict_skips_empty_text(self):
+        """Empty text parts should be skipped when serializing to API format."""
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+
+        msg = Message(role="assistant", parts=[
+            MessagePart(type="text", content=""),
+            MessagePart(type="text", content="hello"),
+        ])
+        result = message_to_anthropic_dict(msg)
+        text_blocks = [b for b in result["content"] if b.get("type") == "text"]
+        self.assertEqual(len(text_blocks), 1)
+        self.assertEqual(text_blocks[0]["text"], "hello")
+
+    def test_message_to_anthropic_dict_skips_whitespace_only_text(self):
+        """Whitespace-only text parts should be skipped when serializing."""
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+
+        msg = Message(role="assistant", parts=[
+            MessagePart(type="text", content="  \n "),
+            MessagePart(type="text", content="valid"),
+        ])
+        result = message_to_anthropic_dict(msg)
+        text_blocks = [b for b in result["content"] if b.get("type") == "text"]
+        self.assertEqual(len(text_blocks), 1)
+        self.assertEqual(text_blocks[0]["text"], "valid")
+
+    def test_round_trip_filters_empty_text(self):
+        """API response with empty text -> deserialize -> serialize -> no empty text."""
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+
+        # Simulate API response with empty text block alongside real content
+        api_response = {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": ""},
+                {"type": "text", "text": "I'll help you with that."},
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "query",
+                    "input": {"sql": "SELECT 1"},
+                },
+            ],
+        }
+
+        # Deserialize
+        msg = Message.from_anthropic_dict(**api_response)
+
+        # Serialize back
+        result = message_to_anthropic_dict(msg)
+
+        # No empty text blocks in output
+        text_blocks = [b for b in result["content"] if b.get("type") == "text"]
+        self.assertEqual(len(text_blocks), 1)
+        self.assertEqual(text_blocks[0]["text"], "I'll help you with that.")
+
+        # Tool use is preserved
+        tool_blocks = [b for b in result["content"] if b.get("type") == "tool_use"]
+        self.assertEqual(len(tool_blocks), 1)
 
 
 if __name__ == "__main__":
