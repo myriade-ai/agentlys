@@ -171,14 +171,8 @@ class Agentlys(AgentlysBase):
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
-            elif hasattr(tool, "__repr__"):
-                tool_output = repr(tool)
-            elif hasattr(tool, "__str__"):
-                tool_output = str(tool)
             else:
-                raise ValueError(
-                    f"Tool {tool_name} has no __llm__, __repr__ or __str__ method"
-                )
+                tool_output = (tool.__class__.__doc__ or "").strip()
             tool_output = _truncate_with_warning(tool_output)
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
@@ -307,9 +301,7 @@ class Agentlys(AgentlysBase):
         loop = get_event_loop_or_create()
         return loop.run_until_complete(self.ask_async(message, **kwargs))
 
-    def _format_callback_message(
-        self, function_name, function_call_id, content, image
-    ):
+    def _format_callback_message(self, function_name, function_call_id, content, image):
         if isinstance(content, Message):
             message = content
             # TODO: Add name and function_call_id to the message
@@ -443,9 +435,7 @@ class Agentlys(AgentlysBase):
                 self.functions[name], response, **args
             )
 
-    def _process_tool_result(
-        self, result: typing.Any
-    ) -> tuple[typing.Any, typing.Any]:
+    def _process_tool_result(self, result: typing.Any) -> tuple[typing.Any, typing.Any]:
         """Process tool result and handle tuple unpacking.
 
         Returns:

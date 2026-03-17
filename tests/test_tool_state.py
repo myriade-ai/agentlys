@@ -8,7 +8,7 @@ class MockTool:
         self.name = name
         self.call_count = 0
 
-    def __repr__(self):
+    def __llm__(self):
         return f"MockTool(name={self.name}, call_count={self.call_count})"
 
     def increment(self):
@@ -16,7 +16,7 @@ class MockTool:
         return self.call_count
 
 
-class TestToolRepr(unittest.TestCase):
+class TestToolState(unittest.TestCase):
     def test_tool_repr_in_initial_tools_states(self):
         agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
@@ -125,6 +125,45 @@ class TestToolRepr(unittest.TestCase):
         # Replace the create method with our mock
         agent.provider.client.messages.create = mock_create
         agent.ask("Hello")
+
+
+class ToolWithoutLlm:
+    """A helpful tool."""
+
+    def do_stuff(self):
+        return "done"
+
+
+class TestToolFallback(unittest.TestCase):
+    def test_no_llm_uses_docstring(self):
+        """Tools without __llm__ should use the class docstring."""
+        agent = Agentlys(provider="openai")
+        tool = ToolWithoutLlm()
+        agent.add_tool(tool)
+
+        states = agent.initial_tools_states
+        self.assertIn("A helpful tool.", states)
+        self.assertNotIn("object at 0x", states)
+
+    def test_repr_is_ignored_without_llm(self):
+        """Tools with __repr__ but no __llm__ should use docstring, not repr."""
+
+        class ToolWithReprOnly:
+            """Docstring wins."""
+
+            def __repr__(self):
+                return "SHOULD_NOT_APPEAR"
+
+            def do_stuff(self):
+                return "done"
+
+        agent = Agentlys(provider="openai")
+        tool = ToolWithReprOnly()
+        agent.add_tool(tool)
+
+        states = agent.initial_tools_states
+        self.assertIn("Docstring wins.", states)
+        self.assertNotIn("SHOULD_NOT_APPEAR", states)
 
 
 if __name__ == "__main__":
