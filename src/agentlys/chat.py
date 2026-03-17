@@ -72,6 +72,7 @@ class Agentlys(AgentlysBase):
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
+        compaction: typing.Optional[object] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -108,6 +109,7 @@ class Agentlys(AgentlysBase):
         self.context = context
         self.max_interactions = max_interactions
         self.thinking = thinking
+        self.compaction = compaction
         self._initial_tools_states = None
         self.functions_schema = []
         self.functions = {}
@@ -192,10 +194,17 @@ class Agentlys(AgentlysBase):
         return f"## Initial Tools States\n{tool_context}\n--- End of Initial Tools States ---"
 
     def load_messages(self, messages: list[Message]):
-        # Check order of messages (based on createdAt)
-        # Oldest first (createdAt ASC)
-        # messages = sorted(messages, key=lambda x: x.createdAt)
-        self.messages = messages  # [message for message in messages]
+        # If compaction checkpoints exist, only load from the latest one onward
+        # (older messages were already summarized into the compaction message)
+        latest_compaction_idx = None
+        for i, msg in enumerate(messages):
+            if any(p.type == "compaction" for p in (msg.parts or [])):
+                latest_compaction_idx = i
+
+        if latest_compaction_idx is not None:
+            self.messages = messages[latest_compaction_idx:]
+        else:
+            self.messages = messages
 
     def add_function(
         self,
@@ -278,6 +287,11 @@ class Agentlys(AgentlysBase):
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
             kwargs["thinking"] = self.thinking
+
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                await self.compaction.compact(self)
 
         # Call the async strategy
         response = await self.provider.fetch_async(**kwargs)
@@ -673,6 +687,17 @@ class Agentlys(AgentlysBase):
             if isinstance(message, str):
                 message = Message(role="user", content=message)
             self.messages.append(message)
+
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                yield {"type": "compacting"}
+                await self.compaction.compact(self)
+                # Yield the compaction summary message so callers can persist it.
+                # Only emit when compact() actually produced a summary (it can
+                # be a no-op when there are too few messages to compact).
+                if self.messages[0].has_compaction:
+                    yield {"type": "compaction_message", "message": self.messages[0]}
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
