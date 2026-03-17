@@ -16,7 +16,7 @@ class MockTool:
         return self.call_count
 
 
-class TestToolRepr(unittest.TestCase):
+class TestToolState(unittest.TestCase):
     def test_tool_repr_in_initial_tools_states(self):
         agent = Agentlys(provider="openai")
         mock_tool = MockTool("TestTool")
