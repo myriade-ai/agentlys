@@ -171,9 +171,17 @@ class Agentlys(AgentlysBase):
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
-            elif "__repr__" in type(tool).__dict__:
+            elif any(
+                "__repr__" in cls.__dict__
+                for cls in type(tool).__mro__
+                if cls is not object
+            ):
                 tool_output = repr(tool)
-            elif "__str__" in type(tool).__dict__:
+            elif any(
+                "__str__" in cls.__dict__
+                for cls in type(tool).__mro__
+                if cls is not object
+            ):
                 tool_output = str(tool)
             else:
                 # Fall back to the class docstring or empty string.
@@ -309,9 +317,7 @@ class Agentlys(AgentlysBase):
         loop = get_event_loop_or_create()
         return loop.run_until_complete(self.ask_async(message, **kwargs))
 
-    def _format_callback_message(
-        self, function_name, function_call_id, content, image
-    ):
+    def _format_callback_message(self, function_name, function_call_id, content, image):
         if isinstance(content, Message):
             message = content
             # TODO: Add name and function_call_id to the message
@@ -445,9 +451,7 @@ class Agentlys(AgentlysBase):
                 self.functions[name], response, **args
             )
 
-    def _process_tool_result(
-        self, result: typing.Any
-    ) -> tuple[typing.Any, typing.Any]:
+    def _process_tool_result(self, result: typing.Any) -> tuple[typing.Any, typing.Any]:
         """Process tool result and handle tuple unpacking.
 
         Returns:
