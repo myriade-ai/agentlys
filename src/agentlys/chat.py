@@ -313,9 +313,13 @@ class Agentlys(AgentlysBase):
 
             invocation_id = str(uuid.uuid4())
 
-            # If compute levels are enabled, create a shallow copy of the agent
-            # and its provider to avoid mutating shared state (concurrency-safe).
-            run_agent = agent
+            # Always create a shallow copy to isolate state — parallel calls
+            # to the same sub-agent must not race on shared messages/provider.
+            run_agent = copy.copy(agent)
+            run_agent.provider = copy.copy(agent.provider)
+            run_agent.provider.chat = run_agent
+            run_agent.messages = []
+
             if compute_mapping:
                 if compute_level not in compute_mapping:
                     logging.warning(
@@ -323,14 +327,8 @@ class Agentlys(AgentlysBase):
                     )
                     compute_level = "medium"
                 target_model = compute_mapping[compute_level]
-                run_agent = copy.copy(agent)
-                run_agent.provider = copy.copy(agent.provider)
-                run_agent.provider.chat = run_agent
                 run_agent.model = target_model
                 run_agent.provider.model = target_model
-
-            # Reset messages for stateless execution
-            run_agent.messages = []
 
             final_content = None
             async for event in run_agent.run_conversation_stream_async(prompt):

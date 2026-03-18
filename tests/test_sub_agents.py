@@ -213,9 +213,9 @@ async def test_sub_agent_stateless():
             async for _ in parent.run_conversation_async("Do something"):
                 pass
 
-    # Child messages should have been reset (not contain "old message")
+    # Original child messages should be untouched (copy-based isolation)
     old_msgs = [m for m in child.messages if m.content == "old message"]
-    assert len(old_msgs) == 0
+    assert len(old_msgs) == 1
 
 
 # ── Parallel execution tests ────────────────────────────────────────────────
