@@ -85,6 +85,20 @@ Remove a sub-agent by name (without the `sub_agent__` prefix).
 coordinator.remove_sub_agent("researcher")
 ```
 
+### on_sub_agent_event
+
+Optional callback to observe sub-agent execution events (streaming text, tool calls, etc.). Called with `(sub_agent_name, invocation_id, event)` for each event during a sub-agent's conversation.
+
+```python
+def on_event(name: str, invocation_id: str, event: dict):
+    if event["type"] == "text":
+        print(f"[{name}] {event['content']}", end="", flush=True)
+
+coordinator.on_sub_agent_event = on_event
+```
+
+Set to `None` to disable (default). Cleared by `reset()`.
+
 ---
 
 ## Sub-Agents with Their Own Tools
@@ -177,7 +191,7 @@ async for message in coordinator.run_conversation_async("Analyze the dataset"):
 # Streaming
 async for event in coordinator.run_conversation_stream_async("Analyze the dataset"):
     if event["type"] == "text":
-        print(event["data"], end="", flush=True)
+        print(event["content"], end="", flush=True)
 ```
 
 ---

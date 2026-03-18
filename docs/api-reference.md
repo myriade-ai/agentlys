@@ -119,6 +119,14 @@ Remove a sub-agent by name (without the `sub_agent__` prefix).
 parent.remove_sub_agent("researcher")
 ```
 
+#### on_sub_agent_event
+
+Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`.
+
+```python
+parent.on_sub_agent_event = lambda name, id, event: print(f"[{name}] {event}")
+```
+
 See [Sub-Agents](sub-agents.md) for full documentation.
 
 ### Template Methods

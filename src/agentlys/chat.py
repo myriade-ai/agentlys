@@ -142,6 +142,7 @@ class Agentlys(AgentlysBase):
         self.functions = {}
         self.tools = {}
         self._sub_agents = {}
+        self.on_sub_agent_event = None
         self._initial_tools_states = None
 
     def refresh_tools_states(self):
