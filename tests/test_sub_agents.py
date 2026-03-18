@@ -138,44 +138,53 @@ async def test_sub_agent_invocation():
 
     parent.add_sub_agent(child)
 
-    # Mock the child's provider to return a simple response
-    async def mock_child_fetch(**kwargs):
-        return _make_assistant_text("Here is the research result.")
+    # Mock the child's streaming provider
+    async def mock_child_stream(**kwargs):
+        msg = _make_assistant_text("Here is the research result.")
+        yield {"type": "text", "content": "Here is the research result."}
+        yield {"type": "message", "message": msg}
 
-    # Mock the parent's provider: first call triggers the sub-agent, second returns final
+    # Mock the parent's streaming provider: first call triggers sub-agent, second returns final
     call_count = 0
 
-    async def mock_parent_fetch(**kwargs):
+    async def mock_parent_stream(**kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            return _make_tool_call(
+            msg = _make_tool_call(
                 "sub_agent__researcher",
                 {"prompt": "Research AI agents"},
                 "call_sub_1",
             )
+            yield {"type": "message", "message": msg}
         else:
-            return _make_assistant_text("Based on the research, here is the summary.")
+            msg = _make_assistant_text("Based on the research, here is the summary.")
+            yield {"type": "text", "content": "Based on the research, here is the summary."}
+            yield {"type": "message", "message": msg}
 
-    with patch.object(child.provider, "fetch_async", side_effect=mock_child_fetch):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
-            parent.provider, "fetch_async", side_effect=mock_parent_fetch
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
-            messages = []
-            async for message in parent.run_conversation_async("Tell me about AI agents"):
-                messages.append(message)
+            events = []
+            async for event in parent.run_conversation_stream_async("Tell me about AI agents"):
+                events.append(event)
 
-    # Expected: user, assistant (tool call), function result, final assistant
-    assert len(messages) == 4
-    assert messages[0].role == "user"
-    assert messages[1].role == "assistant"
-    assert messages[2].role == "function"
-    assert messages[3].role == "assistant"
+    # Collect messages by type
+    user_events = [e for e in events if e.get("type") == "user"]
+    assistant_events = [e for e in events if e.get("type") == "assistant"]
+    function_events = [e for e in events if e.get("type") == "function"]
+    tool_result_events = [e for e in events if e.get("type") == "tool_result"]
 
-    # The function result should contain the child's response
-    assert "research result" in messages[2].content.lower()
-    # The final response is the parent's summary
-    assert "summary" in messages[3].content.lower()
+    assert len(user_events) == 1
+    assert len(assistant_events) == 2
+    assert len(function_events) == 1
+    assert len(tool_result_events) == 1
+
+    # The tool result should contain the child's response
+    assert "research result" in tool_result_events[0]["data"]["message"].content.lower()
+    # The final assistant response is the parent's summary
+    assert "summary" in assistant_events[1]["message"].content.lower()
 
 
 @pytest.mark.asyncio
@@ -232,13 +241,17 @@ async def test_sub_agents_parallel_execution():
     parent.add_sub_agent(child_a)
     parent.add_sub_agent(child_b)
 
-    async def mock_child_a_fetch(**kwargs):
-        await asyncio.sleep(0.1)
-        return _make_assistant_text("Result from agent A.")
+    async def mock_child_a_stream(**kwargs):
+        await asyncio.sleep(0.2)
+        msg = _make_assistant_text("Result from agent A.")
+        yield {"type": "text", "content": "Result from agent A."}
+        yield {"type": "message", "message": msg}
 
-    async def mock_child_b_fetch(**kwargs):
-        await asyncio.sleep(0.1)
-        return _make_assistant_text("Result from agent B.")
+    async def mock_child_b_stream(**kwargs):
+        await asyncio.sleep(0.2)
+        msg = _make_assistant_text("Result from agent B.")
+        yield {"type": "text", "content": "Result from agent B."}
+        yield {"type": "message", "message": msg}
 
     # Parent calls both sub-agents in parallel
     parallel_call = Message(
@@ -263,9 +276,9 @@ async def test_sub_agents_parallel_execution():
         ],
     )
 
-    with patch.object(child_a.provider, "fetch_async", side_effect=mock_child_a_fetch):
+    with patch.object(child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream):
         with patch.object(
-            child_b.provider, "fetch_async", side_effect=mock_child_b_fetch
+            child_b.provider, "fetch_stream_async", side_effect=mock_child_b_stream
         ):
             start = time.time()
             result = await parent._call_functions_parallel(
@@ -273,8 +286,8 @@ async def test_sub_agents_parallel_execution():
             )
             elapsed = time.time() - start
 
-    # If parallel: ~0.1s. If sequential: ~0.2s.
-    assert elapsed < 0.15, f"Parallel execution took {elapsed}s, expected < 0.15s"
+    # If parallel: ~0.2s. If sequential: ~0.4s. Use generous threshold.
+    assert elapsed < 0.35, f"Parallel execution took {elapsed}s, expected < 0.35s"
 
     # Both results should be in the combined message
     assert result.role == "function"
