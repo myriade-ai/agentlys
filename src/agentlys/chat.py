@@ -30,6 +30,12 @@ AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
+DEFAULT_COMPUTE_LEVELS = {
+    "high": "claude-opus-4-20250514",
+    "medium": "claude-sonnet-4-20250514",
+    "low": "claude-haiku-4-5-20251001",
+}
+
 
 def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
     """Truncate text to limit and add warning if truncated."""
@@ -113,6 +119,7 @@ class Agentlys(AgentlysBase):
         self.functions = {}
         self.tools = {}
         self._sub_agents = {}
+        self.on_sub_agent_event: typing.Optional[typing.Callable] = None
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -252,6 +259,7 @@ class Agentlys(AgentlysBase):
         agent: "Agentlys",
         name: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
+        compute_levels: typing.Optional[typing.Union[bool, dict]] = None,
     ) -> str:
         """Add a sub-agent that can be triggered by this agent.
 
@@ -263,6 +271,10 @@ class Agentlys(AgentlysBase):
             agent: An Agentlys instance to use as a sub-agent.
             name: Override name for the sub-agent tool. Defaults to agent.name.
             description: Description shown to the LLM. Defaults to agent.instruction.
+            compute_levels: Enable dynamic compute levels for this sub-agent.
+                - None/False: disabled (default, backward compatible).
+                - True: enabled with default Anthropic mapping (opus/sonnet/haiku).
+                - dict: custom mapping with keys "high", "medium", "low" mapped to model names.
 
         Returns:
             The registered function name (e.g. "sub_agent__researcher").
@@ -280,21 +292,58 @@ class Agentlys(AgentlysBase):
                 f"Sub-agent with name '{sub_agent_name}' is already registered."
             )
 
-        async def _invoke_sub_agent(prompt: str) -> str:
+        # Resolve compute level mapping
+        compute_mapping = None
+        if compute_levels is True:
+            compute_mapping = DEFAULT_COMPUTE_LEVELS.copy()
+        elif isinstance(compute_levels, dict):
+            required_keys = {"high", "medium", "low"}
+            missing = required_keys - set(compute_levels.keys())
+            if missing:
+                raise ValueError(
+                    f"compute_levels dict is missing required keys: {missing}"
+                )
+            compute_mapping = compute_levels
+
+        async def _invoke_sub_agent(prompt: str, compute_level: str = "medium") -> str:
             """Run the sub-agent with the given prompt and return its response."""
+            import copy
+            import uuid
+
+            invocation_id = str(uuid.uuid4())
+
+            # If compute levels are enabled, create a shallow copy of the agent
+            # and its provider to avoid mutating shared state (concurrency-safe).
+            run_agent = agent
+            if compute_mapping:
+                if compute_level not in compute_mapping:
+                    logging.warning(
+                        f"Invalid compute_level '{compute_level}', falling back to 'medium'"
+                    )
+                    compute_level = "medium"
+                target_model = compute_mapping[compute_level]
+                run_agent = copy.copy(agent)
+                run_agent.provider = copy.copy(agent.provider)
+                run_agent.provider.chat = run_agent
+                run_agent.model = target_model
+                run_agent.provider.model = target_model
+
             # Reset messages for stateless execution
-            agent.messages = []
+            run_agent.messages = []
 
-            messages = []
-            async for message in agent.run_conversation_async(prompt):
-                messages.append(message)
+            final_content = None
+            async for event in run_agent.run_conversation_stream_async(prompt):
+                # Forward events to parent via callback
+                if self.on_sub_agent_event:
+                    self.on_sub_agent_event(sub_agent_name, invocation_id, event)
 
-            # Return only the final assistant response
-            assistant_messages = [m for m in messages if m.role == "assistant"]
-            if not assistant_messages:
-                return "Sub-agent produced no response."
+                # Capture final assistant response
+                if event.get("type") == "assistant":
+                    msg = event.get("message")
+                    if msg and msg.content:
+                        final_content = msg.content
 
-            return assistant_messages[-1].content or "Sub-agent produced no text response."
+            return final_content or "Sub-agent produced no response."
 
         func_description = (
             description
@@ -302,23 +351,38 @@ class Agentlys(AgentlysBase):
             or f"Delegate a task to the {sub_agent_name} sub-agent."
         )
 
+        properties = {
+            "prompt": {
+                "type": "string",
+                "description": "The task or question to send to this sub-agent.",
+            }
+        }
+        if compute_mapping:
+            properties["compute_level"] = {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "description": (
+                    "Compute level: 'high' for complex tasks requiring deep reasoning, "
+                    "'medium' for standard tasks, 'low' for simple lookups. "
+                    "Defaults to 'medium'."
+                ),
+            }
+
         function_schema = {
             "name": func_name,
             "description": func_description,
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "The task or question to send to this sub-agent.",
-                    }
-                },
+                "properties": properties,
                 "required": ["prompt"],
             },
         }
 
         self.add_function(_invoke_sub_agent, function_schema)
-        self._sub_agents[func_name] = agent
+        self._sub_agents[func_name] = {
+            "agent": agent,
+            "compute_levels": compute_mapping,
+        }
 
         return func_name
 

@@ -5,7 +5,7 @@ import time
 from unittest.mock import patch
 
 import pytest
-from agentlys import Agentlys
+from agentlys import Agentlys, DEFAULT_COMPUTE_LEVELS
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider
 
@@ -430,3 +430,243 @@ async def test_sub_agent_streaming():
     # Tool result should contain the child's response
     tool_data = tool_result_events[0]["data"]
     assert tool_data["function_name"] == "sub_agent__researcher"
+
+
+# ── Compute level tests ────────────────────────────────────────────────────
+
+
+def test_compute_levels_true_adds_enum_to_schema():
+    """compute_levels=True should add compute_level enum to the tool schema."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
+
+    parent.add_sub_agent(child, compute_levels=True)
+
+    schema = next(
+        s for s in parent.functions_schema if s["name"] == "sub_agent__researcher"
+    )
+    props = schema["parameters"]["properties"]
+    assert "compute_level" in props
+    assert props["compute_level"]["type"] == "string"
+    assert props["compute_level"]["enum"] == ["high", "medium", "low"]
+    # compute_level should NOT be required
+    assert "compute_level" not in schema["parameters"]["required"]
+
+
+def test_compute_levels_none_no_enum():
+    """compute_levels=None (default) should not add compute_level to schema."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
+
+    parent.add_sub_agent(child)
+
+    schema = next(
+        s for s in parent.functions_schema if s["name"] == "sub_agent__researcher"
+    )
+    props = schema["parameters"]["properties"]
+    assert "compute_level" not in props
+
+
+def test_compute_levels_custom_dict():
+    """compute_levels with a custom dict should store the mapping."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
+
+    custom_mapping = {
+        "high": "gpt-4o",
+        "medium": "gpt-4o-mini",
+        "low": "gpt-3.5-turbo",
+    }
+    parent.add_sub_agent(child, compute_levels=custom_mapping)
+
+    sub_agent_entry = parent._sub_agents["sub_agent__researcher"]
+    assert sub_agent_entry["compute_levels"] == custom_mapping
+
+
+def test_compute_levels_dict_missing_keys_raises():
+    """compute_levels dict missing required keys should raise ValueError."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+
+    with pytest.raises(ValueError, match="missing required keys"):
+        parent.add_sub_agent(child, compute_levels={"high": "gpt-4o"})
+
+
+def test_compute_levels_true_uses_defaults():
+    """compute_levels=True should use DEFAULT_COMPUTE_LEVELS."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+
+    parent.add_sub_agent(child, compute_levels=True)
+
+    sub_agent_entry = parent._sub_agents["sub_agent__researcher"]
+    assert sub_agent_entry["compute_levels"] == DEFAULT_COMPUTE_LEVELS
+
+
+def _mock_child_stream(text: str, model_tracker: dict = None):
+    """Create a mock fetch_stream_async that yields a simple assistant response."""
+    async def _stream(**kwargs):
+        if model_tracker is not None:
+            # 'self' is the provider copy — capture its model
+            model_tracker["model"] = kwargs.get("_provider_model", None)
+        msg = _make_assistant_text(text)
+        yield {"type": "text", "content": text}
+        yield {"type": "message", "message": msg}
+    return _stream
+
+
+def _mock_child_stream_error():
+    """Create a mock fetch_stream_async that raises an error."""
+    async def _stream(**kwargs):
+        raise RuntimeError("Sub-agent error")
+        yield  # make it a generator  # noqa: E501
+    return _stream
+
+
+@pytest.mark.asyncio
+async def test_compute_level_swaps_model():
+    """Invoking a sub-agent with a compute_level should use the correct model on the copy."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    original_model = child.model
+    original_provider_model = child.provider.model
+
+    parent.add_sub_agent(child, compute_levels=True)
+
+    # Track which model was set on the copied provider during fetch
+    model_during_fetch = {}
+
+    async def mock_child_stream(**kwargs):
+        # 'self' context: this runs on the copied provider, capture its model
+        # We use a side_effect function that gets the provider model via the instance
+        model_during_fetch["captured"] = True
+        msg = _make_assistant_text("Result.")
+        yield {"type": "text", "content": "Result."}
+        yield {"type": "message", "message": msg}
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Research X", "compute_level": "high"},
+                "call_compute",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Done.")
+            yield {"type": "text", "content": "Done."}
+            yield {"type": "message", "message": msg}
+
+    # Patch the child's provider — the copy will inherit the mock
+    with patch.object(
+        child.provider, "fetch_stream_async",
+        side_effect=mock_child_stream,
+    ):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+            async for _ in parent.run_conversation_stream_async("Do research"):
+                pass
+
+    # The original child model should be untouched (copy pattern, not mutate)
+    assert child.model == original_model
+    assert child.provider.model == original_provider_model
+    # Verify the sub-agent was actually invoked
+    assert model_during_fetch.get("captured") is True
+
+
+@pytest.mark.asyncio
+async def test_compute_level_default_medium():
+    """Invoking without compute_level should default to medium."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    original_model = child.model
+
+    parent.add_sub_agent(child, compute_levels=True)
+
+    invoked = {}
+
+    async def mock_child_stream(**kwargs):
+        invoked["called"] = True
+        msg = _make_assistant_text("Result.")
+        yield {"type": "text", "content": "Result."}
+        yield {"type": "message", "message": msg}
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # No compute_level in arguments — should default to medium
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Quick lookup"},
+                "call_default",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Done.")
+            yield {"type": "text", "content": "Done."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(
+        child.provider, "fetch_stream_async",
+        side_effect=mock_child_stream,
+    ):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+            async for _ in parent.run_conversation_stream_async("Look something up"):
+                pass
+
+    # Original model untouched
+    assert child.model == original_model
+    # Sub-agent was invoked
+    assert invoked.get("called") is True
+
+
+@pytest.mark.asyncio
+async def test_compute_level_preserves_original_on_error():
+    """Original agent model should be untouched even if the sub-agent errors."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    original_model = child.model
+    original_provider_model = child.provider.model
+
+    parent.add_sub_agent(child, compute_levels=True)
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Fail task", "compute_level": "low"},
+                "call_error",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Handled the error.")
+            yield {"type": "text", "content": "Handled the error."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(
+        child.provider, "fetch_stream_async",
+        side_effect=_mock_child_stream_error(),
+    ):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+            async for _ in parent.run_conversation_stream_async("Try something"):
+                pass
+
+    # Original model untouched (copy pattern means original is never modified)
+    assert child.model == original_model
+    assert child.provider.model == original_provider_model

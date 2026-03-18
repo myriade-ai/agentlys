@@ -50,15 +50,16 @@ The coordinator's LLM sees `sub_agent__researcher` and `sub_agent__writer` as ca
 
 ## API
 
-### add_sub_agent(agent, name=None, description=None) -> str
+### add_sub_agent(agent, name=None, description=None, compute_levels=None) -> str
 
 Register a sub-agent.
 
-| Parameter     | Type       | Default               | Description                              |
-| ------------- | ---------- | --------------------- | ---------------------------------------- |
-| `agent`       | `Agentlys` | required              | The agent instance to register           |
-| `name`        | `str`      | `agent.name`          | Override the tool name                   |
-| `description` | `str`      | `agent.instruction`   | Description shown to the parent LLM      |
+| Parameter        | Type                 | Default             | Description                              |
+| ---------------- | -------------------- | ------------------- | ---------------------------------------- |
+| `agent`          | `Agentlys`           | required            | The agent instance to register           |
+| `name`           | `str`                | `agent.name`        | Override the tool name                   |
+| `description`    | `str`                | `agent.instruction` | Description shown to the parent LLM      |
+| `compute_levels` | `bool` or `dict`     | `None`              | Enable dynamic compute levels (see below)|
 
 Returns the registered function name (e.g. `"sub_agent__researcher"`).
 
@@ -178,6 +179,58 @@ async for event in coordinator.run_conversation_stream_async("Analyze the datase
     if event["type"] == "text":
         print(event["data"], end="", flush=True)
 ```
+
+---
+
+## Compute Levels
+
+Let the parent agent dynamically choose how much compute to allocate per sub-agent call. Simple lookups use a lightweight model, complex reasoning uses a powerful one.
+
+```python
+from agentlys import Agentlys
+
+researcher = Agentlys(
+    name="researcher",
+    instruction="You research topics thoroughly.",
+    provider="anthropic"
+)
+
+coordinator = Agentlys(
+    instruction="Delegate tasks. Use 'high' compute for complex analysis, 'low' for simple lookups.",
+    provider="anthropic"
+)
+
+# Enable with default mapping (Opus / Sonnet / Haiku)
+coordinator.add_sub_agent(researcher, compute_levels=True)
+```
+
+The parent LLM now sees an optional `compute_level` parameter (`"high"`, `"medium"`, `"low"`) on the sub-agent tool. It defaults to `"medium"` if omitted.
+
+### Default model mapping
+
+| Level    | Model                        |
+| -------- | ---------------------------- |
+| `high`   | `claude-opus-4-20250514`     |
+| `medium` | `claude-sonnet-4-20250514`   |
+| `low`    | `claude-haiku-4-5-20251001`  |
+
+### Custom model mapping
+
+Override the defaults for any provider:
+
+```python
+coordinator.add_sub_agent(researcher, compute_levels={
+    "high": "gpt-4o",
+    "medium": "gpt-4o-mini",
+    "low": "gpt-3.5-turbo",
+})
+```
+
+All three keys (`"high"`, `"medium"`, `"low"`) are required.
+
+### Without compute levels
+
+When `compute_levels` is not set (default), the sub-agent always runs on whatever model it was configured with — no `compute_level` parameter is exposed to the parent LLM.
 
 ---
 
