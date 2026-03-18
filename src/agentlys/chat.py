@@ -78,6 +78,7 @@ class Agentlys(AgentlysBase):
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
+        compaction: typing.Optional[object] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -114,6 +115,7 @@ class Agentlys(AgentlysBase):
         self.context = context
         self.max_interactions = max_interactions
         self.thinking = thinking
+        self.compaction = compaction
         self._initial_tools_states = None
         self.functions_schema = []
         self.functions = {}
@@ -179,14 +181,8 @@ class Agentlys(AgentlysBase):
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
-            elif hasattr(tool, "__repr__"):
-                tool_output = repr(tool)
-            elif hasattr(tool, "__str__"):
-                tool_output = str(tool)
             else:
-                raise ValueError(
-                    f"Tool {tool_name} has no __llm__, __repr__ or __str__ method"
-                )
+                tool_output = (tool.__class__.__doc__ or "").strip()
             tool_output = _truncate_with_warning(tool_output)
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
@@ -202,10 +198,17 @@ class Agentlys(AgentlysBase):
         return f"## Initial Tools States\n{tool_context}\n--- End of Initial Tools States ---"
 
     def load_messages(self, messages: list[Message]):
-        # Check order of messages (based on createdAt)
-        # Oldest first (createdAt ASC)
-        # messages = sorted(messages, key=lambda x: x.createdAt)
-        self.messages = messages  # [message for message in messages]
+        # If compaction checkpoints exist, only load from the latest one onward
+        # (older messages were already summarized into the compaction message)
+        latest_compaction_idx = None
+        for i, msg in enumerate(messages):
+            if any(p.type == "compaction" for p in (msg.parts or [])):
+                latest_compaction_idx = i
+
+        if latest_compaction_idx is not None:
+            self.messages = messages[latest_compaction_idx:]
+        else:
+            self.messages = messages
 
     def add_function(
         self,
@@ -437,6 +440,11 @@ class Agentlys(AgentlysBase):
         if self.thinking and "thinking" not in kwargs:
             kwargs["thinking"] = self.thinking
 
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                await self.compaction.compact(self)
+
         # Call the async strategy
         response = await self.provider.fetch_async(**kwargs)
         self.messages.append(response)
@@ -451,9 +459,7 @@ class Agentlys(AgentlysBase):
         loop = get_event_loop_or_create()
         return loop.run_until_complete(self.ask_async(message, **kwargs))
 
-    def _format_callback_message(
-        self, function_name, function_call_id, content, image
-    ):
+    def _format_callback_message(self, function_name, function_call_id, content, image):
         if isinstance(content, Message):
             message = content
             # TODO: Add name and function_call_id to the message
@@ -587,9 +593,7 @@ class Agentlys(AgentlysBase):
                 self.functions[name], response, **args
             )
 
-    def _process_tool_result(
-        self, result: typing.Any
-    ) -> tuple[typing.Any, typing.Any]:
+    def _process_tool_result(self, result: typing.Any) -> tuple[typing.Any, typing.Any]:
         """Process tool result and handle tuple unpacking.
 
         Returns:
@@ -831,6 +835,17 @@ class Agentlys(AgentlysBase):
             if isinstance(message, str):
                 message = Message(role="user", content=message)
             self.messages.append(message)
+
+        # Run compaction if configured and threshold is exceeded
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                yield {"type": "compacting"}
+                await self.compaction.compact(self)
+                # Yield the compaction summary message so callers can persist it.
+                # Only emit when compact() actually produced a summary (it can
+                # be a no-op when there are too few messages to compact).
+                if self.messages[0].has_compaction:
+                    yield {"type": "compaction_message", "message": self.messages[0]}
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
