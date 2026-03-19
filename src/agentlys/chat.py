@@ -3,6 +3,7 @@
 __version__ = "0.4.1"
 
 import asyncio
+import copy
 import inspect
 import io
 import json
@@ -10,8 +11,9 @@ import logging
 import os
 import traceback
 import typing
+import uuid
 import warnings
-from typing import Type, Union
+from typing import TYPE_CHECKING, Type, Union
 
 from PIL import Image as PILImage
 
@@ -25,6 +27,9 @@ from agentlys.utils import (
     inspect_schema,
     parse_chat_template,
 )
+
+if TYPE_CHECKING:
+    from agentlys.compaction import CompactionHandler
 
 AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
@@ -109,7 +114,7 @@ class Agentlys(AgentlysBase):
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
-        compaction: typing.Optional[object] = None,
+        compaction: typing.Optional["CompactionHandler"] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -342,9 +347,6 @@ class Agentlys(AgentlysBase):
 
         async def _invoke_sub_agent(prompt: str, compute_level: str = "medium") -> str:
             """Run the sub-agent with the given prompt and return its response."""
-            import copy
-            import uuid
-
             invocation_id = str(uuid.uuid4())
 
             # Always create a shallow copy to isolate state — parallel calls

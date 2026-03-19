@@ -199,33 +199,44 @@ async def test_sub_agent_stateless():
     # Pre-populate child messages to verify they get cleared
     child.messages = [Message(role="user", content="old message")]
 
-    async def mock_child_fetch(**kwargs):
-        return _make_assistant_text("Fresh response.")
+    async def mock_child_stream(**kwargs):
+        msg = _make_assistant_text("Fresh response.")
+        yield {"type": "text", "content": "Fresh response."}
+        yield {"type": "message", "message": msg}
 
     call_count = 0
 
-    async def mock_parent_fetch(**kwargs):
+    async def mock_parent_stream(**kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            return _make_tool_call(
+            msg = _make_tool_call(
                 "sub_agent__researcher",
                 {"prompt": "New task"},
                 "call_sub_2",
             )
+            yield {"type": "message", "message": msg}
         else:
-            return _make_assistant_text("Done.")
+            msg = _make_assistant_text("Done.")
+            yield {"type": "text", "content": "Done."}
+            yield {"type": "message", "message": msg}
 
-    with patch.object(child.provider, "fetch_async", side_effect=mock_child_fetch):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
-            parent.provider, "fetch_async", side_effect=mock_parent_fetch
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
-            async for _ in parent.run_conversation_async("Do something"):
-                pass
+            events = []
+            async for event in parent.run_conversation_stream_async("Do something"):
+                events.append(event)
 
     # Original child messages should be untouched (copy-based isolation)
     old_msgs = [m for m in child.messages if m.content == "old message"]
     assert len(old_msgs) == 1
+
+    # Verify the sub-agent actually returned meaningful output
+    tool_results = [e for e in events if e.get("type") == "tool_result"]
+    assert len(tool_results) == 1
+    assert "fresh response" in tool_results[0]["data"]["message"].content.lower()
 
 
 # ── Parallel execution tests ────────────────────────────────────────────────
@@ -306,20 +317,24 @@ async def test_sub_agents_parallel_in_conversation():
     parent.add_sub_agent(child_a, description="Agent A handles task A")
     parent.add_sub_agent(child_b, description="Agent B handles task B")
 
-    async def mock_child_a_fetch(**kwargs):
-        return _make_assistant_text("Result A")
+    async def mock_child_a_stream(**kwargs):
+        msg = _make_assistant_text("Result A")
+        yield {"type": "text", "content": "Result A"}
+        yield {"type": "message", "message": msg}
 
-    async def mock_child_b_fetch(**kwargs):
-        return _make_assistant_text("Result B")
+    async def mock_child_b_stream(**kwargs):
+        msg = _make_assistant_text("Result B")
+        yield {"type": "text", "content": "Result B"}
+        yield {"type": "message", "message": msg}
 
     call_count = 0
 
-    async def mock_parent_fetch(**kwargs):
+    async def mock_parent_stream(**kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             # Parent calls both sub-agents in parallel
-            return Message(
+            msg = Message(
                 role="assistant",
                 parts=[
                     MessagePart(
@@ -344,33 +359,39 @@ async def test_sub_agents_parallel_in_conversation():
                     ),
                 ],
             )
+            yield {"type": "text", "content": "I'll delegate to both agents."}
+            yield {"type": "message", "message": msg}
         else:
-            return _make_assistant_text("Both tasks are complete.")
+            msg = _make_assistant_text("Both tasks are complete.")
+            yield {"type": "text", "content": "Both tasks are complete."}
+            yield {"type": "message", "message": msg}
 
-    with patch.object(child_a.provider, "fetch_async", side_effect=mock_child_a_fetch):
+    with patch.object(child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream):
         with patch.object(
-            child_b.provider, "fetch_async", side_effect=mock_child_b_fetch
+            child_b.provider, "fetch_stream_async", side_effect=mock_child_b_stream
         ):
             with patch.object(
-                parent.provider, "fetch_async", side_effect=mock_parent_fetch
+                parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
             ):
-                messages = []
-                async for message in parent.run_conversation_async(
+                events = []
+                async for event in parent.run_conversation_stream_async(
                     "Run both tasks"
                 ):
-                    messages.append(message)
+                    events.append(event)
 
-    # Expected: user, assistant (parallel tool calls), function results, final assistant
-    assert len(messages) == 4
-
-    # Function results should have both sub-agent responses
-    func_msg = messages[2]
-    assert func_msg.role == "function"
-    assert len(func_msg.parts) == 2
+    # Verify both sub-agent results came through
+    tool_results = [e for e in events if e.get("type") == "tool_result"]
+    assert len(tool_results) == 2
+    result_contents = sorted(
+        e["data"]["message"].content.lower() for e in tool_results
+    )
+    assert "result a" in result_contents[0]
+    assert "result b" in result_contents[1]
 
     # Final response
-    assert messages[3].role == "assistant"
-    assert "complete" in messages[3].content.lower()
+    assistant_events = [e for e in events if e.get("type") == "assistant"]
+    assert len(assistant_events) == 2
+    assert "complete" in assistant_events[1]["message"].content.lower()
 
 
 # ── Streaming tests ─────────────────────────────────────────────────────────
@@ -405,8 +426,10 @@ async def test_sub_agent_streaming():
     child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
     parent.add_sub_agent(child)
 
-    async def mock_child_fetch(**kwargs):
-        return _make_assistant_text("Streamed research result.")
+    async def mock_child_stream(**kwargs):
+        msg = _make_assistant_text("Streamed research result.")
+        yield {"type": "text", "content": "Streamed research result."}
+        yield {"type": "message", "message": msg}
 
     stream_call_count = 0
 
@@ -418,7 +441,7 @@ async def test_sub_agent_streaming():
         else:
             return _mock_stream_final()
 
-    with patch.object(child.provider, "fetch_async", side_effect=mock_child_fetch):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=get_mock_stream
         ):
@@ -444,6 +467,7 @@ async def test_sub_agent_streaming():
     # Tool result should contain the child's response
     tool_data = tool_result_events[0]["data"]
     assert tool_data["function_name"] == "sub_agent__researcher"
+    assert "streamed research result" in tool_data["message"].content.lower()
 
 
 # ── Compute level tests ────────────────────────────────────────────────────
@@ -742,3 +766,142 @@ class TestResolveThinkingForModel:
         original = {"type": "adaptive"}
         _resolve_thinking_for_model(original, "claude-haiku-4-5-20251001")
         assert original == {"type": "adaptive"}
+
+
+# ── Event callback tests ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_on_sub_agent_event_callback():
+    """on_sub_agent_event should be called with events during sub-agent execution."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    parent.add_sub_agent(child)
+
+    received_events = []
+
+    def on_event(name: str, invocation_id: str, event: dict):
+        received_events.append((name, invocation_id, event))
+
+    parent.on_sub_agent_event = on_event
+
+    async def mock_child_stream(**kwargs):
+        msg = _make_assistant_text("Research result.")
+        yield {"type": "text", "content": "Research result."}
+        yield {"type": "message", "message": msg}
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Research AI"},
+                "call_event_test",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Done.")
+            yield {"type": "text", "content": "Done."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+            async for _ in parent.run_conversation_stream_async("Research AI"):
+                pass
+
+    # Callback should have been invoked with child events
+    assert len(received_events) > 0
+    # All events should reference the correct sub-agent name
+    assert all(name == "researcher" for name, _, _ in received_events)
+    # All events should share the same invocation_id
+    invocation_ids = set(inv_id for _, inv_id, _ in received_events)
+    assert len(invocation_ids) == 1
+    # Should include text and message events from the child
+    event_types = [ev["type"] for _, _, ev in received_events]
+    assert "text" in event_types
+    assert "assistant" in event_types or "message" in event_types
+
+
+# ── Nested sub-agents tests ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_nested_sub_agents():
+    """Sub-agents with their own sub-agents should work end-to-end."""
+    coordinator = Agentlys(provider=APIProvider.ANTHROPIC)
+    team_lead = Agentlys(name="team_lead", provider=APIProvider.ANTHROPIC)
+    worker = Agentlys(name="worker", provider=APIProvider.ANTHROPIC)
+
+    team_lead.add_sub_agent(worker)
+    coordinator.add_sub_agent(team_lead)
+
+    # Worker returns a result
+    async def mock_worker_stream(**kwargs):
+        msg = _make_assistant_text("Worker result.")
+        yield {"type": "text", "content": "Worker result."}
+        yield {"type": "message", "message": msg}
+
+    # Team lead calls the worker, then returns a combined result
+    team_lead_call_count = 0
+
+    async def mock_team_lead_stream(**kwargs):
+        nonlocal team_lead_call_count
+        team_lead_call_count += 1
+        if team_lead_call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__worker",
+                {"prompt": "Do the work"},
+                "call_worker",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Team lead compiled: Worker result.")
+            yield {"type": "text", "content": "Team lead compiled: Worker result."}
+            yield {"type": "message", "message": msg}
+
+    # Coordinator calls team_lead, then returns final
+    coord_call_count = 0
+
+    async def mock_coordinator_stream(**kwargs):
+        nonlocal coord_call_count
+        coord_call_count += 1
+        if coord_call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__team_lead",
+                {"prompt": "Manage the team"},
+                "call_team_lead",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Final coordinated result.")
+            yield {"type": "text", "content": "Final coordinated result."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(worker.provider, "fetch_stream_async", side_effect=mock_worker_stream):
+        with patch.object(
+            team_lead.provider, "fetch_stream_async", side_effect=mock_team_lead_stream
+        ):
+            with patch.object(
+                coordinator.provider, "fetch_stream_async",
+                side_effect=mock_coordinator_stream,
+            ):
+                events = []
+                async for event in coordinator.run_conversation_stream_async(
+                    "Coordinate the work"
+                ):
+                    events.append(event)
+
+    # Verify the coordinator got a final result through the nested chain
+    assistant_events = [e for e in events if e.get("type") == "assistant"]
+    assert len(assistant_events) == 2
+    assert "final coordinated result" in assistant_events[1]["message"].content.lower()
+
+    # The tool result from team_lead should contain its compiled response
+    tool_results = [e for e in events if e.get("type") == "tool_result"]
+    assert len(tool_results) == 1
+    assert "team lead compiled" in tool_results[0]["data"]["message"].content.lower()

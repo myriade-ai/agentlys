@@ -224,8 +224,8 @@ The parent LLM now sees an optional `compute_level` parameter (`"high"`, `"mediu
 
 | Level    | Model                        |
 | -------- | ---------------------------- |
-| `high`   | `claude-opus-4-20250514`     |
-| `medium` | `claude-sonnet-4-20250514`   |
+| `high`   | `claude-opus-4-6`            |
+| `medium` | `claude-sonnet-4-6`          |
 | `low`    | `claude-haiku-4-5-20251001`  |
 
 ### Custom model mapping
