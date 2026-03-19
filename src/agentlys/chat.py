@@ -37,6 +37,37 @@ DEFAULT_COMPUTE_LEVELS = {
 }
 
 
+def _resolve_thinking_for_model(
+    thinking: typing.Optional[dict],
+    target_model: str,
+) -> typing.Optional[dict]:
+    """Adjust thinking config for model compatibility when switching models.
+
+    - Opus/Sonnet: prefer adaptive thinking
+    - Haiku: only supports extended thinking (type=enabled with budget_tokens)
+    """
+    if not thinking:
+        return thinking
+
+    thinking_type = thinking.get("type")
+    model_lower = target_model.lower()
+
+    if "haiku" in model_lower:
+        if thinking_type == "adaptive":
+            return {
+                "type": "enabled",
+                "budget_tokens": thinking.get("budget_tokens", 5000),
+            }
+        return thinking
+
+    if "opus" in model_lower or "sonnet" in model_lower:
+        if thinking_type == "enabled":
+            return {"type": "adaptive"}
+        return thinking
+
+    return thinking
+
+
 def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
     """Truncate text to limit and add warning if truncated."""
     if len(text) > limit:
@@ -332,6 +363,9 @@ class Agentlys(AgentlysBase):
                 target_model = compute_mapping[compute_level]
                 run_agent.model = target_model
                 run_agent.provider.model = target_model
+                run_agent.thinking = _resolve_thinking_for_model(
+                    agent.thinking, target_model
+                )
 
             final_content = None
             async for event in run_agent.run_conversation_stream_async(prompt):

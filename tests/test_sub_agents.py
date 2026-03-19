@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from agentlys import Agentlys, DEFAULT_COMPUTE_LEVELS
+from agentlys.chat import _resolve_thinking_for_model
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider
 
@@ -683,3 +684,61 @@ async def test_compute_level_preserves_original_on_error():
     # Original model untouched (copy pattern means original is never modified)
     assert child.model == original_model
     assert child.provider.model == original_provider_model
+
+
+# ── Thinking compatibility tests ─────────────────────────────────────────────
+
+
+class TestResolveThinkingForModel:
+    def test_none_unchanged(self):
+        assert _resolve_thinking_for_model(None, "claude-opus-4-20250514") is None
+        assert _resolve_thinking_for_model(None, "claude-haiku-4-5-20251001") is None
+
+    def test_haiku_adaptive_to_extended(self):
+        result = _resolve_thinking_for_model(
+            {"type": "adaptive"}, "claude-haiku-4-5-20251001"
+        )
+        assert result == {"type": "enabled", "budget_tokens": 5000}
+
+    def test_haiku_preserves_custom_budget(self):
+        result = _resolve_thinking_for_model(
+            {"type": "adaptive", "budget_tokens": 8000}, "claude-haiku-4-5-20251001"
+        )
+        assert result == {"type": "enabled", "budget_tokens": 8000}
+
+    def test_haiku_extended_passthrough(self):
+        thinking = {"type": "enabled", "budget_tokens": 3000}
+        result = _resolve_thinking_for_model(thinking, "claude-haiku-4-5-20251001")
+        assert result == thinking
+
+    def test_opus_extended_to_adaptive(self):
+        result = _resolve_thinking_for_model(
+            {"type": "enabled", "budget_tokens": 10000}, "claude-opus-4-20250514"
+        )
+        assert result == {"type": "adaptive"}
+
+    def test_opus_adaptive_passthrough(self):
+        thinking = {"type": "adaptive"}
+        result = _resolve_thinking_for_model(thinking, "claude-opus-4-20250514")
+        assert result == thinking
+
+    def test_sonnet_extended_to_adaptive(self):
+        result = _resolve_thinking_for_model(
+            {"type": "enabled", "budget_tokens": 10000}, "claude-sonnet-4-20250514"
+        )
+        assert result == {"type": "adaptive"}
+
+    def test_sonnet_adaptive_passthrough(self):
+        thinking = {"type": "adaptive"}
+        result = _resolve_thinking_for_model(thinking, "claude-sonnet-4-20250514")
+        assert result == thinking
+
+    def test_unknown_model_passthrough(self):
+        thinking = {"type": "adaptive"}
+        result = _resolve_thinking_for_model(thinking, "some-custom-model")
+        assert result == thinking
+
+    def test_original_dict_not_mutated(self):
+        original = {"type": "adaptive"}
+        _resolve_thinking_for_model(original, "claude-haiku-4-5-20251001")
+        assert original == {"type": "adaptive"}
