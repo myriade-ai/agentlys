@@ -257,8 +257,8 @@ class TestTokenThresholdCompactionShouldCompact(unittest.TestCase):
 class TestTokenThresholdCompactionCompact(unittest.TestCase):
     """Tests for TokenThresholdCompaction.compact."""
 
-    def test_compact_replaces_older_messages_with_summary(self):
-        compaction = TokenThresholdCompaction(preserve_last_n=2)
+    def test_compact_replaces_all_messages_with_summary(self):
+        compaction = TokenThresholdCompaction()
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
@@ -267,8 +267,6 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="First response"),
             Message(role="user", content="Second message"),
             Message(role="assistant", content="Second response"),
-            Message(role="user", content="Third message"),
-            Message(role="assistant", content="Third response"),
         ]
 
         mock_text_block = MagicMock()
@@ -287,26 +285,19 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
         finally:
             loop.close()
 
-        # Should have: 1 compaction message + 2 preserved messages
-        self.assertEqual(len(agent.messages), 3)
+        # Should have only the compaction message
+        self.assertEqual(len(agent.messages), 1)
         self.assertTrue(agent.messages[0].has_compaction)
         self.assertEqual(
             agent.messages[0].parts[0].content, "Conversation summary here"
         )
-        self.assertEqual(agent.messages[1].content, "Third message")
-        self.assertEqual(agent.messages[2].content, "Third response")
 
-    def test_compact_skips_when_too_few_messages(self):
-        compaction = TokenThresholdCompaction(preserve_last_n=4)
+    def test_compact_skips_when_no_messages(self):
+        compaction = TokenThresholdCompaction()
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
-        agent.messages = [
-            Message(role="user", content="Hello"),
-            Message(role="assistant", content="Hi"),
-        ]
-
-        original_messages = list(agent.messages)
+        agent.messages = []
 
         with patch("anthropic.AsyncAnthropic"):
             loop = asyncio.new_event_loop()
@@ -315,11 +306,11 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             finally:
                 loop.close()
 
-        self.assertEqual(len(agent.messages), len(original_messages))
+        self.assertEqual(len(agent.messages), 0)
 
     def test_compact_extracts_summary_without_tags(self):
         """When the model doesn't use summary tags, use the full response."""
-        compaction = TokenThresholdCompaction(preserve_last_n=2)
+        compaction = TokenThresholdCompaction()
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
@@ -351,9 +342,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
 
     def test_compact_uses_custom_instructions(self):
         custom_prompt = "Preserve all code snippets verbatim."
-        compaction = TokenThresholdCompaction(
-            preserve_last_n=2, instructions=custom_prompt
-        )
+        compaction = TokenThresholdCompaction(instructions=custom_prompt)
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
