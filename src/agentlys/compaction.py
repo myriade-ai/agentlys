@@ -43,20 +43,17 @@ class TokenThresholdCompaction:
     """Client-side compaction using a cheap model for summarization.
 
     Checks the most recent API response's ``usage.input_tokens`` against a
-    configurable threshold. When exceeded, summarizes older messages using
-    ``summary_model`` and replaces them with a compaction message, preserving
-    the last N messages verbatim.
+    configurable threshold. When exceeded, summarizes the entire conversation
+    into a single compaction message.
 
     Args:
         token_threshold: Trigger compaction when input tokens exceed this value.
         summary_model: Model to use for generating summaries (cheap/fast recommended).
-        preserve_last_n: Number of recent messages to keep verbatim alongside the summary.
         instructions: Custom summarization prompt. Replaces the default if provided.
     """
 
     token_threshold: int = 100_000
     summary_model: str = "claude-haiku-4-5-20251001"
-    preserve_last_n: int = 4
     instructions: Optional[str] = None
 
     async def should_compact(self, chat: AgentlysBase) -> bool:
@@ -84,16 +81,12 @@ class TokenThresholdCompaction:
         from agentlys.model import Message, MessagePart
 
         messages = chat.messages
-        if len(messages) <= self.preserve_last_n:
-            return  # Nothing to compact
+        if not messages:
+            return
 
-        # Split: messages to summarize vs messages to preserve
-        to_summarize = messages[: -self.preserve_last_n]
-        to_preserve = messages[-self.preserve_last_n :]
-
-        # Build a text representation of messages to summarize
+        # Summarize the entire conversation into a single compaction message.
         conversation_text = []
-        for msg in to_summarize:
+        for msg in messages:
             conversation_text.append(msg.to_markdown())
         conversation_str = "\n".join(conversation_text)
 
@@ -151,9 +144,8 @@ class TokenThresholdCompaction:
             parts=[MessagePart(type="compaction", content=summary_text)],
         )
 
-        chat.messages = [compaction_message] + to_preserve
+        chat.messages = [compaction_message]
         logger.info(
-            "Compacted %d messages into summary, preserved last %d",
-            len(to_summarize),
-            len(to_preserve),
+            "Compacted %d messages into summary",
+            len(messages),
         )
