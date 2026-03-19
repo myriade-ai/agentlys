@@ -31,8 +31,8 @@ AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
 DEFAULT_COMPUTE_LEVELS = {
-    "high": "claude-opus-4-20250514",
-    "medium": "claude-sonnet-4-20250514",
+    "high": "claude-opus-4-6",
+    "medium": "claude-sonnet-4-6",
     "low": "claude-haiku-4-5-20251001",
 }
 
