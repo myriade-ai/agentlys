@@ -3,6 +3,7 @@
 __version__ = "0.4.1"
 
 import asyncio
+import copy
 import inspect
 import io
 import json
@@ -10,8 +11,9 @@ import logging
 import os
 import traceback
 import typing
+import uuid
 import warnings
-from typing import Type, Union
+from typing import TYPE_CHECKING, Type, Union
 
 from PIL import Image as PILImage
 
@@ -26,9 +28,49 @@ from agentlys.utils import (
     parse_chat_template,
 )
 
+if TYPE_CHECKING:
+    from agentlys.compaction import CompactionHandler
+
 AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
+
+DEFAULT_COMPUTE_LEVELS = {
+    "high": "claude-opus-4-6",
+    "medium": "claude-sonnet-4-6",
+    "low": "claude-haiku-4-5-20251001",
+}
+
+
+def _resolve_thinking_for_model(
+    thinking: typing.Optional[dict],
+    target_model: str,
+) -> typing.Optional[dict]:
+    """Adjust thinking config for model compatibility when switching models.
+
+    - Opus/Sonnet: prefer adaptive thinking
+    - Haiku: only supports extended thinking (type=enabled with budget_tokens)
+    """
+    if not thinking:
+        return thinking
+
+    thinking_type = thinking.get("type")
+    model_lower = target_model.lower()
+
+    if "haiku" in model_lower:
+        if thinking_type == "adaptive":
+            return {
+                "type": "enabled",
+                "budget_tokens": thinking.get("budget_tokens", 5000),
+            }
+        return thinking
+
+    if "opus" in model_lower or "sonnet" in model_lower:
+        if thinking_type == "enabled":
+            return {"type": "adaptive"}
+        return thinking
+
+    return thinking
 
 
 def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
@@ -72,7 +114,7 @@ class Agentlys(AgentlysBase):
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
-        compaction: typing.Optional[object] = None,
+        compaction: typing.Optional["CompactionHandler"] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -114,6 +156,8 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._sub_agents = {}
+        self.on_sub_agent_event: typing.Optional[typing.Callable] = None
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -135,6 +179,8 @@ class Agentlys(AgentlysBase):
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
+        self._sub_agents = {}
+        self.on_sub_agent_event = None
         self._initial_tools_states = None
 
     def refresh_tools_states(self):
@@ -247,6 +293,154 @@ class Agentlys(AgentlysBase):
         self.functions = {
             name: func for name, func in self.functions.items() if name != tool_id
         }
+
+    def add_sub_agent(
+        self,
+        agent: "Agentlys",
+        name: typing.Optional[str] = None,
+        description: typing.Optional[str] = None,
+        compute_levels: typing.Optional[typing.Union[bool, dict]] = None,
+    ) -> str:
+        """Add a sub-agent that can be triggered by this agent.
+
+        The sub-agent runs its own conversation loop when called and only
+        returns its final response to this agent's context, keeping the
+        main context window clean.
+
+        Args:
+            agent: An Agentlys instance to use as a sub-agent.
+            name: Override name for the sub-agent tool. Defaults to agent.name.
+            description: Description shown to the LLM. Defaults to agent.instruction.
+            compute_levels: Enable dynamic compute levels for this sub-agent.
+                - None/False: disabled (default, backward compatible).
+                - True: enabled with default Anthropic mapping (opus/sonnet/haiku).
+                - dict: custom mapping with keys "high", "medium", "low" mapped to model names.
+
+        Returns:
+            The registered function name (e.g. "sub_agent__researcher").
+        """
+        sub_agent_name = name or agent.name
+        if not sub_agent_name:
+            raise ValueError(
+                "Sub-agent must have a name. Set agent.name or pass name= to add_sub_agent()."
+            )
+
+        func_name = f"sub_agent__{sub_agent_name}"
+
+        if func_name in self._sub_agents:
+            raise ValueError(
+                f"Sub-agent with name '{sub_agent_name}' is already registered."
+            )
+
+        # Resolve compute level mapping
+        compute_mapping = None
+        if compute_levels is True:
+            compute_mapping = DEFAULT_COMPUTE_LEVELS.copy()
+        elif isinstance(compute_levels, dict):
+            required_keys = {"high", "medium", "low"}
+            missing = required_keys - set(compute_levels.keys())
+            if missing:
+                raise ValueError(
+                    f"compute_levels dict is missing required keys: {missing}"
+                )
+            compute_mapping = compute_levels
+
+        async def _invoke_sub_agent(prompt: str, compute_level: str = "medium") -> str:
+            """Run the sub-agent with the given prompt and return its response."""
+            invocation_id = str(uuid.uuid4())
+
+            # Always create a shallow copy to isolate state — parallel calls
+            # to the same sub-agent must not race on shared messages/provider.
+            run_agent = copy.copy(agent)
+            run_agent.provider = copy.copy(agent.provider)
+            run_agent.provider.chat = run_agent
+            run_agent.messages = []
+
+            if compute_mapping:
+                if compute_level not in compute_mapping:
+                    logging.warning(
+                        f"Invalid compute_level '{compute_level}', falling back to 'medium'"
+                    )
+                    compute_level = "medium"
+                target_model = compute_mapping[compute_level]
+                run_agent.model = target_model
+                run_agent.provider.model = target_model
+                run_agent.thinking = _resolve_thinking_for_model(
+                    agent.thinking, target_model
+                )
+
+            final_content = None
+            async for event in run_agent.run_conversation_stream_async(prompt):
+                # Forward events to parent via callback
+                if self.on_sub_agent_event:
+                    self.on_sub_agent_event(sub_agent_name, invocation_id, event)
+
+                # Capture final assistant response
+                if event.get("type") == "assistant":
+                    msg = event.get("message")
+                    if msg and msg.content:
+                        final_content = msg.content
+
+            return final_content or "Sub-agent produced no response."
+
+        func_description = (
+            description
+            or agent.instruction
+            or f"Delegate a task to the {sub_agent_name} sub-agent."
+        )
+
+        properties = {
+            "prompt": {
+                "type": "string",
+                "description": "The task or question to send to this sub-agent.",
+            }
+        }
+        if compute_mapping:
+            properties["compute_level"] = {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "description": (
+                    "Compute level: 'high' for complex tasks requiring deep reasoning, "
+                    "'medium' for standard tasks, 'low' for simple lookups. "
+                    "Defaults to 'medium'."
+                ),
+            }
+
+        function_schema = {
+            "name": func_name,
+            "description": func_description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": ["prompt"],
+            },
+        }
+
+        self.add_function(_invoke_sub_agent, function_schema)
+        self._sub_agents[func_name] = {
+            "agent": agent,
+            "compute_levels": compute_mapping,
+        }
+
+        return func_name
+
+    def remove_sub_agent(self, name: str):
+        """Remove a sub-agent by name.
+
+        Args:
+            name: The sub-agent name (without the 'sub_agent__' prefix).
+        """
+        func_name = f"sub_agent__{name}"
+        if func_name not in self._sub_agents:
+            raise ValueError(f"No sub-agent with name '{name}' found.")
+
+        del self._sub_agents[func_name]
+        self.functions.pop(func_name, None)
+        self.functions_schema = [
+            schema
+            for schema in self.functions_schema
+            if schema["name"] != func_name
+        ]
 
     async def add_mcp_server(self, mcp_server):
         """

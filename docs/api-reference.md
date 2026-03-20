@@ -96,6 +96,39 @@ calc = Calculator()
 agent.add_tool(calc, "Calculator")
 ```
 
+### Sub-Agent Management
+
+#### add_sub_agent(agent, name=None, description=None, compute_levels=None) -> str
+
+Register a sub-agent that can be triggered by this agent. The sub-agent runs its own conversation loop and returns only its final response.
+
+```python
+researcher = Agentlys(name="researcher", instruction="You research topics.", provider="anthropic")
+parent.add_sub_agent(researcher)
+# Returns: "sub_agent__researcher"
+
+# With dynamic compute levels (parent LLM picks high/medium/low per call)
+parent.add_sub_agent(researcher, compute_levels=True)
+```
+
+#### remove_sub_agent(name)
+
+Remove a sub-agent by name (without the `sub_agent__` prefix).
+
+```python
+parent.remove_sub_agent("researcher")
+```
+
+#### on_sub_agent_event
+
+Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`.
+
+```python
+parent.on_sub_agent_event = lambda name, id, event: print(f"[{name}] {event}")
+```
+
+See [Sub-Agents](sub-agents.md) for full documentation.
+
 ### Template Methods
 
 #### from_template(file_path) -> Agentlys
