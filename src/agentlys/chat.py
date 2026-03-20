@@ -470,16 +470,19 @@ class Agentlys(AgentlysBase):
                     role="user",
                     content=message,
                 )
-            self.messages.append(message)  # Add the question to the history
+
+        # Run compaction before appending the new message so it is never
+        # included in the summary — the LLM must see the exact user request.
+        if self.compaction and hasattr(self.compaction, "should_compact"):
+            if await self.compaction.should_compact(self):
+                await self.compaction.compact(self)
+
+        if message:
+            self.messages.append(message)
 
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
             kwargs["thinking"] = self.thinking
-
-        # Run compaction if configured and threshold is exceeded
-        if self.compaction and hasattr(self.compaction, "should_compact"):
-            if await self.compaction.should_compact(self):
-                await self.compaction.compact(self)
 
         # Call the async strategy
         response = await self.provider.fetch_async(**kwargs)
@@ -870,9 +873,9 @@ class Agentlys(AgentlysBase):
         if message:
             if isinstance(message, str):
                 message = Message(role="user", content=message)
-            self.messages.append(message)
 
-        # Run compaction if configured and threshold is exceeded
+        # Run compaction before appending the new message so it is never
+        # included in the summary — the LLM must see the exact user request.
         if self.compaction and hasattr(self.compaction, "should_compact"):
             if await self.compaction.should_compact(self):
                 yield {"type": "compacting"}
@@ -882,6 +885,9 @@ class Agentlys(AgentlysBase):
                 # be a no-op when there are too few messages to compact).
                 if self.messages[0].has_compaction:
                     yield {"type": "compaction_message", "message": self.messages[0]}
+
+        if message:
+            self.messages.append(message)
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
