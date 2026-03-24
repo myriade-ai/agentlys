@@ -121,6 +121,13 @@ class OpenAIProviderFunctionLegacy(BaseProvider):
                     content=self.chat.instruction,
                 )
             )
+        if self.chat.context:
+            system_messages.append(
+                Message(
+                    role="system",
+                    content=self.chat.context,
+                )
+            )
         if self.chat.initial_tools_states:
             system_messages.append(
                 Message(

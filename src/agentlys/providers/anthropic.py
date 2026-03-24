@@ -304,6 +304,9 @@ class AnthropicProvider(BaseProvider):
         if system is not None:
             system_messages.append({"type": "text", "text": system})
 
+        if self.chat.context:
+            system_messages.append({"type": "text", "text": self.chat.context})
+
         if self.chat.initial_tools_states:
             system_messages.append(
                 {"type": "text", "text": self.chat.initial_tools_states}

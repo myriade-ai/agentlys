@@ -96,6 +96,7 @@ class OpenAIProviderFunctionShim(OpenAIProvider):
             function_schemas_text = json.dumps(self.chat.functions_schema, indent=2)
             augmented_instruction = (
                 (self.chat.instruction or "")
+                + ("\n\n" + self.chat.context if self.chat.context else "")
                 + "\n\nHere are the available functions you can call, in JSON format:\n"
                 + function_schemas_text
                 + "\n\n"
@@ -110,7 +111,10 @@ class OpenAIProviderFunctionShim(OpenAIProvider):
                 + "If you do not need to call a function, just respond normally."
             )
         else:
-            augmented_instruction = self.chat.instruction
+            augmented_instruction = (
+                (self.chat.instruction or "")
+                + ("\n\n" + self.chat.context if self.chat.context else "")
+            ) or None
 
         if augmented_instruction:
             system_msg = Message(
