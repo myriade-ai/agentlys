@@ -95,7 +95,7 @@ class TestParseTemplateSubsections(unittest.TestCase):
 
     def test_full_payload_instruction_in_system(self):
         """End-to-end: instruction must be in system field, not user messages."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
         from agentlys import Agentlys, APIProvider, Message
 
