@@ -155,7 +155,10 @@ def parse_chat_template(filename) -> list[Message]:
         string = f.read()
 
     # split the string by "\n## " to get a list of speaker and message pairs
-    pairs = string.split("## ")[1:]
+    # Prepend \n so the first "## " at the start of the file is also matched.
+    # Using "\n## " (not "## ") avoids splitting on "### " subsection headings
+    # which contain "## " as a substring.
+    pairs = ("\n" + string).split("\n## ")[1:]
 
     # split each element of the resulting list by "\n" to separate the speaker and message
     pairs = [pair.split("\n", 1) for pair in pairs]
