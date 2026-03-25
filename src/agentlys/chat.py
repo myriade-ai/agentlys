@@ -361,7 +361,8 @@ class Agentlys(AgentlysBase):
             run_agent = copy.copy(agent)
             run_agent.provider = copy.copy(agent.provider)
             run_agent.provider.chat = run_agent
-            run_agent.cancel_event = self.cancel_event  # Propagate cancellation
+            if self.cancel_event is not None:  # Propagate cancellation, preserve child's own event
+                run_agent.cancel_event = self.cancel_event
             run_agent.messages = []
 
             if compute_mapping:
