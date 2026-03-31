@@ -20,55 +20,46 @@ class BaseProvider(ABC):
         transform_function: typing.Callable,
         transform_list_function: typing.Callable = lambda x: x,
     ) -> list[dict]:
-        """Prepare messages for API requests using a transformation function."""
-        first_message = self.chat.messages[0]
+        """Prepare messages for API requests using a transformation function.
 
-        # Prepend context to the first message for the API request.
-        # IMPORTANT: build a new Message instead of mutating the original,
-        # because prepare_messages is called on every LLM round-trip within
-        # a tool loop.  Mutating in-place would accumulate context and
-        # invalidate the Anthropic prompt cache.
-        if self.chat.context:
-            if isinstance(first_message.content, str):
-                first_message = Message(
-                    role=first_message.role,
-                    name=first_message.name,
-                    id=first_message.id,
-                    parts=[
-                        MessagePart(
-                            type=first_message.parts[0].type,
-                            content=self.chat.context
-                            + "\n"
-                            + first_message.parts[0].content,
-                            function_call_id=first_message.parts[0].function_call_id,
-                        ),
-                        *first_message.parts[1:],
-                    ],
+        Context and instruction are not included here — each provider adds
+        them to the system prompt natively (e.g. Anthropic's ``system``
+        field, OpenAI's system messages).
+
+        ``user_context`` (untrusted, user-provided content) is prepended to
+        the last user message so the model sees it as user input, not as
+        system instructions.
+        """
+        all_messages = self.chat.examples + self.chat.messages
+
+        # Prepend user_context to the last user message.  Build a new
+        # Message to avoid mutating the original (prepare_messages is
+        # called on every LLM round-trip within a tool loop).
+        if self.chat.user_context and all_messages:
+            last_user_idx = None
+            for i in range(len(all_messages) - 1, -1, -1):
+                if all_messages[i].role == "user":
+                    last_user_idx = i
+                    break
+
+            if last_user_idx is not None:
+                orig = all_messages[last_user_idx]
+                context_part = MessagePart(
+                    type="text", content=self.chat.user_context
                 )
-            elif isinstance(first_message.content, list):
-                first_message = Message(
-                    role=first_message.role,
-                    name=first_message.name,
-                    id=first_message.id,
-                    parts=[
-                        MessagePart(type="text", content=self.chat.context),
-                        *first_message.parts,
-                    ],
+                patched = Message(
+                    role=orig.role,
+                    name=orig.name,
+                    id=orig.id,
+                    parts=[context_part, *orig.parts],
                 )
-            else:
-                # content is None (e.g. compaction-only message).
-                # Prepend context as a new text part.
-                first_message = Message(
-                    role=first_message.role,
-                    name=first_message.name,
-                    id=first_message.id,
-                    parts=[
-                        MessagePart(type="text", content=self.chat.context),
-                        *first_message.parts,
-                    ],
+                all_messages = (
+                    all_messages[:last_user_idx]
+                    + [patched]
+                    + all_messages[last_user_idx + 1 :]
                 )
 
-        messages = self.chat.examples + [first_message] + self.chat.messages[1:]
+        messages = all_messages
         messages = transform_list_function(messages)
         return [transform_function(m) for m in messages]
 

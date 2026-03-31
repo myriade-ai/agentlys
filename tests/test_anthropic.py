@@ -292,18 +292,8 @@ class TestCacheControlPlacement(unittest.TestCase):
         self.assertEqual(system[0]["cache_control"], {"type": "ephemeral"})
 
 
-class TestContextMutationInPrepareMessages(unittest.TestCase):
-    """Tests that prepare_messages does not mutate the original messages.
-
-    Bug: base_provider.prepare_messages() prepends self.chat.context to
-    messages[0].parts[0].content IN PLACE. On every LLM call within a
-    tool loop, context is prepended again, causing:
-      - Call 1: "CONTEXT\\nHello"
-      - Call 2: "CONTEXT\\nCONTEXT\\nHello"
-      - Call 3: "CONTEXT\\nCONTEXT\\nCONTEXT\\nHello"
-    This invalidates the Anthropic prompt cache because messages[0] changes
-    every call, so the entire message prefix hash changes.
-    """
+class TestContextInSystemPrompt(unittest.TestCase):
+    """Tests that context is included in the system prompt, not in user messages."""
 
     def setUp(self):
         self.mock_anthropic_client = MagicMock()
@@ -318,28 +308,65 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
         return agent
 
     def _call_prepare(self, agent):
-        """Call _prepare_request_params and return the messages kwarg."""
-
-        class FakeAnthropicMessage:
-            def __init__(self, role, content):
-                self.role = role
-                self.content = content
-
-            def to_dict(self):
-                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
+        """Call fetch_async and return the full kwargs dict."""
 
         mock_create = AsyncMock(
-            return_value=FakeAnthropicMessage(role="assistant", content="ok")
+            return_value=_FakeAnthropicMessage(role="assistant", content="ok")
         )
         with patch.object(agent.provider.client.messages, "create", mock_create):
             import asyncio
 
             asyncio.get_event_loop().run_until_complete(agent.provider.fetch_async())
 
-        return mock_create.call_args.kwargs["messages"]
+        return mock_create.call_args.kwargs
 
-    def test_context_not_accumulated_across_calls(self):
-        """Calling prepare_messages N times must produce identical messages[0] each time."""
+    def test_context_in_system_not_in_user_messages(self):
+        """Context must appear in the system field, not in user messages."""
+        context = "## Project\nname: test_db"
+        agent = self._make_agent(context=context)
+        agent.messages = [Message(role="user", content="Hello")]
+
+        kwargs = self._call_prepare(agent)
+
+        # Context should be in system
+        system = kwargs["system"]
+        system_texts = [b["text"] for b in system]
+        self.assertTrue(
+            any(context in t for t in system_texts),
+            "Context should be in the system field",
+        )
+
+        # Context should NOT be in the user message
+        first_msg_content = kwargs["messages"][0]["content"]
+        if isinstance(first_msg_content, str):
+            user_texts = [first_msg_content]
+        else:
+            user_texts = [b.get("text", "") for b in first_msg_content if isinstance(b, dict)]
+        self.assertFalse(
+            any(context in t for t in user_texts),
+            "Context should NOT be in user messages",
+        )
+
+    def test_system_ordering_instruction_context_tools(self):
+        """System blocks must be ordered: instruction, context, tool_states."""
+        context = "## Project\nname: test_db"
+        agent = self._make_agent(context=context)
+        agent.messages = [Message(role="user", content="Hello")]
+
+        # Simulate tool states being captured
+        agent._initial_tools_states = "## Initial Tools States\n### DummyTool\nA tool"
+
+        kwargs = self._call_prepare(agent)
+        system = kwargs["system"]
+
+        # Should have 3 blocks: instruction, context, tool_states
+        self.assertEqual(len(system), 3)
+        self.assertIn("You are a data analyst.", system[0]["text"])
+        self.assertIn(context, system[1]["text"])
+        self.assertIn("Initial Tools States", system[2]["text"])
+
+    def test_context_stable_across_calls(self):
+        """System field must be identical across repeated calls (cache-safe)."""
         agent = self._make_agent()
         agent.messages = [
             Message(role="user", content="What tables are available?"),
@@ -347,89 +374,108 @@ class TestContextMutationInPrepareMessages(unittest.TestCase):
             Message(role="user", content="Thanks"),
         ]
 
-        msgs1 = self._call_prepare(agent)
-        msgs2 = self._call_prepare(agent)
-        msgs3 = self._call_prepare(agent)
+        kwargs1 = self._call_prepare(agent)
+        kwargs2 = self._call_prepare(agent)
+        kwargs3 = self._call_prepare(agent)
 
-        # The first message text must be identical across all 3 calls
-        text1 = msgs1[0]["content"][0]["text"]
-        text2 = msgs2[0]["content"][0]["text"]
-        text3 = msgs3[0]["content"][0]["text"]
+        self.assertEqual(kwargs1["system"], kwargs2["system"])
+        self.assertEqual(kwargs2["system"], kwargs3["system"])
 
-        self.assertEqual(text1, text2, "Context was accumulated on 2nd call")
-        self.assertEqual(text2, text3, "Context was accumulated on 3rd call")
+    def test_no_context_omits_block(self):
+        """When context is None, system should not include an empty block."""
+        agent = self._make_agent(context=None)
+        agent.messages = [Message(role="user", content="Hello")]
 
-    def test_original_message_not_mutated(self):
-        """The original Message object in agent.messages must not be modified."""
-        agent = self._make_agent()
-        original_content = "What tables are available?"
-        agent.messages = [
-            Message(role="user", content=original_content),
-        ]
+        kwargs = self._call_prepare(agent)
+        system = kwargs["system"]
 
-        self._call_prepare(agent)
+        # Should only have instruction (no context block, no tool_states)
+        self.assertEqual(len(system), 1)
+        self.assertIn("You are a data analyst.", system[0]["text"])
 
-        # The original message's content must be unchanged
-        self.assertEqual(
-            agent.messages[0].parts[0].content,
-            original_content,
-            "prepare_messages mutated the original message in-place",
+
+class TestUserContext(unittest.TestCase):
+    """user_context must be prepended to the last user message, not in system."""
+
+    def setUp(self):
+        self.mock_anthropic_client = MagicMock()
+
+    def _call_prepare(self, agent):
+        mock_create = AsyncMock(
+            return_value=_FakeAnthropicMessage(role="assistant", content="ok")
+        )
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(agent.provider.fetch_async())
+        return mock_create.call_args.kwargs
+
+    def test_user_context_in_user_message_not_system(self):
+        """user_context must appear in user messages, not in system."""
+        agent = Agentlys(
+            instruction="You are a helper.",
+            provider=APIProvider.ANTHROPIC,
+            user_context="project:\n  name: Sales DB",
+        )
+        agent.provider.client = self.mock_anthropic_client
+        agent.messages = [Message(role="user", content="Hello")]
+
+        kwargs = self._call_prepare(agent)
+
+        # Must NOT be in system
+        system_texts = [b["text"] for b in kwargs["system"]]
+        self.assertFalse(
+            any("Sales DB" in t for t in system_texts),
+            "user_context should NOT be in system",
         )
 
-    def test_context_prepended_to_compaction_only_message(self):
-        """When messages[0] is compaction-only (content is None), context should be prepended."""
-        context = "## Project\nname: test_db"
-        agent = self._make_agent(context=context)
-        agent.messages = [
-            Message(
-                role="user",
-                parts=[MessagePart(type="compaction", content="Prior conversation summary")],
-            ),
-            Message(role="user", content="Follow-up question"),
-        ]
-
-        # Verify content is None for the compaction-only message
-        self.assertIsNone(agent.messages[0].content)
-
-        msgs1 = self._call_prepare(agent)
-
-        # First API message should contain both context and compaction summary
-        first_content = msgs1[0]["content"]
-        texts = [b["text"] for b in first_content if b.get("type") == "text"]
+        # Must be in the user message
+        msg = kwargs["messages"][0]
+        content = msg["content"]
+        if isinstance(content, str):
+            texts = [content]
+        else:
+            texts = [b.get("text", "") for b in content if isinstance(b, dict)]
         combined = "\n".join(texts)
-        self.assertIn(context, combined, "Context should be present in API output")
-        self.assertIn(
-            "Prior conversation summary",
-            combined,
-            "Compaction summary should be present in API output",
+        self.assertIn("Sales DB", combined)
+        self.assertIn("Hello", combined)
+
+    def test_user_context_not_mutated_across_calls(self):
+        """Repeated calls must not accumulate user_context."""
+        agent = Agentlys(
+            instruction="You are a helper.",
+            provider=APIProvider.ANTHROPIC,
+            user_context="project:\n  name: Sales DB",
         )
+        agent.provider.client = self.mock_anthropic_client
+        agent.messages = [Message(role="user", content="Hello")]
 
-        # Original message must not be mutated
-        self.assertEqual(len(agent.messages[0].parts), 1)
-        self.assertEqual(agent.messages[0].parts[0].type, "compaction")
+        kwargs1 = self._call_prepare(agent)
+        kwargs2 = self._call_prepare(agent)
 
-        # Repeated calls must not accumulate context
-        msgs2 = self._call_prepare(agent)
-        first_content2 = msgs2[0]["content"]
-        texts2 = [b["text"] for b in first_content2 if b.get("type") == "text"]
-        self.assertEqual(texts, texts2, "Context was accumulated on 2nd call")
+        msgs1 = kwargs1["messages"]
+        msgs2 = kwargs2["messages"]
+        self.assertEqual(msgs1, msgs2)
 
-    def test_context_is_present_in_output(self):
-        """Context should still be prepended in the API output (just not mutated in-place)."""
-        context = "## Project\nname: test_db"
-        agent = self._make_agent(context=context)
-        original_content = "Hello"
-        agent.messages = [
-            Message(role="user", content=original_content),
-        ]
-
-        msgs = self._call_prepare(agent)
-
-        first_text = msgs[0]["content"][0]["text"]
-        self.assertIn(context, first_text, "Context should be in the API output")
-        self.assertIn(
-            original_content, first_text, "Original content should be in the API output"
+    def test_no_user_context_leaves_messages_unchanged(self):
+        """When user_context is None, messages stay clean."""
+        agent = Agentlys(
+            instruction="You are a helper.",
+            provider=APIProvider.ANTHROPIC,
         )
+        agent.provider.client = self.mock_anthropic_client
+        agent.messages = [Message(role="user", content="Hello")]
+
+        kwargs = self._call_prepare(agent)
+
+        msg = kwargs["messages"][0]
+        content = msg["content"]
+        if isinstance(content, str):
+            self.assertEqual(content, "Hello")
+        else:
+            texts = [b.get("text", "") for b in content if isinstance(b, dict)]
+            self.assertEqual(len(texts), 1)
+            self.assertEqual(texts[0], "Hello")
 
 
 class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
