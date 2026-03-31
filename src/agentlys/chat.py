@@ -242,9 +242,18 @@ class Agentlys(AgentlysBase):
                 latest_compaction_idx = i
 
         if latest_compaction_idx is not None:
-            self.messages = messages[latest_compaction_idx:]
-        else:
-            self.messages = messages
+            messages = messages[latest_compaction_idx:]
+
+        # Strip thinking blocks from loaded messages — they may have stale
+        # signatures from an older model version or be modified by DB
+        # serialization.  The Anthropic docs confirm omitting thinking from
+        # prior turns is safe.  Live tool-loop thinking is never loaded
+        # through this path (it's appended via self.messages.append).
+        for msg in messages:
+            if msg.role == "assistant":
+                msg.parts = [p for p in msg.parts if p.type != "thinking"]
+
+        self.messages = messages
 
     def add_function(
         self,
