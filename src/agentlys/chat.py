@@ -255,6 +255,10 @@ class Agentlys(AgentlysBase):
             if msg.role == "assistant":
                 msg.parts = [p for p in msg.parts if p.type != "thinking"]
 
+        # Remove messages that became empty after thinking block removal
+        # (e.g. assistant messages that contained only thinking parts)
+        messages = [m for m in messages if m.parts]
+
         self.messages = messages
 
     def add_function(
