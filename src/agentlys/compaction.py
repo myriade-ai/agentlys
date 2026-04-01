@@ -85,8 +85,11 @@ class TokenThresholdCompaction:
             return
 
         # Summarize the entire conversation into a single compaction message.
+        # Skip messages with no parts (e.g. after thinking block removal).
         conversation_text = []
         for msg in messages:
+            if not msg.parts:
+                continue
             conversation_text.append(msg.to_markdown())
         conversation_str = "\n".join(conversation_text)
 

@@ -308,6 +308,37 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
 
         self.assertEqual(len(agent.messages), 0)
 
+    def test_compact_skips_empty_messages(self):
+        """Compaction should not crash on messages with no parts (e.g. after thinking removal)."""
+        compaction = TokenThresholdCompaction()
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        agent.messages = [
+            Message(role="user", content="Hello"),
+            Message(role="assistant", parts=[]),  # empty after thinking removal
+            Message(role="user", content="Follow up"),
+            Message(role="assistant", content="Response"),
+        ]
+
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "<summary>Summary</summary>"
+        mock_response = MagicMock()
+        mock_response.content = [mock_text_block]
+
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
+
+        self.assertEqual(len(agent.messages), 1)
+        self.assertTrue(agent.messages[0].has_compaction)
+
     def test_compact_extracts_summary_without_tags(self):
         """When the model doesn't use summary tags, use the full response."""
         compaction = TokenThresholdCompaction()
