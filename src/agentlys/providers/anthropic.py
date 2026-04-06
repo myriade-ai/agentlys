@@ -61,11 +61,18 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "tool_use_id": part.function_call_id,
         }
     elif part.type == "function_result":
-        return {
+        result = {
             "type": "tool_result",
             "tool_use_id": part.function_call_id,
-            "content": part.content,
         }
+        if part.tool_references is not None:
+            result["content"] = [
+                {"type": "tool_reference", "tool_name": name}
+                for name in part.tool_references
+            ]
+        else:
+            result["content"] = part.content
+        return result
     elif part.type == "thinking":
         if part.is_redacted:
             return {
@@ -241,14 +248,16 @@ class AnthropicProvider(BaseProvider):
         messages = self._strip_thinking_from_prior_turns(messages)
 
         # Need to map field "parameters" to "input_schema"
-        tools = [
-            {
+        tools = []
+        for s in self.chat.functions_schema:
+            tool_def = {
                 "name": s["name"],
                 "description": s["description"],
                 "input_schema": s["parameters"],
             }
-            for s in self.chat.functions_schema
-        ]
+            if s.get("defer_loading"):
+                tool_def["defer_loading"] = True
+            tools.append(tool_def)
         # Add description to the function is their description is empty
         for tool in tools:
             if not tool["description"]:
@@ -310,6 +319,11 @@ class AnthropicProvider(BaseProvider):
         if self.chat.initial_tools_states:
             system_messages.append(
                 {"type": "text", "text": self.chat.initial_tools_states}
+            )
+
+        if hasattr(self.chat, "tool_search_categories_hint") and self.chat.tool_search_categories_hint:
+            system_messages.append(
+                {"type": "text", "text": self.chat.tool_search_categories_hint}
             )
 
         if system_messages:
