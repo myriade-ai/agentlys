@@ -589,9 +589,13 @@ class Agentlys(AgentlysBase):
             search_model=search_model,
         )
 
-        # Mark all existing functions as deferred (except always_loaded)
+        # Mark all existing functions as deferred (except always_loaded).
+        # Also clear defer_loading for tools that are now always_loaded
+        # (handles reconfiguration with a different always_loaded list).
         for schema in self.functions_schema:
-            if schema["name"] not in always_loaded:
+            if schema["name"] in always_loaded:
+                schema.pop("defer_loading", None)
+            else:
                 schema["defer_loading"] = True
 
         # Register the search tool (never deferred)

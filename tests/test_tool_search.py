@@ -547,6 +547,27 @@ def test_enable_tool_search_twice_updates_config():
     assert agent._tool_search_config.always_loaded == []
 
 
+def test_enable_tool_search_reconfigure_clears_defer_for_new_always_loaded():
+    """Reconfiguring always_loaded should clear defer_loading for newly added tools."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.add_function(_dummy_fn_b)
+
+    # First call: only _dummy_fn_a is always loaded
+    agent.enable_tool_search(always_loaded=["_dummy_fn_a"])
+    schema_b = next(
+        s for s in agent.functions_schema if s["name"] == "_dummy_fn_b"
+    )
+    assert schema_b.get("defer_loading") is True
+
+    # Second call: now _dummy_fn_b is also always loaded
+    agent.enable_tool_search(always_loaded=["_dummy_fn_a", "_dummy_fn_b"])
+    schema_b = next(
+        s for s in agent.functions_schema if s["name"] == "_dummy_fn_b"
+    )
+    assert "defer_loading" not in schema_b
+
+
 # ── Anthropic empty tool_references test ─────────────────────────────────────
 
 
