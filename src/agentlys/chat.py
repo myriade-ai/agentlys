@@ -160,6 +160,8 @@ class Agentlys(AgentlysBase):
         self.tools = {}
         self._sub_agents = {}
         self.on_sub_agent_event: typing.Optional[typing.Callable] = None
+        self._tool_search_config = None
+        self._tool_search_function_name: typing.Optional[str] = None
         for m in mcp_servers:
             self.add_mcp_server(m)
 
@@ -184,6 +186,8 @@ class Agentlys(AgentlysBase):
         self._sub_agents = {}
         self.on_sub_agent_event = None
         self._initial_tools_states = None
+        self._tool_search_config = None
+        self._tool_search_function_name = None
 
     def refresh_tools_states(self):
         """Clear and re-capture tool states.
@@ -217,6 +221,19 @@ class Agentlys(AgentlysBase):
         tool_reprs = []
         for tool_id, tool in self.tools.items():
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
+
+            # When tool search is enabled, skip __llm__ for tools whose
+            # methods are ALL deferred — they haven't been discovered yet.
+            if self._tool_search_config:
+                prefix = f"{tool_name}__"
+                has_loaded_method = any(
+                    s["name"].startswith(prefix)
+                    and not s.get("defer_loading")
+                    for s in self.functions_schema
+                )
+                if not has_loaded_method:
+                    continue
+
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
             else:
@@ -234,6 +251,50 @@ class Agentlys(AgentlysBase):
         --- End of Initial Tools States ---
         """
         return f"## Initial Tools States\n{tool_context}\n--- End of Initial Tools States ---"
+
+    @property
+    def tool_search_categories_hint(self) -> typing.Optional[str]:
+        """Short hint listing deferred tool categories for the system prompt.
+
+        Only generated when tool search is enabled.  Helps the LLM know
+        what kinds of tools it can search for without seeing their schemas.
+        """
+        if not self._tool_search_config:
+            return None
+
+        deferred = [
+            s for s in self.functions_schema if s.get("defer_loading")
+        ]
+        if not deferred:
+            return None
+
+        # Group tools by class/prefix (e.g. "EchartsTool", "CatalogTool")
+        categories: dict[str, list[str]] = {}
+        for s in deferred:
+            name = s["name"]
+            # Extract category from "ClassName-id__method" or use the name
+            if "__" in name:
+                prefix = name.split("__")[0]
+                # Strip the tool_id suffix: "ClassName-id" -> "ClassName"
+                if "-" in prefix:
+                    category = prefix.rsplit("-", 1)[0]
+                else:
+                    category = prefix
+            else:
+                category = name
+            method = name.split("__")[-1] if "__" in name else name
+            categories.setdefault(category, []).append(method)
+
+        lines = []
+        for category, methods in categories.items():
+            methods_str = ", ".join(methods)
+            lines.append(f"- {category}: {methods_str}")
+
+        return (
+            "## Searchable Tool Categories\n"
+            "Use the tool_search function to discover and load these tools:\n"
+            + "\n".join(lines)
+        )
 
     def load_messages(self, messages: list[Message]):
         # If compaction checkpoints exist, only load from the latest one onward
@@ -265,10 +326,24 @@ class Agentlys(AgentlysBase):
         self,
         function: typing.Callable,
         function_schema: typing.Optional[dict] = None,
+        defer_loading: bool = False,
     ):
         if function_schema is None:
             # We try to infer the function schema from the function
             function_schema = inspect_schema(function)
+
+        if defer_loading:
+            function_schema["defer_loading"] = True
+
+        # Auto-defer when tool search is enabled
+        if (
+            self._tool_search_config
+            and not defer_loading
+            and function_schema["name"]
+            not in self._tool_search_config.always_loaded
+            and function_schema["name"] != self._tool_search_function_name
+        ):
+            function_schema["defer_loading"] = True
 
         self.functions_schema.append(function_schema)
         self.functions[function_schema["name"]] = function
@@ -457,6 +532,77 @@ class Agentlys(AgentlysBase):
             if schema["name"] != func_name
         ]
 
+    def enable_tool_search(
+        self,
+        always_loaded: typing.Optional[list[str]] = None,
+        search_fn: typing.Optional[typing.Callable] = None,
+        search_model: typing.Optional[str] = None,
+    ):
+        """Enable tool search to defer most tools and discover them on-demand.
+
+        When enabled, all registered tools (except those in *always_loaded*)
+        are marked with ``defer_loading=True`` so the provider hides them
+        from the LLM's context.  A search tool is automatically registered
+        that the LLM can call to discover relevant tools.
+
+        Tools added *after* this call are also auto-deferred unless they
+        appear in *always_loaded*.
+
+        Args:
+            always_loaded: Tool names to keep always visible to the LLM.
+                If *None*, no tools are always-loaded (besides the search
+                tool itself).
+            search_fn: Custom async search function with signature
+                ``async def search(query: str, catalog: list[dict]) -> list[str]``.
+                Each catalog entry has ``name`` and ``description`` keys.
+                If *None*, uses a default LLM-based search with a cheap model.
+            search_model: Model to use for the default LLM-based search.
+                Ignored if *search_fn* is provided.  Defaults to
+                ``claude-haiku-4-5-20251001`` for Anthropic providers and
+                ``gpt-4o-mini`` for OpenAI providers.
+        """
+        from agentlys.tool_search import ToolSearchConfig, create_search_tool_fn
+
+        if always_loaded is None:
+            always_loaded = []
+
+        # Determine default search model based on provider
+        if search_model is None:
+            provider_name = self.provider.__class__.__name__.lower()
+            if "openai" in provider_name:
+                search_model = "gpt-4o-mini"
+            else:
+                search_model = "claude-haiku-4-5-20251001"
+
+        # Remove previous search tool if re-enabling
+        if self._tool_search_function_name is not None:
+            self.functions.pop(self._tool_search_function_name, None)
+            self.functions_schema = [
+                s
+                for s in self.functions_schema
+                if s["name"] != self._tool_search_function_name
+            ]
+
+        self._tool_search_config = ToolSearchConfig(
+            always_loaded=always_loaded,
+            search_fn=search_fn,
+            search_model=search_model,
+        )
+
+        # Mark all existing functions as deferred (except always_loaded).
+        # Also clear defer_loading for tools that are now always_loaded
+        # (handles reconfiguration with a different always_loaded list).
+        for schema in self.functions_schema:
+            if schema["name"] in always_loaded:
+                schema.pop("defer_loading", None)
+            else:
+                schema["defer_loading"] = True
+
+        # Register the search tool (never deferred)
+        search_callable, search_schema = create_search_tool_fn(self)
+        self._tool_search_function_name = search_schema["name"]
+        self.add_function(search_callable, search_schema)
+
     async def add_mcp_server(self, mcp_server):
         """
         Add a MCP server to the agent instance.
@@ -520,6 +666,23 @@ class Agentlys(AgentlysBase):
             # message.name = function_name
             # message.function_call_id = function_call_id
             return message
+
+        # Tool search results get special handling — the provider layer
+        # will convert tool_references into provider-specific blocks
+        # (e.g. Anthropic tool_reference content blocks).
+        if (
+            self._tool_search_function_name
+            and function_name == self._tool_search_function_name
+            and isinstance(content, list)
+            and all(isinstance(item, str) for item in content)
+        ):
+            part = MessagePart(
+                type="function_result",
+                content=", ".join(content) if content else "[]",
+                function_call_id=function_call_id,
+                tool_references=content,
+            )
+            return Message(name=function_name, role="function", parts=[part])
 
         # We format the function_call response to be used as a next message
         if content is None:

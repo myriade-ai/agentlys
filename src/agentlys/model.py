@@ -68,6 +68,7 @@ class MessagePart:
         thinking: typing.Optional[str] = None,
         thinking_signature: typing.Optional[str] = None,
         is_redacted: bool = False,
+        tool_references: typing.Optional[list[str]] = None,
     ) -> None:
         self.type = type
         self.content = content
@@ -77,6 +78,7 @@ class MessagePart:
         self.thinking = thinking
         self.thinking_signature = thinking_signature
         self.is_redacted = is_redacted
+        self.tool_references = tool_references
 
 
 class Message:

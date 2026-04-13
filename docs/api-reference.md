@@ -71,7 +71,7 @@ async for message in agent.run_conversation_async("Help me code"):
 
 ### Tool Management
 
-#### add_function(func)
+#### add_function(func, function_schema=None, defer_loading=False)
 
 Add a Python function as a tool.
 
@@ -81,6 +81,9 @@ def calculate(a: int, b: int) -> int:
     return a + b
 
 agent.add_function(calculate)
+
+# Defer a tool so it's hidden from the LLM until discovered via tool search
+agent.add_function(calculate, defer_loading=True)
 ```
 
 #### add_tool(obj, name=None)
@@ -95,6 +98,44 @@ class Calculator:
 calc = Calculator()
 agent.add_tool(calc, "Calculator")
 ```
+
+### Tool Search
+
+#### enable_tool_search(always_loaded=None, search_fn=None, search_model=None)
+
+Enable tool search to defer most tools and discover them on-demand. Reduces context window usage and improves tool selection accuracy for agents with many tools.
+
+When enabled, all registered tools (except those in `always_loaded`) are marked with `defer_loading=True`. A `tool_search` function is automatically registered that the LLM can call to discover relevant tools. Tools added after this call are also auto-deferred.
+
+```python
+agent.add_tool(Database(conn), "db")
+agent.add_tool(Charts(), "charts")
+agent.add_tool(Documents(), "docs")
+agent.add_function(answer)
+
+# Defer everything except answer and the DB query tool
+agent.enable_tool_search(
+    always_loaded=["answer", "Database-db__query"],
+)
+```
+
+**Parameters:**
+
+- `always_loaded`: Tool names to keep always visible to the LLM. If `None`, only the search tool is visible.
+- `search_fn`: Custom async search function with signature `async def search(query: str, catalog: list[dict]) -> list[str]`. Each catalog entry has `name`, `description`, and `args` keys. If `None`, uses built-in keyword matching.
+- `search_model`: Model for LLM-based search (only used with custom `search_fn`). Defaults based on provider.
+
+**How it works:**
+
+1. Deferred tools are sent to the API with `defer_loading: true` — the provider hides them from the LLM's context window
+2. When the LLM needs a tool, it calls `tool_search(query="...")`
+3. The search function matches the query against tool names, descriptions, and argument names
+4. Matching tools are returned as `tool_reference` blocks, which the API auto-expands into full definitions
+5. The LLM can now call the discovered tools
+
+**Behavior with `__llm__()`:** When tool search is enabled, `__llm__()` is only called for tools that have at least one always-loaded method. Fully deferred tools skip their `__llm__()` output to save context tokens.
+
+**Categories hint:** A short summary of deferred tool categories is automatically injected into the system prompt so the LLM knows what kinds of tools are available to search for.
 
 ### Sub-Agent Management
 

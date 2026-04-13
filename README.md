@@ -141,6 +141,24 @@ agent = Agentlys(model="gpt-4o")
 
 ---
 
+### 4. Tool Search (defer loading)
+
+When you have many tools, defer most of them and let the LLM discover what it needs:
+
+```python
+agent.add_tool(Database(conn), "db")
+agent.add_tool(Charts(), "charts")
+agent.add_tool(Documents(), "docs")
+agent.add_function(answer)
+
+agent.enable_tool_search(always_loaded=["answer", "Database-db__query"])
+# Charts and Documents tools are hidden until the LLM searches for them
+```
+
+Reduces context usage by 50-85% with large tool sets. See [API Reference](docs/api-reference.md#tool-search).
+
+---
+
 ## More
 
 - [API Reference](docs/api-reference.md)

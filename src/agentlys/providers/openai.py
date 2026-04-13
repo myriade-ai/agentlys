@@ -174,13 +174,19 @@ class OpenAIProvider(BaseProvider):
             kwargs["tool_choice"] = "required"
 
         if self.chat.functions_schema:
-            tools = [
-                {
-                    "type": "function",
-                    "function": tool,
+            tools = []
+            for tool_schema in self.chat.functions_schema:
+                # Strip defer_loading from the function schema before sending
+                clean_schema = {
+                    k: v for k, v in tool_schema.items() if k != "defer_loading"
                 }
-                for tool in self.chat.functions_schema
-            ]
+                tool_def = {
+                    "type": "function",
+                    "function": clean_schema,
+                }
+                if tool_schema.get("defer_loading"):
+                    tool_def["defer_loading"] = True
+                tools.append(tool_def)
             res = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
