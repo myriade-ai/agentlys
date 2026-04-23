@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from agentlys import Agentlys, DEFAULT_COMPUTE_LEVELS
-from agentlys.chat import _resolve_thinking_for_model
+from agentlys.chat import StopLoopException, _resolve_thinking_for_model
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider
 
@@ -905,3 +905,122 @@ async def test_nested_sub_agents():
     tool_results = [e for e in events if e.get("type") == "tool_result"]
     assert len(tool_results) == 1
     assert "team lead compiled" in tool_results[0]["data"]["message"].content.lower()
+
+
+# ── Cancel event tests ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cancel_event_stops_sub_agent():
+    """Setting cancel_event should stop a running sub-agent mid-execution."""
+    cancel_event = asyncio.Event()
+    parent = Agentlys(provider=APIProvider.ANTHROPIC, cancel_event=cancel_event)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    parent.add_sub_agent(child)
+
+    child_started = asyncio.Event()
+
+    async def mock_child_stream(**kwargs):
+        child_started.set()
+        yield {"type": "text", "content": "Starting research..."}
+        # Simulate slow work — cancel will fire before this completes
+        await asyncio.sleep(5)
+        msg = _make_assistant_text("Should not reach here.")
+        yield {"type": "text", "content": "Should not reach here."}
+        yield {"type": "message", "message": msg}
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Slow task"},
+                "call_cancel",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("Done.")
+            yield {"type": "text", "content": "Done."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+
+            async def run_and_cancel():
+                events = []
+                try:
+                    async for event in parent.run_conversation_stream_async(
+                        "Do slow task"
+                    ):
+                        events.append(event)
+                except StopLoopException:
+                    pass  # Expected — cancel_event triggers this
+                return events
+
+            # Schedule the cancel after the child starts
+            async def cancel_after_start():
+                await child_started.wait()
+                cancel_event.set()
+
+            events, _ = await asyncio.gather(
+                run_and_cancel(), cancel_after_start()
+            )
+
+    # The conversation should have ended early — no "Should not reach here"
+    all_text = " ".join(
+        e.get("content", "") or e.get("message", Message(role="user")).content or ""
+        for e in events
+        if e.get("type") in ("text", "assistant")
+    )
+    assert "Should not reach here" not in all_text
+
+
+@pytest.mark.asyncio
+async def test_cancel_event_none_backward_compatible():
+    """cancel_event=None (default) should not affect existing behavior."""
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="researcher", provider=APIProvider.ANTHROPIC)
+    parent.add_sub_agent(child)
+
+    # Verify cancel_event defaults to None
+    assert parent.cancel_event is None
+
+    async def mock_child_stream(**kwargs):
+        msg = _make_assistant_text("Research complete.")
+        yield {"type": "text", "content": "Research complete."}
+        yield {"type": "message", "message": msg}
+
+    call_count = 0
+
+    async def mock_parent_stream(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            msg = _make_tool_call(
+                "sub_agent__researcher",
+                {"prompt": "Quick task"},
+                "call_compat",
+            )
+            yield {"type": "message", "message": msg}
+        else:
+            msg = _make_assistant_text("All done.")
+            yield {"type": "text", "content": "All done."}
+            yield {"type": "message", "message": msg}
+
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
+        with patch.object(
+            parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
+        ):
+            events = []
+            async for event in parent.run_conversation_stream_async("Quick task"):
+                events.append(event)
+
+    # Should complete normally
+    assistant_events = [e for e in events if e.get("type") == "assistant"]
+    assert len(assistant_events) == 2
+    assert "all done" in assistant_events[1]["message"].content.lower()

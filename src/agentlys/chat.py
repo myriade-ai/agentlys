@@ -116,6 +116,7 @@ class Agentlys(AgentlysBase):
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
         compaction: typing.Optional["CompactionHandler"] = None,
+        cancel_event: typing.Optional[asyncio.Event] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -154,6 +155,7 @@ class Agentlys(AgentlysBase):
         self.max_interactions = max_interactions
         self.thinking = thinking
         self.compaction = compaction
+        self.cancel_event = cancel_event
         self._initial_tools_states = None
         self.functions_schema = []
         self.functions = {}
@@ -164,6 +166,11 @@ class Agentlys(AgentlysBase):
         self._tool_search_function_name: typing.Optional[str] = None
         for m in mcp_servers:
             self.add_mcp_server(m)
+
+    def _check_cancel(self):
+        """Raise StopLoopException if the cancel event has been set."""
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise StopLoopException("Cancelled via cancel_event")
 
     @classmethod
     def from_template(cls, chat_template: str, **kwargs):
@@ -444,6 +451,8 @@ class Agentlys(AgentlysBase):
             run_agent = copy.copy(agent)
             run_agent.provider = copy.copy(agent.provider)
             run_agent.provider.chat = run_agent
+            if self.cancel_event is not None:  # Propagate cancellation, preserve child's own event
+                run_agent.cancel_event = self.cancel_event
             run_agent.messages = []
 
             if compute_mapping:
@@ -861,6 +870,7 @@ class Agentlys(AgentlysBase):
         response: Message,
     ) -> tuple[str, str, typing.Any, typing.Any]:
         """Execute one tool and return (function_call_id, function_name, content, image)."""
+        self._check_cancel()
         name = part.function_call["name"]
         args = part.function_call["arguments"]
         function_call_id = part.function_call_id
@@ -1012,6 +1022,7 @@ class Agentlys(AgentlysBase):
             self._initial_tools_states = self.initial_tools_states
 
         for _ in range(self.max_interactions):
+            self._check_cancel()
             # Ask the LLM with the current message (if any)
             response = await self.ask_async(message)
 
@@ -1103,9 +1114,11 @@ class Agentlys(AgentlysBase):
             self._initial_tools_states = self.initial_tools_states
 
         for _ in range(self.max_interactions):
+            self._check_cancel()
             # Stream the LLM response
             response = None
             async for chunk in self.ask_stream_async(message):
+                self._check_cancel()
                 if chunk["type"] == "message":
                     response = chunk["message"]
                 else:
