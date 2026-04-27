@@ -301,9 +301,14 @@ class AnthropicProvider(BaseProvider):
             # re-caching the entire prefix (cache_creation).
             if len(messages) >= 3:
                 _set_cache_control(-3)
-        # Tools: Add cache_control to the last tool function
+        # Tools: Add cache_control to the last tool function.
+        # Tools with defer_loading=true cannot carry cache_control, so
+        # walk backward to the last eligible tool.
         if tools:
-            tools[-1]["cache_control"] = {"type": "ephemeral"}
+            for tool in reversed(tools):
+                if not tool.get("defer_loading"):
+                    tool["cache_control"] = {"type": "ephemeral"}
+                    break
 
         # System: add cache_control to the LAST system block so the entire
         # system section (instruction + tool states) is cached as a unit.
