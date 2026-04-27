@@ -108,7 +108,6 @@ class Agentlys(AgentlysBase):
         examples: typing.Union[list[Message], None] = None,
         messages: typing.Union[list[Message], None] = None,
         context: str = None,
-        user_context: str = None,
         max_interactions: int = 100,
         model=AGENTLYS_MODEL,
         provider: Union[str, Type[BaseProvider]] = APIProvider.OPENAI,
@@ -151,7 +150,6 @@ class Agentlys(AgentlysBase):
             self.messages = messages
 
         self.context = context
-        self.user_context = user_context
         self.max_interactions = max_interactions
         self.thinking = thinking
         self.compaction = compaction
