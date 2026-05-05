@@ -519,6 +519,121 @@ class TestCompactionIntegrationWithAskAsync(unittest.TestCase):
         self.assertEqual(result.usage["input_tokens"], 42000)
 
 
+class TestCompactionMidToolExchange(unittest.TestCase):
+    """Compaction must not run mid tool_use/tool_result exchange.
+
+    Wiping history while the next message is a tool_result, or while the
+    last message ends with an unanswered tool_use, would orphan the
+    tool_use_id and the API would reject the next request with:
+    "tool_result block must have a corresponding tool_use block".
+    """
+
+    def _make_agent(self):
+        mock_compaction = MagicMock()
+        mock_compaction.should_compact = AsyncMock(return_value=True)
+        mock_compaction.compact = AsyncMock()
+        agent = Agentlys(
+            instruction="Test",
+            provider=APIProvider.ANTHROPIC,
+            compaction=mock_compaction,
+        )
+        agent.provider.client = MagicMock()
+        return agent, mock_compaction
+
+    def _fake_response(self):
+        class FakeResponse:
+            def to_dict(self):
+                return {
+                    "role": "assistant",
+                    "content": "Hi",
+                    "usage": {"input_tokens": 100, "output_tokens": 10},
+                }
+
+        return FakeResponse()
+
+    def test_skips_compaction_when_next_message_is_function_result(self):
+        agent, mock_compaction = self._make_agent()
+        agent.messages = [
+            Message(role="user", content="Hi"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "f", "arguments": "{}"},
+                        function_call_id="toolu_1",
+                    )
+                ],
+            ),
+        ]
+        tool_result = Message(
+            role="function",
+            parts=[
+                MessagePart(
+                    type="function_result",
+                    content="result",
+                    function_call_id="toolu_1",
+                )
+            ],
+        )
+
+        mock_create = AsyncMock(return_value=self._fake_response())
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(agent.ask_async(tool_result))
+            finally:
+                loop.close()
+
+        mock_compaction.compact.assert_not_called()
+        # Tool result was still appended; assistant tool_use is preserved.
+        self.assertEqual(agent.messages[1].parts[0].function_call_id, "toolu_1")
+        self.assertIn(tool_result, agent.messages)
+
+    def test_skips_compaction_when_last_message_has_pending_tool_use(self):
+        agent, mock_compaction = self._make_agent()
+        agent.messages = [
+            Message(role="user", content="Hi"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "f", "arguments": "{}"},
+                        function_call_id="toolu_1",
+                    )
+                ],
+            ),
+        ]
+
+        mock_create = AsyncMock(return_value=self._fake_response())
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(agent.ask_async())
+            finally:
+                loop.close()
+
+        mock_compaction.compact.assert_not_called()
+
+    def test_compaction_runs_for_normal_user_message(self):
+        agent, mock_compaction = self._make_agent()
+        agent.messages = [
+            Message(role="user", content="Hi"),
+            Message(role="assistant", content="Hello"),
+        ]
+
+        mock_create = AsyncMock(return_value=self._fake_response())
+        with patch.object(agent.provider.client.messages, "create", mock_create):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(agent.ask_async("Follow-up"))
+            finally:
+                loop.close()
+
+        mock_compaction.compact.assert_called_once_with(agent)
+
+
 class TestCustomCompactionHandler(unittest.TestCase):
     """Tests for using a custom CompactionHandler."""
 
