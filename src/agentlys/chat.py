@@ -172,6 +172,55 @@ class Agentlys(AgentlysBase):
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise StopLoopException("Cancelled via cancel_event")
 
+    def _is_tool_result_message(
+        self, message: typing.Optional[Message]
+    ) -> bool:
+        """True if the message carries tool/function results.
+
+        Compaction must not run when the next message is a tool result, because
+        wiping history would orphan the corresponding tool_use block in the
+        prior assistant message and the API would reject the request.
+        """
+        if message is None:
+            return False
+        if message.role in ("function", "tool"):
+            return True
+        return any(
+            part.type in ("function_result", "function_result_image")
+            for part in (message.parts or [])
+        )
+
+    def _has_unanswered_tool_use(self) -> bool:
+        """True if the last message is an assistant turn with pending tool_use.
+
+        Compacting in this state would drop the tool_use blocks while a future
+        tool_result still references their ids — the same orphan condition as
+        above, just observed from the other side.
+        """
+        if not self.messages:
+            return False
+        last = self.messages[-1]
+        if last.role != "assistant":
+            return False
+        return any(
+            part.type == "function_call" for part in (last.parts or [])
+        )
+
+    async def _maybe_compact(
+        self, next_message: typing.Optional[Message]
+    ) -> bool:
+        """Run compaction if safe. Returns True if compaction executed."""
+        if not (self.compaction and hasattr(self.compaction, "should_compact")):
+            return False
+        if self._is_tool_result_message(next_message):
+            return False
+        if self._has_unanswered_tool_use():
+            return False
+        if not await self.compaction.should_compact(self):
+            return False
+        await self.compaction.compact(self)
+        return True
+
     @classmethod
     def from_template(cls, chat_template: str, **kwargs):
         instruction, examples = parse_chat_template(chat_template)
@@ -643,9 +692,8 @@ class Agentlys(AgentlysBase):
 
         # Run compaction before appending the new message so it is never
         # included in the summary — the LLM must see the exact user request.
-        if self.compaction and hasattr(self.compaction, "should_compact"):
-            if await self.compaction.should_compact(self):
-                await self.compaction.compact(self)
+        # Skipped mid tool exchange to avoid orphaning tool_use/tool_result.
+        await self._maybe_compact(message)
 
         if message:
             self.messages.append(message)
@@ -1065,15 +1113,21 @@ class Agentlys(AgentlysBase):
 
         # Run compaction before appending the new message so it is never
         # included in the summary — the LLM must see the exact user request.
-        if self.compaction and hasattr(self.compaction, "should_compact"):
-            if await self.compaction.should_compact(self):
-                yield {"type": "compacting"}
-                await self.compaction.compact(self)
-                # Yield the compaction summary message so callers can persist it.
-                # Only emit when compact() actually produced a summary (it can
-                # be a no-op when there are too few messages to compact).
-                if self.messages[0].has_compaction:
-                    yield {"type": "compaction_message", "message": self.messages[0]}
+        # Skipped mid tool exchange to avoid orphaning tool_use/tool_result.
+        if (
+            self.compaction
+            and hasattr(self.compaction, "should_compact")
+            and not self._is_tool_result_message(message)
+            and not self._has_unanswered_tool_use()
+            and await self.compaction.should_compact(self)
+        ):
+            yield {"type": "compacting"}
+            await self.compaction.compact(self)
+            # Yield the compaction summary message so callers can persist it.
+            # Only emit when compact() actually produced a summary (it can
+            # be a no-op when there are too few messages to compact).
+            if self.messages[0].has_compaction:
+                yield {"type": "compaction_message", "message": self.messages[0]}
 
         if message:
             self.messages.append(message)
