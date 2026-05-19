@@ -828,9 +828,20 @@ class Agentlys(AgentlysBase):
         return Message(name=function_name, role="function", parts=[part])
 
     def _format_exception(self, e):
-        # We clean the traceback to remove frames from __init__.py
+        # We clean the traceback to remove frames from __init__.py, plus the
+        # asyncio.to_thread plumbing frames that appear when a sync tool is
+        # offloaded to a worker thread — those add no value for the LLM.
         tb = traceback.extract_tb(e.__traceback__)
-        filtered_tb = [frame for frame in tb if "chat.py" not in frame.filename]
+        agentlys_internal_files = (
+            "chat.py",
+            "asyncio/threads.py",
+            "concurrent/futures/thread.py",
+        )
+        filtered_tb = [
+            frame
+            for frame in tb
+            if not any(marker in frame.filename for marker in agentlys_internal_files)
+        ]
         if filtered_tb:
             content = "Traceback (most recent call last):\n"
             content += "".join(traceback.format_list(filtered_tb))
@@ -843,15 +854,25 @@ class Agentlys(AgentlysBase):
     async def _call_with_signature(self, func, from_response, **kwargs):
         sig = inspect.signature(func)
         if "from_response" in sig.parameters:
-            result = func(**kwargs, from_response=from_response)
-        else:
-            result = func(**kwargs)
+            kwargs = {**kwargs, "from_response": from_response}
 
-        # If the function is async, await the result
+        # Async tools: await them directly on the event loop.
+        if inspect.iscoroutinefunction(func) or (
+            callable(func)
+            and inspect.iscoroutinefunction(getattr(func, "__call__", None))
+        ):
+            return await func(**kwargs)
+
+        # Sync tools: offload to a worker thread so a slow call (network I/O,
+        # blocking DB driver, …) can never freeze the asyncio event loop and
+        # stall every other in-flight request behind it.
+        result = await asyncio.to_thread(func, **kwargs)
+
+        # Defensive: some sync wrappers return a coroutine (eg lambdas around
+        # async fns). Await it to preserve historical semantics.
         if inspect.iscoroutine(result):
             return await result
-        else:
-            return result
+        return result
 
     async def _resolve_and_call_function(
         self, name: str, args: dict, response: Message
