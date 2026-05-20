@@ -42,12 +42,21 @@ DEFAULT_COMPACTION_PROMPT = (
 class TokenThresholdCompaction:
     """Client-side compaction using a cheap model for summarization.
 
-    Checks the most recent API response's ``usage.input_tokens`` against a
-    configurable threshold. When exceeded, summarizes the entire conversation
-    into a single compaction message.
+    Checks the most recent API response's token usage against a configurable
+    threshold. When exceeded, summarizes the entire conversation into a single
+    compaction message.
+
+    ``should_compact`` measures *conversation growth* this turn —
+    ``input_tokens + cache_creation_input_tokens`` — and ignores
+    ``cache_read_input_tokens``. Cache reads are the stable prefix (system
+    prompt, tool definitions, cached history) that Anthropic's prompt-caching
+    layer already amortized; counting them would make the threshold fire on
+    every turn as soon as a cached prefix exists, even when the conversation
+    itself is barely growing. See:
+    https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
 
     Args:
-        token_threshold: Trigger compaction when input tokens exceed this value.
+        token_threshold: Trigger compaction when growth tokens exceed this value.
         summary_model: Model to use for generating summaries (cheap/fast recommended).
         instructions: Custom summarization prompt. Replaces the default if provided.
     """
@@ -59,17 +68,18 @@ class TokenThresholdCompaction:
     async def should_compact(self, chat: AgentlysBase) -> bool:
         """Check if compaction is needed based on the last API response's token usage.
 
-        Each assistant Message from the provider carries a ``usage`` dict.
-        Total input tokens includes cached tokens (cache_creation_input_tokens,
-        cache_read_input_tokens) which are separate from input_tokens when
-        prompt caching is enabled.
+        Walks ``chat.messages`` from the end and uses the first message that
+        carries a ``usage`` dict with ``input_tokens``. Sums
+        ``input_tokens + cache_creation_input_tokens`` — the new tokens this
+        turn either added to the cache or sent uncached, i.e. conversation
+        growth. ``cache_read_input_tokens`` is excluded because it's the
+        stable cached prefix and would otherwise push every post-cache turn
+        over a modest threshold.
         """
         for msg in reversed(chat.messages):
             if msg.usage and "input_tokens" in msg.usage:
-                total = (
-                    msg.usage["input_tokens"]
-                    + msg.usage.get("cache_creation_input_tokens", 0)
-                    + msg.usage.get("cache_read_input_tokens", 0)
+                total = msg.usage["input_tokens"] + msg.usage.get(
+                    "cache_creation_input_tokens", 0
                 )
                 return total > self.token_threshold
         return False
@@ -106,8 +116,7 @@ class TokenThresholdCompaction:
             {
                 "role": "user",
                 "content": (
-                    f"{prompt}\n\n"
-                    f"--- Conversation to summarize ---\n{conversation_str}"
+                    f"{prompt}\n\n--- Conversation to summarize ---\n{conversation_str}"
                 ),
             }
         ]

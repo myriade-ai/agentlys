@@ -658,5 +658,107 @@ class TestCustomCompactionHandler(unittest.TestCase):
         self.assertIsInstance(compactor, CompactionHandler)
 
 
+class _StubChat:
+    """Minimal stand-in for AgentlysBase: only ``messages`` is read."""
+
+    def __init__(self, messages):
+        self.messages = messages
+
+
+class TestShouldCompactCacheAwareness(unittest.TestCase):
+    """The default mode must ignore ``cache_read_input_tokens`` (the bug fix).
+
+    A cached system prompt routinely contributes thousands of cache_read
+    tokens on every turn. Counting it made compaction fire every turn for
+    long-lived conversations with prompt caching enabled.
+    """
+
+    def _run(self, compaction, chat):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(compaction.should_compact(chat))
+        finally:
+            loop.close()
+
+    def test_no_messages_returns_false(self):
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        self.assertFalse(self._run(compaction, _StubChat([])))
+
+    def test_last_message_without_usage_returns_false(self):
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        chat = _StubChat([Message(role="user", content="Hi")])
+        self.assertFalse(self._run(compaction, chat))
+
+    def test_input_tokens_alone_above_threshold_returns_true(self):
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        chat = _StubChat(
+            [
+                Message(
+                    role="assistant",
+                    content="ok",
+                    usage={"input_tokens": 150, "output_tokens": 10},
+                )
+            ]
+        )
+        self.assertTrue(self._run(compaction, chat))
+
+    def test_cache_read_alone_above_threshold_returns_false(self):
+        """The bug fix: a huge cached prefix must not trigger compaction."""
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        chat = _StubChat(
+            [
+                Message(
+                    role="assistant",
+                    content="ok",
+                    usage={
+                        "input_tokens": 10,
+                        "cache_creation_input_tokens": 5,
+                        "cache_read_input_tokens": 5_000,
+                        "output_tokens": 10,
+                    },
+                )
+            ]
+        )
+        self.assertFalse(self._run(compaction, chat))
+
+    def test_input_plus_cache_creation_above_threshold_returns_true(self):
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        chat = _StubChat(
+            [
+                Message(
+                    role="assistant",
+                    content="ok",
+                    usage={
+                        "input_tokens": 60,
+                        "cache_creation_input_tokens": 60,
+                        "cache_read_input_tokens": 0,
+                        "output_tokens": 10,
+                    },
+                )
+            ]
+        )
+        self.assertTrue(self._run(compaction, chat))
+
+    def test_finds_most_recent_message_with_usage(self):
+        """Older usage data must be skipped in favor of the latest turn."""
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        chat = _StubChat(
+            [
+                Message(
+                    role="assistant",
+                    content="old",
+                    usage={"input_tokens": 9_999, "output_tokens": 10},
+                ),
+                Message(role="user", content="next"),
+                Message(
+                    role="assistant",
+                    content="new",
+                    usage={"input_tokens": 5, "output_tokens": 10},
+                ),
+            ]
+        )
+        self.assertFalse(self._run(compaction, chat))
+
+
 if __name__ == "__main__":
     unittest.main()
