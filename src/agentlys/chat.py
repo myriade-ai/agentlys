@@ -852,6 +852,25 @@ class Agentlys(AgentlysBase):
         return content
 
     async def _call_with_signature(self, func, from_response, **kwargs):
+        # Per-call isolation seam. A tool method runs concurrently with others
+        # in a turn — sync tools on worker threads (see below), async tools as
+        # interleaved tasks — yet they share the one tool instance. State on
+        # that instance which isn't safe to share (a DB session, an open
+        # transaction, a non-thread-safe client) then races across calls.
+        #
+        # If the tool owning this method exposes ``__agentlys_call_scope__`` (a
+        # context manager), run the call inside it and rebind the method to the
+        # instance it yields, so each concurrent invocation gets its own scope.
+        # Tools without it are unaffected; plain functions have no owner.
+        owner = getattr(func, "__self__", None)
+        call_scope = getattr(owner, "__agentlys_call_scope__", None)
+        if call_scope is not None:
+            with call_scope() as scoped_owner:
+                scoped_func = getattr(scoped_owner, func.__name__)
+                return await self._invoke_func(scoped_func, from_response, **kwargs)
+        return await self._invoke_func(func, from_response, **kwargs)
+
+    async def _invoke_func(self, func, from_response, **kwargs):
         sig = inspect.signature(func)
         if "from_response" in sig.parameters:
             kwargs = {**kwargs, "from_response": from_response}
