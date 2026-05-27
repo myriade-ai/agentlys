@@ -852,15 +852,62 @@ class Agentlys(AgentlysBase):
         return content
 
     async def _call_with_signature(self, func, from_response, **kwargs):
+        # Per-call isolation seam. A tool method runs concurrently with others
+        # in a turn — sync tools on worker threads (see below), async tools as
+        # interleaved tasks — yet they share the one tool instance. State on
+        # that instance which isn't safe to share (a DB session, an open
+        # transaction, a non-thread-safe client) then races across calls.
+        #
+        # If the tool owning this method exposes ``__agentlys_call_scope__`` (a
+        # context manager), run the call inside it and rebind the method to the
+        # instance it yields, so each concurrent invocation gets its own scope.
+        # Tools without it are unaffected; plain functions have no owner.
+        owner = getattr(func, "__self__", None)
+        call_scope = getattr(owner, "__agentlys_call_scope__", None)
+        if call_scope is None:
+            return await self._invoke_func(func, from_response, **kwargs)
+
+        # Async tools run as tasks on the event loop, so opening the scope here
+        # and awaiting the body share one thread/task — enter the scope inline.
+        if self._is_async_callable(func):
+            with call_scope() as scoped_owner:
+                scoped_func = getattr(scoped_owner, func.__name__)
+                return await self._invoke_func(scoped_func, from_response, **kwargs)
+
+        # Sync tools are offloaded to a worker thread (see ``_invoke_func``), so
+        # the scope must open, run AND close on that same thread. Entering it on
+        # the event-loop thread would create/close a thread-affine resource (a
+        # SQLAlchemy ``Session``) on a different thread than the one the method
+        # body uses, defeating the "session per thread" isolation this provides.
+        def _run_scoped_sync():
+            with call_scope() as scoped_owner:
+                scoped_func = getattr(scoped_owner, func.__name__)
+                call_kwargs = kwargs
+                if "from_response" in inspect.signature(scoped_func).parameters:
+                    call_kwargs = {**kwargs, "from_response": from_response}
+                return scoped_func(**call_kwargs)
+
+        result = await asyncio.to_thread(_run_scoped_sync)
+        # Defensive: a sync wrapper may return a coroutine (eg a lambda around an
+        # async fn); await it on the event loop to preserve historical semantics.
+        if inspect.iscoroutine(result):
+            return await result
+        return result
+
+    @staticmethod
+    def _is_async_callable(func) -> bool:
+        return inspect.iscoroutinefunction(func) or (
+            callable(func)
+            and inspect.iscoroutinefunction(getattr(func, "__call__", None))
+        )
+
+    async def _invoke_func(self, func, from_response, **kwargs):
         sig = inspect.signature(func)
         if "from_response" in sig.parameters:
             kwargs = {**kwargs, "from_response": from_response}
 
         # Async tools: await them directly on the event loop.
-        if inspect.iscoroutinefunction(func) or (
-            callable(func)
-            and inspect.iscoroutinefunction(getattr(func, "__call__", None))
-        ):
+        if self._is_async_callable(func):
             return await func(**kwargs)
 
         # Sync tools: offload to a worker thread so a slow call (network I/O,
