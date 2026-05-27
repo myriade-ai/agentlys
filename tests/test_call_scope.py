@@ -67,6 +67,50 @@ class _ScopedTool:
         raise StopLoopException("done")
 
 
+class _ThreadRecordingTool:
+    """Records the thread on which scope enter/exit and the body each run.
+
+    ``threads`` is a shared dict: the scope yields a shallow copy, so the copy
+    (which runs the body) and the original (which runs enter/exit) write into
+    the same dict.
+    """
+
+    def __init__(self):
+        self.session = None
+        self.threads = {}
+
+    @contextlib.contextmanager
+    def __agentlys_call_scope__(self):
+        scoped = copy.copy(self)
+        scoped.session = object()
+        self.threads["enter"] = threading.get_ident()
+        try:
+            yield scoped
+        finally:
+            self.threads["exit"] = threading.get_ident()
+
+    def work(self, **kwargs):
+        self.threads["body"] = threading.get_ident()
+        return self.session
+
+
+@pytest.mark.asyncio
+async def test_sync_scope_lifecycle_and_body_share_one_worker_thread():
+    # A thread-affine resource (eg a SQLAlchemy Session) must be opened, used
+    # and closed on the same thread. For sync tools that means the scope's
+    # enter/exit run on the worker thread alongside the offloaded body — never
+    # on the event-loop thread.
+    chat = Agentlys()
+    tool = _ThreadRecordingTool()
+    loop_thread = threading.get_ident()
+
+    await chat._call_with_signature(tool.work, None)
+
+    t = tool.threads
+    assert t["enter"] == t["body"] == t["exit"]
+    assert t["body"] != loop_thread, "sync body must run off the event loop"
+
+
 class _PlainTool:
     """No scope → calls run on the original instance (current behaviour)."""
 
