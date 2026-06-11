@@ -172,9 +172,7 @@ class Agentlys(AgentlysBase):
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise StopLoopException("Cancelled via cancel_event")
 
-    def _is_tool_result_message(
-        self, message: typing.Optional[Message]
-    ) -> bool:
+    def _is_tool_result_message(self, message: typing.Optional[Message]) -> bool:
         """True if the message carries tool/function results.
 
         Compaction must not run when the next message is a tool result, because
@@ -202,13 +200,9 @@ class Agentlys(AgentlysBase):
         last = self.messages[-1]
         if last.role != "assistant":
             return False
-        return any(
-            part.type == "function_call" for part in (last.parts or [])
-        )
+        return any(part.type == "function_call" for part in (last.parts or []))
 
-    async def _maybe_compact(
-        self, next_message: typing.Optional[Message]
-    ) -> bool:
+    async def _maybe_compact(self, next_message: typing.Optional[Message]) -> bool:
         """Run compaction if safe. Returns True if compaction executed."""
         if not (self.compaction and hasattr(self.compaction, "should_compact")):
             return False
@@ -283,8 +277,7 @@ class Agentlys(AgentlysBase):
             if self._tool_search_config:
                 prefix = f"{tool_name}__"
                 has_loaded_method = any(
-                    s["name"].startswith(prefix)
-                    and not s.get("defer_loading")
+                    s["name"].startswith(prefix) and not s.get("defer_loading")
                     for s in self.functions_schema
                 )
                 if not has_loaded_method:
@@ -318,9 +311,7 @@ class Agentlys(AgentlysBase):
         if not self._tool_search_config:
             return None
 
-        deferred = [
-            s for s in self.functions_schema if s.get("defer_loading")
-        ]
+        deferred = [s for s in self.functions_schema if s.get("defer_loading")]
         if not deferred:
             return None
 
@@ -395,8 +386,7 @@ class Agentlys(AgentlysBase):
         if (
             self._tool_search_config
             and not defer_loading
-            and function_schema["name"]
-            not in self._tool_search_config.always_loaded
+            and function_schema["name"] not in self._tool_search_config.always_loaded
             and function_schema["name"] != self._tool_search_function_name
         ):
             function_schema["defer_loading"] = True
@@ -500,7 +490,9 @@ class Agentlys(AgentlysBase):
             run_agent = copy.copy(agent)
             run_agent.provider = copy.copy(agent.provider)
             run_agent.provider.chat = run_agent
-            if self.cancel_event is not None:  # Propagate cancellation, preserve child's own event
+            if (
+                self.cancel_event is not None
+            ):  # Propagate cancellation, preserve child's own event
                 run_agent.cancel_event = self.cancel_event
             run_agent.messages = []
 
@@ -585,9 +577,7 @@ class Agentlys(AgentlysBase):
         del self._sub_agents[func_name]
         self.functions.pop(func_name, None)
         self.functions_schema = [
-            schema
-            for schema in self.functions_schema
-            if schema["name"] != func_name
+            schema for schema in self.functions_schema if schema["name"] != func_name
         ]
 
     def enable_tool_search(
@@ -661,20 +651,70 @@ class Agentlys(AgentlysBase):
         self._tool_search_function_name = search_schema["name"]
         self.add_function(search_callable, search_schema)
 
-    async def add_mcp_server(self, mcp_server):
+    async def add_mcp_server(
+        self,
+        mcp_server,
+        prefix: str = "",
+        tool_filter: typing.Optional[typing.Callable] = None,
+        max_result_chars: typing.Optional[int] = None,
+        include_resources: bool = True,
+    ) -> list[str]:
         """
         Add a MCP server to the agent instance.
         The MCP server will be used to call tools and resources.
+
+        Args:
+            mcp_server: An initialized MCP ``ClientSession`` (or any object
+                exposing the same ``list_tools`` / ``call_tool`` /
+                ``list_resources`` interface).
+            prefix: Namespace prefix applied to every registered name so
+                tools from different servers (or built-in tools) never
+                collide.
+            tool_filter: Optional callable receiving the MCP ``Tool``
+                object; return False to skip the tool.
+            max_result_chars: Optional cap on tool/resource result size.
+            include_resources: Also expose the server's resources as
+                functions (default True, matching historical behavior).
+
+        Returns:
+            The list of registered function names. Names already taken by
+            existing functions are skipped (with a warning), so MCP servers
+            can never shadow built-in tools.
         """
         from agentlys.mcp import fetch_mcp_server_resources, fetch_mcp_server_tools
 
-        logging.warning("Experimental feature: MCP servers")
-        tools_functions, schemas = await fetch_mcp_server_tools(mcp_server)
-        self.functions.update(tools_functions)
-        self.functions_schema.extend(schemas)
-        resources_functions, schemas = await fetch_mcp_server_resources(mcp_server)
-        self.functions.update(resources_functions)
-        self.functions_schema.extend(schemas)
+        registered: list[str] = []
+
+        batches = [
+            await fetch_mcp_server_tools(
+                mcp_server,
+                prefix=prefix,
+                tool_filter=tool_filter,
+                max_result_chars=max_result_chars,
+            )
+        ]
+        if include_resources:
+            batches.append(
+                await fetch_mcp_server_resources(
+                    mcp_server,
+                    prefix=prefix,
+                    max_result_chars=max_result_chars,
+                )
+            )
+
+        # Route through add_function so tool-search auto-deferral applies
+        # and the registration behaves like any other tool.
+        for functions, schemas in batches:
+            for schema in schemas:
+                if schema["name"] in self.functions:
+                    logging.warning(
+                        "MCP name %r collides with an existing function, skipping",
+                        schema["name"],
+                    )
+                    continue
+                self.add_function(functions[schema["name"]], schema)
+                registered.append(schema["name"])
+        return registered
 
     async def ask_async(
         self,
