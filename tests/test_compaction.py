@@ -339,6 +339,44 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
         self.assertEqual(len(agent.messages), 1)
         self.assertTrue(agent.messages[0].has_compaction)
 
+    def test_compact_skips_when_no_text_block(self):
+        """If the summarizer returns no text block (e.g. a thinking-only or
+        empty response), skip compaction instead of raising — the conversation
+        must stay intact so the agent turn does not crash (DEV-1304)."""
+        compaction = TokenThresholdCompaction()
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        original_messages = [
+            Message(role="user", content="First message"),
+            Message(role="assistant", content="First response"),
+            Message(role="user", content="Second message"),
+            Message(role="assistant", content="Second response"),
+        ]
+        agent.messages = list(original_messages)
+
+        # Response carries only a non-text (thinking) block — no text block.
+        mock_thinking_block = MagicMock()
+        mock_thinking_block.type = "thinking"
+        mock_response = MagicMock()
+        mock_response.content = [mock_thinking_block]
+
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
+
+        loop = asyncio.new_event_loop()
+        try:
+            # Must not raise RuntimeError.
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
+
+        # Conversation left untouched: no compaction message inserted.
+        self.assertEqual(len(agent.messages), len(original_messages))
+        self.assertFalse(
+            any(getattr(m, "has_compaction", False) for m in agent.messages)
+        )
+
     def test_compact_extracts_summary_without_tags(self):
         """When the model doesn't use summary tags, use the full response."""
         compaction = TokenThresholdCompaction()

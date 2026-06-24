@@ -133,7 +133,15 @@ class TokenThresholdCompaction:
             (block for block in response.content if block.type == "text"), None
         )
         if text_block is None:
-            raise RuntimeError("Compaction response contained no text block")
+            # The summarizer occasionally returns no text block (e.g. an empty
+            # or thinking-only response). Skip compaction this round instead of
+            # crashing the agent turn; the conversation is left intact and
+            # compaction is retried on the next response that exceeds the
+            # threshold.
+            logger.warning(
+                "Compaction response contained no text block; skipping compaction"
+            )
+            return
         summary_text = text_block.text
 
         # Try to extract from <summary> tags if present
