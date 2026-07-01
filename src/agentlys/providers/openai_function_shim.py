@@ -124,7 +124,7 @@ class OpenAIProviderFunctionShim(OpenAIProvider):
             messages = [message_to_openai_dict(system_msg)] + messages
 
         # Make the request WITHOUT 'functions='
-        res = self.client.chat.completions.create(
+        res = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,
         )

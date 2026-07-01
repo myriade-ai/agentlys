@@ -16,7 +16,18 @@ async def async_calculator(**kwargs):
 @pytest.mark.asyncio
 async def test_fetch_stream_async_not_implemented_raises_error():
     """Test that providers without streaming support raise NotImplementedError."""
-    chat = Agentlys(provider=APIProvider.OPENAI)
+    from agentlys.base import AgentlysBase
+    from agentlys.providers.base_provider import BaseProvider
+
+    class NoStreamProvider(BaseProvider):
+        def __init__(self, chat: AgentlysBase, model: str):
+            self.chat = chat
+            self.model = model
+
+        async def fetch_async(self, **kwargs) -> Message:
+            return Message(role="assistant", content="Hello")
+
+    chat = Agentlys(provider=NoStreamProvider, model="test-model")
     chat.messages.append(Message(role="user", content="Hello"))
 
     with pytest.raises(NotImplementedError) as exc_info:
@@ -24,7 +35,7 @@ async def test_fetch_stream_async_not_implemented_raises_error():
             pass
 
     assert "does not support streaming" in str(exc_info.value)
-    assert "OpenAIProvider" in str(exc_info.value)
+    assert "NoStreamProvider" in str(exc_info.value)
 
 
 async def mock_stream_chunks():

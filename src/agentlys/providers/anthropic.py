@@ -6,8 +6,6 @@ from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
 from agentlys.providers.utils import add_empty_function_result
 
-AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
-
 
 def part_to_anthropic_dict(part: MessagePart) -> dict:
     if part.type == "text":
@@ -110,10 +108,20 @@ DEFAULT_MAX_TOKENS = int(os.getenv("ANTHROPIC_MAX_TOKENS", "10000"))
 
 
 class AnthropicProvider(BaseProvider):
-    def __init__(self, chat: AgentlysBase, model: str, max_tokens: int | None = None):
+    def __init__(
+        self,
+        chat: AgentlysBase,
+        model: str,
+        max_tokens: int | None = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ):
         self.model = model
+        env_host = os.getenv("AGENTLYS_HOST")
         self.client = anthropic.AsyncAnthropic(
-            base_url=AGENTLYS_HOST if AGENTLYS_HOST else "https://api.anthropic.com",
+            base_url=base_url or env_host or "https://api.anthropic.com",
+            # None lets the SDK fall back to the ANTHROPIC_API_KEY env var
+            api_key=api_key or os.getenv("AGENTLYS_API_KEY"),
         )
         self.chat = chat
         self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens

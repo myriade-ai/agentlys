@@ -1,14 +1,12 @@
 import json
-import os
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message
 from agentlys.providers.openai import (
     OpenAIProvider,
+    create_openai_client,
     parts_to_openai_dict,
 )
-
-AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def message_to_openai_dict(message: Message) -> dict:
@@ -25,13 +23,13 @@ def message_to_openai_dict(message: Message) -> dict:
         res = {"role": message.role, "content": []}
         for part in message.parts:
             if part.type == "function_call" and message.role == "assistant":
-                res["tool_calls"] = [
+                res.setdefault("tool_calls", []).append(
                     {
                         "id": part.function_call_id,
                         "type": "function",
                         "function": parts_to_openai_dict(part),
                     }
-                ]
+                )
             elif part.type == "function_call" and message.role == "user":
                 # Workaround: If the user is triggering a function, we add it's name and arguments to the content
                 res["content"] = (
@@ -54,9 +52,13 @@ class DefaultProvider(OpenAIProvider):
     - Function call content is a string
     """
 
-    def __init__(self, chat: AgentlysBase, model: str, base_url: str = None):
-        from openai import OpenAI
-
+    def __init__(
+        self,
+        chat: AgentlysBase,
+        model: str,
+        base_url: str = None,
+        api_key: str = None,
+    ):
         self.chat = chat
         self.model = model
-        self.client = OpenAI(base_url=AGENTLYS_HOST)
+        self.client = create_openai_client(base_url=base_url, api_key=api_key)
