@@ -11,7 +11,7 @@ class FunctionCallParsingError(Exception):
         self.function_call = function_call
 
     def __str__(self):
-        return f"Invalid function_call: {self.obj.function_call}"
+        return f"Invalid function_call: {self.function_call}"
 
 
 # TODO: should probably exploit default model from provider

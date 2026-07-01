@@ -73,9 +73,6 @@ def message_to_openai_dict(message: Message) -> dict:
 
 
 class OpenAIProviderFunctionShim(OpenAIProvider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     async def fetch_async(self):
         """
         Calls the OpenAI ChatCompletion endpoint using ONLY text-based instructions for function usage.

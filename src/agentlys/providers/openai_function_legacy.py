@@ -58,6 +58,11 @@ def parts_to_openai_dict(part: MessagePart) -> dict:
                 "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
             },
         }
+    elif part.type == "compaction":
+        return {
+            "type": "text",
+            "text": f"[Previous conversation summary]\n{part.content}",
+        }
 
     raise ValueError(f"Unknown part type: {part.type}")
 

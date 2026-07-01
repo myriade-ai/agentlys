@@ -15,8 +15,9 @@ def message_to_openai_dict(message: Message) -> dict:
             "role": "tool",
             "tool_call_id": message.function_call_id,
             "content": message.content,
-            "name": message.name,
         }
+        if message.name:
+            res["name"] = message.name
     elif message.role == "system":
         res = {"role": message.role, "content": message.content}
     else:
@@ -49,8 +50,12 @@ def message_to_openai_dict(message: Message) -> dict:
 class DefaultProvider(OpenAIProvider):
     """Default provider is OpenAI with small changes
     - System messages are string only
-    - Function call content is a string
+    - Function result content is a string
+
+    Useful for OpenAI-compatible servers that reject list-of-parts content.
     """
+
+    message_transform = staticmethod(message_to_openai_dict)
 
     def __init__(
         self,

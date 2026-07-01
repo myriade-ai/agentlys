@@ -34,7 +34,6 @@ from agentlys.utils import (
 if TYPE_CHECKING:
     from agentlys.compaction import CompactionHandler
 
-AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
@@ -155,7 +154,6 @@ class Agentlys(AgentlysBase):
                 "use_tools_only is a beta feature and may change in the future"
             )
         self.use_tools_only = use_tools_only
-        self.client = None  # TODO:
         self.name = name
         self.instruction = instruction
         if examples is None:

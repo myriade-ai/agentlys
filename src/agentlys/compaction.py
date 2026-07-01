@@ -46,14 +46,19 @@ class TokenThresholdCompaction:
     configurable threshold. When exceeded, summarizes the entire conversation
     into a single compaction message.
 
+    Works with any provider implementing ``BaseProvider.complete()``
+    (Anthropic, OpenAI, and any OpenAI-compatible API).
+
     Args:
         token_threshold: Trigger compaction when input tokens exceed this value.
-        summary_model: Model to use for generating summaries (cheap/fast recommended).
+        summary_model: Model to use for generating summaries (cheap/fast
+            recommended). Defaults to the provider's current model — pass a
+            cheap model explicitly to reduce summarization cost.
         instructions: Custom summarization prompt. Replaces the default if provided.
     """
 
     token_threshold: int = 100_000
-    summary_model: str = "claude-haiku-4-5-20251001"
+    summary_model: Optional[str] = None
     instructions: Optional[str] = None
 
     async def should_compact(self, chat: AgentlysBase) -> bool:
@@ -76,8 +81,6 @@ class TokenThresholdCompaction:
 
     async def compact(self, chat: AgentlysBase) -> None:
         """Summarize older messages and replace them with a compaction message."""
-        import anthropic as anthropic_sdk
-
         from agentlys.model import Message, MessagePart
 
         messages = chat.messages
@@ -95,46 +98,23 @@ class TokenThresholdCompaction:
 
         prompt = self.instructions or DEFAULT_COMPACTION_PROMPT
 
-        provider = chat.provider
-        # Reuse the provider's client so proxy auth / custom base_url work
-        if hasattr(provider, "client"):
-            client = provider.client
-        else:
-            client = anthropic_sdk.AsyncAnthropic()
-
         summary_messages = [
             {
                 "role": "user",
                 "content": (
-                    f"{prompt}\n\n"
-                    f"--- Conversation to summarize ---\n{conversation_str}"
+                    f"{prompt}\n\n--- Conversation to summarize ---\n{conversation_str}"
                 ),
             }
         ]
 
-        # Include the original system instruction for context
-        kwargs = {}
-        if chat.instruction:
-            kwargs["system"] = chat.instruction
-
-        # If the provider exposes auth headers (e.g. proxy), inject them
-        if hasattr(provider, "_get_auth_headers"):
-            kwargs["extra_headers"] = await provider._get_auth_headers()
-
-        response = await client.messages.create(
-            model=self.summary_model,
+        # The provider handles client shape, proxy auth and custom base_url
+        summary_text = await chat.provider.complete(
             messages=summary_messages,
+            # Include the original system instruction for context
+            system=chat.instruction,
+            model=self.summary_model,
             max_tokens=4096,
-            **kwargs,
         )
-
-        # Extract summary text (skip ThinkingBlocks when extended thinking is enabled)
-        text_block = next(
-            (block for block in response.content if block.type == "text"), None
-        )
-        if text_block is None:
-            raise RuntimeError("Compaction response contained no text block")
-        summary_text = text_block.text
 
         # Try to extract from <summary> tags if present
         match = re.search(r"<summary>(.*?)</summary>", summary_text, re.DOTALL)

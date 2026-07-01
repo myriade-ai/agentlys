@@ -123,6 +123,11 @@ def parts_to_openai_dict(part: MessagePart) -> dict:
                 "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
             },
         }
+    elif part.type == "compaction":
+        return {
+            "type": "text",
+            "text": f"[Previous conversation summary]\n{part.content}",
+        }
 
     raise ValueError(f"Unknown part type: {part.type}")
 
@@ -201,6 +206,10 @@ def split_function_results(messages: list[Message]) -> list[Message]:
 
 
 class OpenAIProvider(BaseProvider):
+    # Wire-format hook: subclasses can swap the message serializer
+    # (see DefaultProvider's string-only variant).
+    message_transform = staticmethod(message_to_openai_dict)
+
     def __init__(
         self,
         chat: AgentlysBase,
@@ -215,7 +224,7 @@ class OpenAIProvider(BaseProvider):
     def _prepare_request_params(self, **kwargs):
         """Prepare messages, tools, and kwargs for an OpenAI-compatible request."""
         messages = self.prepare_messages(
-            transform_function=message_to_openai_dict,
+            transform_function=self.message_transform,
             transform_list_function=lambda x: split_function_results(
                 add_empty_function_result(return_image_as_user_message(x))
             ),
@@ -243,7 +252,7 @@ class OpenAIProvider(BaseProvider):
                     content=self.chat.initial_tools_states,
                 )
             )
-        messages = [message_to_openai_dict(sm) for sm in system_messages] + messages
+        messages = [self.message_transform(sm) for sm in system_messages] + messages
 
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = "required"
@@ -288,6 +297,31 @@ class OpenAIProvider(BaseProvider):
             id=res.id,  # We use the response id as the message id
             usage=usage_to_dict(res.usage),
         )
+
+    async def complete(
+        self,
+        messages: list[dict],
+        system: typing.Optional[str] = None,
+        model: typing.Optional[str] = None,
+        max_tokens: int = 4096,
+    ) -> str:
+        if system:
+            messages = [{"role": "system", "content": system}] + messages
+        kwargs = {}
+        # If the provider exposes auth headers (e.g. proxy), inject them
+        if hasattr(self, "_get_auth_headers"):
+            kwargs["extra_headers"] = await self._get_auth_headers()
+
+        res = await self.client.chat.completions.create(
+            model=model or self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        content = res.choices[0].message.content
+        if not content:
+            raise RuntimeError("Completion response contained no text")
+        return content
 
     async def fetch_stream_async(self, **kwargs):
         """Stream response tokens from any OpenAI-compatible chat completions API.

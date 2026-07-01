@@ -356,3 +356,143 @@ async def test_run_conversation_stream_async_end_to_end():
     assert assistant_messages[-1].content == "It is sunny!"
     # The tool result was sent back as its own tool message on round 2
     assert call_count["n"] == 2
+
+
+class TestCompleteAndCompaction:
+    """complete() and compaction against OpenAI-compatible providers."""
+
+    def _agent_with_mocked_completion(self, text):
+        from unittest.mock import AsyncMock
+
+        agent = Agentlys(
+            provider="openai",
+            model="llama3.1",
+            base_url="http://localhost:11434/v1",
+            instruction="You are a helpful assistant",
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=text))]
+        )
+        mock_create = AsyncMock(return_value=response)
+        agent.provider.client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=mock_create))
+        )
+        return agent, mock_create
+
+    @pytest.mark.asyncio
+    async def test_complete_prepends_system_and_defaults_model(self):
+        agent, mock_create = self._agent_with_mocked_completion("a summary")
+
+        result = await agent.provider.complete(
+            messages=[{"role": "user", "content": "Summarize this"}],
+            system="You summarize conversations",
+        )
+
+        assert result == "a summary"
+        kwargs = mock_create.call_args.kwargs
+        assert kwargs["model"] == "llama3.1"  # falls back to the provider model
+        assert kwargs["messages"][0] == {
+            "role": "system",
+            "content": "You summarize conversations",
+        }
+
+    @pytest.mark.asyncio
+    async def test_compaction_works_with_openai_provider(self):
+        from agentlys.compaction import TokenThresholdCompaction
+
+        agent, mock_create = self._agent_with_mocked_completion(
+            "<summary>Talked about the weather</summary>"
+        )
+        agent.messages = [
+            Message(role="user", content="First message"),
+            Message(role="assistant", content="First response"),
+            Message(role="user", content="Second message"),
+            Message(role="assistant", content="Second response"),
+        ]
+
+        compaction = TokenThresholdCompaction(token_threshold=100)
+        await compaction.compact(agent)
+
+        assert len(agent.messages) == 1
+        assert agent.messages[0].has_compaction
+        assert agent.messages[0].parts[0].content == "Talked about the weather"
+        # The agent instruction rides along as the system message
+        kwargs = mock_create.call_args.kwargs
+        assert kwargs["messages"][0]["role"] == "system"
+        assert kwargs["max_tokens"] == 4096
+
+    @pytest.mark.asyncio
+    async def test_complete_not_implemented_on_bare_provider(self):
+        from agentlys.providers.base_provider import BaseProvider
+
+        class Bare(BaseProvider):
+            def __init__(self, chat, model):
+                self.chat = chat
+                self.model = model
+
+            async def fetch_async(self, **kwargs):
+                return Message(role="assistant", content="hi")
+
+        agent = Agentlys(provider=Bare, model="m")
+        with pytest.raises(NotImplementedError):
+            await agent.provider.complete(messages=[{"role": "user", "content": "x"}])
+
+
+class TestDefaultProviderTransform:
+    """DefaultProvider must apply its string-only wire format."""
+
+    def _agent(self):
+        return Agentlys(
+            provider="default",
+            model="m",
+            base_url="http://localhost:1234/v1",
+            instruction="Be brief",
+        )
+
+    def test_system_messages_are_strings(self):
+        agent = self._agent()
+        agent.messages = [Message(role="user", content="Hello")]
+        messages, _, _ = agent.provider._prepare_request_params()
+        assert messages[0] == {"role": "system", "content": "Be brief"}
+
+    def test_tool_results_are_strings(self):
+        agent = self._agent()
+        agent.messages = [
+            Message(role="user", content="Weather?"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "get_weather", "arguments": {}},
+                        function_call_id="call_1",
+                    )
+                ],
+            ),
+            Message(
+                role="function",
+                name="get_weather",
+                parts=[
+                    MessagePart(
+                        type="function_result",
+                        content="sunny",
+                        function_call_id="call_1",
+                    )
+                ],
+            ),
+        ]
+        messages, _, _ = agent.provider._prepare_request_params()
+        tool_message = next(m for m in messages if m["role"] == "tool")
+        assert tool_message["content"] == "sunny"
+        assert tool_message["tool_call_id"] == "call_1"
+
+
+def test_compaction_part_serializes_as_text():
+    """Post-compaction history must serialize on the OpenAI wire format."""
+    from agentlys.providers.openai import parts_to_openai_dict
+
+    part = MessagePart(type="compaction", content="Talked about the weather")
+    result = parts_to_openai_dict(part)
+    assert result["type"] == "text"
+    assert "[Previous conversation summary]" in result["text"]
+    assert "Talked about the weather" in result["text"]

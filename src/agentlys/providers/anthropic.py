@@ -374,6 +374,34 @@ class AnthropicProvider(BaseProvider):
         msg.usage = res_dict.get("usage")
         return msg
 
+    async def complete(
+        self,
+        messages: list[dict],
+        system: str | None = None,
+        model: str | None = None,
+        max_tokens: int = 4096,
+    ) -> str:
+        kwargs = {}
+        if system:
+            kwargs["system"] = system
+        # If the provider exposes auth headers (e.g. proxy), inject them
+        if hasattr(self, "_get_auth_headers"):
+            kwargs["extra_headers"] = await self._get_auth_headers()
+
+        response = await self.client.messages.create(
+            model=model or self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        # Extract the text (skip ThinkingBlocks when extended thinking is enabled)
+        text_block = next(
+            (block for block in response.content if block.type == "text"), None
+        )
+        if text_block is None:
+            raise RuntimeError("Completion response contained no text block")
+        return text_block.text
+
     async def fetch_stream_async(self, **kwargs):
         """Stream response tokens from Anthropic.
 
