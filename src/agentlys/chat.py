@@ -13,13 +13,16 @@ import traceback
 import typing
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Type, Union
+from typing import TYPE_CHECKING, Type
 
 from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import APIProvider, BaseProvider
+from agentlys.providers.base_provider import (
+    APIProvider,  # noqa: F401  (re-exported via agentlys.__init__)
+    BaseProvider,
+)
 from agentlys.providers.utils import get_provider_and_model
 from agentlys.utils import (
     csv_dumps,
@@ -31,7 +34,6 @@ from agentlys.utils import (
 if TYPE_CHECKING:
     from agentlys.compaction import CompactionHandler
 
-AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 AGENTLYS_MODEL = os.getenv("AGENTLYS_MODEL")
 OUTPUT_SIZE_LIMIT = int(os.getenv("AGENTLYS_OUTPUT_SIZE_LIMIT", 20_000))
 
@@ -111,25 +113,40 @@ class Agentlys(AgentlysBase):
         user_context: str = None,
         max_interactions: int = 100,
         model=AGENTLYS_MODEL,
-        provider: Union[str, Type[BaseProvider]] = APIProvider.OPENAI,
+        provider: typing.Union[str, Type[BaseProvider], None] = None,
         use_tools_only: bool = False,
         mcp_servers: typing.Union[list[object], None] = [],
         thinking: typing.Optional[dict] = None,
         compaction: typing.Optional["CompactionHandler"] = None,
         cancel_event: typing.Optional[asyncio.Event] = None,
+        base_url: typing.Optional[str] = None,
+        api_key: typing.Optional[str] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
         Args:
+            provider: Union[str, Type[BaseProvider], None] = None,
+                Provider name ("openai", "anthropic", ...) or a custom
+                BaseProvider subclass. Defaults to the AGENTLYS_PROVIDER
+                environment variable, then "openai".
             use_tools_only: bool = False,
                 If True, the chat will only use tools and not the LLM.
                 This is a beta feature and may change in the future.
             thinking: Optional[dict] = None,
                 Extended thinking configuration for Anthropic models.
                 Example: {"type": "enabled", "budget_tokens": 10000}
+            base_url: Optional[str] = None,
+                Custom API endpoint. With provider="openai", any
+                OpenAI-compatible API can be used (Ollama, vLLM, LiteLLM,
+                OpenRouter, ...), e.g. "http://localhost:11434/v1".
+                Defaults to the AGENTLYS_HOST environment variable.
+            api_key: Optional[str] = None,
+                API key for the endpoint. Defaults to the AGENTLYS_API_KEY
+                environment variable, then the provider's own env var
+                (OPENAI_API_KEY / ANTHROPIC_API_KEY).
         """
         self.provider, self.model = get_provider_and_model(
-            self, provider, model
+            self, provider, model, base_url=base_url, api_key=api_key
         )  # TODO: rename register ?
         self.simple_response_callback = simple_response_default_callback
         if use_tools_only:
@@ -137,7 +154,6 @@ class Agentlys(AgentlysBase):
                 "use_tools_only is a beta feature and may change in the future"
             )
         self.use_tools_only = use_tools_only
-        self.client = None  # TODO:
         self.name = name
         self.instruction = instruction
         if examples is None:

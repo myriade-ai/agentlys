@@ -13,9 +13,11 @@ Agentlys(
     context: str = None,
     max_interactions: int = 100,
     model: str = None,
-    provider: str | Type[BaseProvider] = APIProvider.OPENAI,
+    provider: str | Type[BaseProvider] | None = None,
     use_tools_only: bool = False,
-    mcp_servers: list[object] = []
+    mcp_servers: list[object] = [],
+    base_url: str = None,
+    api_key: str = None
 )
 ```
 
@@ -28,9 +30,11 @@ Agentlys(
 - `context`: Additional context for the agent
 - `max_interactions`: Maximum number of interactions in a conversation (default: 100)
 - `model`: Model to use (defaults to env var AGENTLYS_MODEL)
-- `provider`: LLM provider ("openai", "anthropic", or custom provider class)
+- `provider`: LLM provider ("openai", "anthropic", or custom provider class). Defaults to env var AGENTLYS_PROVIDER, then "openai"
 - `use_tools_only`: Beta feature - agent only uses tools, no LLM calls
 - `mcp_servers`: List of MCP server connections
+- `base_url`: Custom API endpoint — with `provider="openai"`, any OpenAI-compatible API works (Ollama, vLLM, LiteLLM, OpenRouter, ...). Defaults to env var AGENTLYS_HOST
+- `api_key`: API key for the endpoint. Defaults to env var AGENTLYS_API_KEY, then the provider's own env var
 
 ### Core Methods
 
@@ -239,7 +243,9 @@ APIProvider.OPENAI_FUNCTION_LEGACY  # Legacy OpenAI function calling
 ## Environment Variables
 
 - `AGENTLYS_MODEL`: Default model to use
-- `AGENTLYS_HOST`: Custom provider endpoint
+- `AGENTLYS_PROVIDER`: Default provider ("openai", "anthropic", ...)
+- `AGENTLYS_HOST`: Custom provider endpoint (any OpenAI-compatible API with the openai provider)
+- `AGENTLYS_API_KEY`: API key for the custom endpoint
 - `AGENTLYS_OUTPUT_SIZE_LIMIT`: Maximum output size in characters (default: 4000)
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key

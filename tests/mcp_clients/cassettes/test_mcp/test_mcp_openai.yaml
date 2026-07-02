@@ -1,9 +1,6 @@
 interactions:
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator
-      to add 1 and 2"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add
-      two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet
-      a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
+    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator to add 1 and 2"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -15,21 +12,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUlN2d196fbLKKAJIn2GzqHckS5t\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701169,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_rPuDEhw3SduaxpPsl4qUNefF\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"add\",\n
-        \             \"arguments\": \"{\\\"a\\\":1,\\\"b\\\":2}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 108,\n    \"completion_tokens\":
-        18,\n    \"total_tokens\": 126,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUlN2d196fbLKKAJIn2GzqHckS5t\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701169,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_rPuDEhw3SduaxpPsl4qUNefF\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"add\",\n              \"arguments\": \"{\\\"a\\\":1,\\\"b\\\":2}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 108,\n    \"completion_tokens\": 18,\n    \"total_tokens\": 126,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
     headers:
       Connection:
       - keep-alive
@@ -51,11 +34,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator
-      to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\":
-      1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add
-      two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet
-      a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
+    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\": 1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -67,17 +46,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUlOYdb303gsH1ijfptNGFhS85Rm\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701170,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"The sum of 1 and 2 is 3.\",\n        \"refusal\":
-        null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n
-        \     \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\":
-        133,\n    \"completion_tokens\": 14,\n    \"total_tokens\": 147,\n    \"prompt_tokens_details\":
-        {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUlOYdb303gsH1ijfptNGFhS85Rm\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701170,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The sum of 1 and 2 is 3.\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 133,\n    \"completion_tokens\": 14,\n    \"total_tokens\": 147,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
     headers:
       Connection:
       - keep-alive
@@ -99,13 +68,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator
-      to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\":
-      1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"},{"role":"assistant","content":[{"type":"text","text":"The
-      sum of 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
-      files and then get file1"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add
-      two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet
-      a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
+    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\": 1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"},{"role":"assistant","content":[{"type":"text","text":"The sum of 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List files and then get file1"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -117,24 +80,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUlOvu08jVz9CS2DSU1auTeQmdIw\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701170,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_UTo8fLOZlIkOd2xlxtwMShYR\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"files__\",\n
-        \             \"arguments\": \"{}\"\n            }\n          },\n          {\n
-        \           \"id\": \"call_VRXsMgq5xKBdyN2CYfhbjQla\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"files__file_name\",\n
-        \             \"arguments\": \"{\\\"file_name\\\": \\\"file1\\\"}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 160,\n    \"completion_tokens\":
-        46,\n    \"total_tokens\": 206,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUlOvu08jVz9CS2DSU1auTeQmdIw\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701170,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_UTo8fLOZlIkOd2xlxtwMShYR\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"files__\",\n              \"arguments\": \"{}\"\n            }\n          },\n          {\n            \"id\": \"call_VRXsMgq5xKBdyN2CYfhbjQla\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"files__file_name\",\n              \"arguments\": \"{\\\"file_name\\\": \\\"file1\\\"}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 160,\n    \"completion_tokens\": 46,\n    \"total_tokens\": 206,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
     headers:
       Connection:
       - keep-alive
@@ -156,13 +102,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator
-      to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\":
-      1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"},{"role":"assistant","content":[{"type":"text","text":"The
-      sum of 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
-      files and then get file1"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_UTo8fLOZlIkOd2xlxtwMShYR","type":"function","function":{"name":"files__","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_UTo8fLOZlIkOd2xlxtwMShYR","content":[{"type":"text","text":"file1\nfile2"}],"name":"files__"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add
-      two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet
-      a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
+    body: '{"messages": [{"role": "user", "content": [{"type": "text", "text": "Use calculator to add 1 and 2"}]}, {"role": "assistant", "content": null, "tool_calls": [{"id": "call_rPuDEhw3SduaxpPsl4qUNefF", "type": "function", "function": {"name": "add", "arguments": "{\"a\": 1, \"b\": 2}"}}]}, {"role": "tool", "tool_call_id": "call_rPuDEhw3SduaxpPsl4qUNefF", "content": [{"type": "text", "text": "3"}], "name": "add"}, {"role": "assistant", "content": [{"type": "text", "text": "The sum of 1 and 2 is 3."}]}, {"role": "user", "content": [{"type": "text", "text": "List files and then get file1"}]}, {"role": "assistant", "content": null, "tool_calls": [{"id": "call_UTo8fLOZlIkOd2xlxtwMShYR", "type": "function", "function": {"name": "files__", "arguments": "{}"}}, {"id": "call_VRXsMgq5xKBdyN2CYfhbjQla", "type": "function", "function": {"name": "files__file_name", "arguments": "{\"file_name\": \"file1\"}"}}]}, {"role": "tool", "tool_call_id": "call_UTo8fLOZlIkOd2xlxtwMShYR", "content": [{"type": "text", "text": "file1\nfile2"}]}, {"role": "tool", "tool_call_id": "call_VRXsMgq5xKBdyN2CYfhbjQla", "content": [{"type": "text", "text": "Hello world"}]}], "model": "gpt-4o", "tools": [{"type": "function", "function": {"name": "add", "description": "Add two numbers", "parameters": {"properties": {"a": {"title": "A", "type": "integer"}, "b": {"title": "B", "type": "integer"}}, "required": ["a", "b"], "title": "addArguments", "type": "object"}}}, {"type": "function", "function": {"name": "files__", "description": "uri:files://", "parameters": {"properties": {}, "required": [], "type": "object"}}}, {"type": "function", "function": {"name": "files__file_name", "description": "uri:files://{file_name}\nGet a file", "parameters": {"properties": {"file_name": {"title": "file_name", "type": "string"}}, "required": ["file_name"], "type": "object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -174,74 +114,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUlParr5dwQJI1rEiRSNimDIIQmW\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701171,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_g33ZjcvPc66V00Aaw3kXUguc\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"files__file_name\",\n
-        \             \"arguments\": \"{\\\"file_name\\\":\\\"file1\\\"}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 183,\n    \"completion_tokens\":
-        19,\n    \"total_tokens\": 202,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Use calculator
-      to add 1 and 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_rPuDEhw3SduaxpPsl4qUNefF","type":"function","function":{"name":"add","arguments":"{\"a\":
-      1, \"b\": 2}"}}]},{"role":"tool","tool_call_id":"call_rPuDEhw3SduaxpPsl4qUNefF","content":[{"type":"text","text":"3"}],"name":"add"},{"role":"assistant","content":[{"type":"text","text":"The
-      sum of 1 and 2 is 3."}]},{"role":"user","content":[{"type":"text","text":"List
-      files and then get file1"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_UTo8fLOZlIkOd2xlxtwMShYR","type":"function","function":{"name":"files__","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_UTo8fLOZlIkOd2xlxtwMShYR","content":[{"type":"text","text":"file1\nfile2"}],"name":"files__"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_g33ZjcvPc66V00Aaw3kXUguc","type":"function","function":{"name":"files__file_name","arguments":"{\"file_name\":
-      \"file1\"}"}}]},{"role":"tool","tool_call_id":"call_g33ZjcvPc66V00Aaw3kXUguc","content":[{"type":"text","text":"Hello
-      world"}],"name":"files__file_name"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"add","description":"Add
-      two numbers","parameters":{"properties":{"a":{"title":"A","type":"integer"},"b":{"title":"B","type":"integer"}},"required":["a","b"],"title":"addArguments","type":"object"}}},{"type":"function","function":{"name":"files__","description":"uri:files://","parameters":{"properties":{},"required":[],"type":"object"}}},{"type":"function","function":{"name":"files__file_name","description":"uri:files://{file_name}\nGet
-      a file","parameters":{"properties":{"file_name":{"title":"file_name","type":"string"}},"required":["file_name"],"type":"object"}}}]}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMUlQKhSCXSqLpIBM0RBxDBAojEQb\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701172,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"The content of \\\"file1\\\" is \\\"Hello
-        world\\\".\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n
-        \     \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n
-        \ \"usage\": {\n    \"prompt_tokens\": 213,\n    \"completion_tokens\": 14,\n
-        \   \"total_tokens\": 227,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUlQKhSCXSqLpIBM0RBxDBAojEQb\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701172,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The content of \\\"file1\\\" is \\\"Hello world\\\".\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 213,\n    \"completion_tokens\": 14,\n    \"total_tokens\": 227,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_a6dfaf2bcf\"\n}\n"
     headers:
       Connection:
       - keep-alive

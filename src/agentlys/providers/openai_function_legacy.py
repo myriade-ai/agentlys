@@ -1,13 +1,11 @@
 import json
-import os
 import typing
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.openai import create_openai_client
 from agentlys.providers.utils import FunctionCallParsingError
-
-AGENTLYS_HOST = os.getenv("AGENTLYS_HOST")
 
 
 def from_openai_object(
@@ -60,6 +58,11 @@ def parts_to_openai_dict(part: MessagePart) -> dict:
                 "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
             },
         }
+    elif part.type == "compaction":
+        return {
+            "type": "text",
+            "text": f"[Previous conversation summary]\n{part.content}",
+        }
 
     raise ValueError(f"Unknown part type: {part.type}")
 
@@ -97,16 +100,17 @@ def message_to_openai_dict(message: Message) -> dict:
 
 
 class OpenAIProviderFunctionLegacy(BaseProvider):
-    def __init__(self, chat: AgentlysBase, model: str, base_url: str = None):
-        from openai import OpenAI
-
+    def __init__(
+        self,
+        chat: AgentlysBase,
+        model: str,
+        base_url: str = None,
+        api_key: str = None,
+    ):
         self.chat = chat
         self.model = model
-        # Possibly set up openai.api_key, base_url, etc.
-        self.client = OpenAI(
-            base_url=(
-                f"{AGENTLYS_HOST}/v1" if AGENTLYS_HOST else "https://api.openai.com/v1"
-            ),
+        self.client = create_openai_client(
+            base_url=base_url, api_key=api_key, host_suffix="/v1"
         )
 
     async def fetch_async(self, **kwargs) -> Message:
@@ -138,14 +142,14 @@ class OpenAIProviderFunctionLegacy(BaseProvider):
         messages = [message_to_openai_dict(sm) for sm in system_messages] + messages
 
         if self.chat.functions_schema:
-            res = self.client.chat.completions.create(
+            res = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 functions=self.chat.functions_schema,
                 **kwargs,
             )
         else:
-            res = self.client.chat.completions.create(
+            res = await self.client.chat.completions.create(
                 model=self.model, messages=messages, **kwargs
             )
 

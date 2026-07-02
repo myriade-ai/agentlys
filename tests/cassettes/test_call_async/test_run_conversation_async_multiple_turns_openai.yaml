@@ -1,9 +1,6 @@
 interactions:
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"First calculate
-      1 + 2, then process the result"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_calculator`","type":"object"}}},{"type":"function","function":{"name":"async_data_processor","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_data_processor`","type":"object"}}}]}'
+    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"First calculate 1 + 2, then process the result"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input for `async_calculator`","type":"object"}}},{"type":"function","function":{"name":"async_data_processor","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input for `async_data_processor`","type":"object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -15,25 +12,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUkqXXfSJ24nN6JvGXc2OB9OQVfF\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701136,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_Fn4w2HHboFGyvRqtGBXKexVS\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"async_calculator\",\n
-        \             \"arguments\": \"{\\\"kwargs\\\": {\\\"expression\\\": \\\"1
-        + 2\\\"}}\"\n            }\n          },\n          {\n            \"id\":
-        \"call_p8Rwq1zadLgLUQRY9Wpn427k\",\n            \"type\": \"function\",\n
-        \           \"function\": {\n              \"name\": \"async_data_processor\",\n
-        \             \"arguments\": \"{\\\"kwargs\\\": {\\\"data\\\": 3}}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 89,\n    \"completion_tokens\":
-        55,\n    \"total_tokens\": 144,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_22890b9c0a\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUkqXXfSJ24nN6JvGXc2OB9OQVfF\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701136,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_Fn4w2HHboFGyvRqtGBXKexVS\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"async_calculator\",\n              \"arguments\": \"{\\\"kwargs\\\": {\\\"expression\\\": \\\"1 + 2\\\"}}\"\n            }\n          },\n          {\n            \"id\": \"call_p8Rwq1zadLgLUQRY9Wpn427k\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"async_data_processor\",\n              \"arguments\": \"{\\\"kwargs\\\": {\\\"data\\\": 3}}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 89,\n    \"completion_tokens\": 55,\n    \"total_tokens\": 144,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_22890b9c0a\"\n}\n"
     headers:
       Connection:
       - keep-alive
@@ -55,11 +34,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"First calculate
-      1 + 2, then process the result"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_Fn4w2HHboFGyvRqtGBXKexVS","type":"function","function":{"name":"async_calculator","arguments":"{\"kwargs\":
-      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_Fn4w2HHboFGyvRqtGBXKexVS","content":[{"type":"text","text":"0"}],"name":"async_calculator"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_calculator`","type":"object"}}},{"type":"function","function":{"name":"async_data_processor","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_data_processor`","type":"object"}}}]}'
+    body: '{"messages": [{"role": "user", "content": [{"type": "text", "text": "First calculate 1 + 2, then process the result"}]}, {"role": "assistant", "content": null, "tool_calls": [{"id": "call_Fn4w2HHboFGyvRqtGBXKexVS", "type": "function", "function": {"name": "async_calculator", "arguments": "{\"kwargs\": {\"expression\": \"1 + 2\"}}"}}, {"id": "call_p8Rwq1zadLgLUQRY9Wpn427k", "type": "function", "function": {"name": "async_data_processor", "arguments": "{\"kwargs\": {\"data\": 3}}"}}]}, {"role": "tool", "tool_call_id": "call_Fn4w2HHboFGyvRqtGBXKexVS", "content": [{"type": "text", "text": "0"}]}, {"role": "tool", "tool_call_id": "call_p8Rwq1zadLgLUQRY9Wpn427k", "content": [{"type": "text", "text": "{\"result\": \"processed data\"}"}]}], "model": "gpt-4o", "tools": [{"type": "function", "function": {"name": "async_calculator", "description": null, "parameters": {"properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title": "Input for `async_calculator`", "type": "object"}}}, {"type": "function", "function": {"name": "async_data_processor", "description": null, "parameters": {"properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title": "Input for `async_data_processor`", "type": "object"}}}]}'
     headers:
       content-type:
       - application/json
@@ -71,72 +46,7 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BMUkrKKeUDcggk2OdK1ukKr2gISvn\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701137,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_P58AIigJwclXwTY1NfPTZF2c\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"async_data_processor\",\n
-        \             \"arguments\": \"{\\\"kwargs\\\":{\\\"data\\\":3}}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 119,\n    \"completion_tokens\":
-        18,\n    \"total_tokens\": 137,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_22890b9c0a\"\n}\n"
-    headers:
-      Connection:
-      - keep-alive
-      Content-Encoding:
-      - ''
-      Content-Type:
-      - application/json
-      Transfer-Encoding:
-      - chunked
-      X-Content-Type-Options:
-      - nosniff
-      access-control-expose-headers:
-      - X-Request-ID
-      alt-svc:
-      - h3=":443"; ma=86400
-      strict-transport-security:
-      - max-age=31536000; includeSubDomains; preload
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"messages":[{"role":"user","content":[{"type":"text","text":"First calculate
-      1 + 2, then process the result"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_Fn4w2HHboFGyvRqtGBXKexVS","type":"function","function":{"name":"async_calculator","arguments":"{\"kwargs\":
-      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_Fn4w2HHboFGyvRqtGBXKexVS","content":[{"type":"text","text":"0"}],"name":"async_calculator"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_P58AIigJwclXwTY1NfPTZF2c","type":"function","function":{"name":"async_data_processor","arguments":"{\"kwargs\":
-      {\"data\": 3}}"}}]},{"role":"tool","tool_call_id":"call_P58AIigJwclXwTY1NfPTZF2c","content":[{"type":"text","text":"{\"result\":
-      \"processed data\"}"}],"name":"async_data_processor"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_calculator`","type":"object"}}},{"type":"function","function":{"name":"async_data_processor","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
-      for `async_data_processor`","type":"object"}}}]}'
-    headers:
-      content-type:
-      - application/json
-      host:
-      - api.openai.com
-      x-stainless-read-timeout:
-      - '600'
-    method: POST
-    uri: https://api.openai.com/v1/chat/completions
-  response:
-    body:
-      string: "{\n  \"id\": \"chatcmpl-BMUksOc4vr7hvZCpUN5LRn9OX3e7m\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1744701138,\n  \"model\": \"gpt-4o-2024-08-06\",\n
-        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"The sum of 1 + 2 is 3, and after processing
-        the result, you get \\\"processed data.\\\"\",\n        \"refusal\": null,\n
-        \       \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\":
-        \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 152,\n    \"completion_tokens\":
-        26,\n    \"total_tokens\": 178,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
-        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
-        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
-        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": \"fp_22890b9c0a\"\n}\n"
+      string: "{\n  \"id\": \"chatcmpl-BMUksOc4vr7hvZCpUN5LRn9OX3e7m\",\n  \"object\": \"chat.completion\",\n  \"created\": 1744701138,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The sum of 1 + 2 is 3, and after processing the result, you get \\\"processed data.\\\"\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 152,\n    \"completion_tokens\": 26,\n    \"total_tokens\": 178,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_22890b9c0a\"\n}\n"
     headers:
       Connection:
       - keep-alive

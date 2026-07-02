@@ -5,7 +5,7 @@ from agentlys.providers.base_provider import BaseProvider
 
 
 class AgentlysBase:  # TODO: rename ?
-    instruction: str = (None,)
+    instruction: typing.Optional[str] = None
     examples: typing.Union[list[Message], None]
     messages: typing.Union[list[Message], None]
     context: str

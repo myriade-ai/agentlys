@@ -51,6 +51,48 @@ agent = Agentlys(provider="anthropic")
 agent = Agentlys(provider="anthropic", model="claude-sonnet-4-20250514")
 ```
 
+### Any OpenAI-Compatible API
+
+The `openai` provider works with any API that speaks the OpenAI chat
+completions protocol: Ollama, vLLM, LiteLLM, OpenRouter, Together, Groq,
+Azure-hosted gateways, self-hosted models, etc. Point it at your endpoint
+with `base_url` (and `api_key` if the endpoint requires one):
+
+```python
+# Ollama running locally (no API key needed)
+agent = Agentlys(
+    provider="openai",
+    model="llama3.1",
+    base_url="http://localhost:11434/v1",
+)
+
+# OpenRouter
+agent = Agentlys(
+    provider="openai",
+    model="meta-llama/llama-3.1-70b-instruct",
+    base_url="https://openrouter.ai/api/v1",
+    api_key="sk-or-...",
+)
+```
+
+Or configure everything through environment variables:
+
+```bash
+export AGENTLYS_PROVIDER="openai"
+export AGENTLYS_HOST="http://localhost:11434/v1"
+export AGENTLYS_API_KEY="optional-key"   # falls back to OPENAI_API_KEY
+export AGENTLYS_MODEL="llama3.1"
+```
+
+```python
+agent = Agentlys()  # picks everything up from the environment
+```
+
+Resolution order: explicit arguments > `AGENTLYS_*` env vars > provider
+defaults. When a custom endpoint is configured without any API key, a
+placeholder key is sent so key-less servers (Ollama, vLLM, ...) work out
+of the box.
+
 ### Custom Provider Host
 
 Use alternative endpoints or self-hosted models:

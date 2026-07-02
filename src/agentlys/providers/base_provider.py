@@ -79,6 +79,25 @@ class BaseProvider(ABC):
         loop = get_event_loop_or_create()
         return loop.run_until_complete(self.fetch_async(**kwargs))
 
+    async def complete(
+        self,
+        messages: list[dict],
+        system: typing.Optional[str] = None,
+        model: typing.Optional[str] = None,
+        max_tokens: int = 4096,
+    ) -> str:
+        """One-shot text completion outside the conversation loop.
+
+        Used for auxiliary LLM calls such as compaction summaries.
+        ``messages`` are simple ``{"role", "content"}`` dicts; ``model``
+        defaults to the provider's configured model.  Returns the response
+        text.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support one-shot completions. "
+            "Please implement complete() to enable features like compaction."
+        )
+
     async def fetch_stream_async(self, **kwargs) -> typing.AsyncGenerator[dict, None]:
         """
         Async streaming version of fetch method.

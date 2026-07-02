@@ -48,8 +48,8 @@ class TestToolState(unittest.TestCase):
         class_name = mock_tool.__class__.__name__
         tool_id = agent.add_tool(mock_tool)
 
-        # Mock the client.messages.create method
-        def mock_create(*args, **kwargs):
+        # Mock the client.chat.completions.create method
+        async def mock_create(*args, **kwargs):
             # Check if the tool representation is in the system message
             messages = kwargs.get("messages", [])
             system_messages = [msg for msg in messages if msg.get("role") == "system"]
@@ -81,6 +81,7 @@ class TestToolState(unittest.TestCase):
             class MockResponse:
                 id = None
                 choices = [MockResponseChoice]
+                usage = None
 
             return MockResponse()
 

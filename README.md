@@ -137,7 +137,12 @@ agent = Agentlys(provider="anthropic", model="claude-sonnet-4-20250514")
 
 # OpenAI
 agent = Agentlys(model="gpt-4o")
+
+# Any OpenAI-compatible API (Ollama, vLLM, LiteLLM, OpenRouter, ...)
+agent = Agentlys(model="llama3.1", base_url="http://localhost:11434/v1")
 ```
+
+See the [Provider Guide](docs/providers.md) for details.
 
 ---
 
