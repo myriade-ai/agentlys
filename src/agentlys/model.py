@@ -15,21 +15,32 @@ class Image:
         if not isinstance(image, PILImage.Image):
             raise TypeError("image must be an instance of PIL.Image.Image")
         self.image = image
+        self._base64_cache: typing.Optional[str] = None
 
     def resize(self, size: tuple[int, int]):
         try:
+            # PIL drops .format on derived images; keep it so later
+            # serialization still knows the encoding.
+            image_format = self.image.format
             self.image = self.image.resize(size)
+            self.image.format = image_format
         except Exception as e:
             raise ValueError(f"Failed to resize image: {e}")
+        self._base64_cache = None
 
     def to_base64(self):
+        # Providers re-serialize the whole history on every request; encoding
+        # is memoized so each image is PNG/base64-encoded only once.
+        if self._base64_cache is not None:
+            return self._base64_cache
         try:
             buffered = BytesIO()
             self.image.save(buffered, format=self.image.format)
             img_str = base64.b64encode(buffered.getvalue()).decode()
-            return img_str
         except Exception as e:
             raise ValueError(f"Failed to convert image to base64: {e}")
+        self._base64_cache = img_str
+        return img_str
 
     @classmethod
     def from_bytes(cls, img_bytes: bytes):
@@ -195,14 +206,15 @@ class Message:
         if self.role == "function":
             raise ValueError("Function messages cannot have content")
         # 1. get all text parts
-        text_parts = [part.content for part in self.parts if part.type == "text"]
+        text_parts = [part for part in self.parts if part.type == "text"]
         # 2. verify that there is only one text part
         if not text_parts:
             raise ValueError("Message has no text part")
         if len(text_parts) > 1:
             raise ValueError("Message has multiple text parts")
-        # 3. set the sugar syntax
-        self.parts[0].content = value
+        # 3. set the sugar syntax on the text part (parts[0] may be
+        # a thinking block or another non-text part)
+        text_parts[0].content = value
 
     @property
     def function_call(self) -> typing.Optional[dict]:

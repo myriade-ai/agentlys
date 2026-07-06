@@ -496,3 +496,26 @@ def test_compaction_part_serializes_as_text():
     assert result["type"] == "text"
     assert "[Previous conversation summary]" in result["text"]
     assert "Talked about the weather" in result["text"]
+
+
+def test_return_image_as_user_message_does_not_mutate_history():
+    """The OpenAI image workaround must not rewrite roles in the shared history."""
+    from PIL import Image as PILImage
+
+    from agentlys.providers.openai import return_image_as_user_message
+
+    original = Message(
+        role="function",
+        name="screenshot",
+        parts=[
+            MessagePart(
+                type="function_result_image",
+                content="ok",
+                image=PILImage.new("RGB", (2, 2)),
+                function_call_id="call_1",
+            )
+        ],
+    )
+    transformed = return_image_as_user_message([original])
+    assert transformed[0].role == "user"
+    assert original.role == "function"

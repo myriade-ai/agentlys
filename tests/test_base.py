@@ -55,5 +55,41 @@ class TestAgentlys(unittest.TestCase):
         self.assertEqual(responses[1].content, "Final response")
 
 
+class TestFormatCallbackMessage(unittest.TestCase):
+    def test_list_of_numbers_is_formatted_as_text(self):
+        agent = Agentlys()
+        message = agent._format_callback_message(
+            function_name="fn",
+            function_call_id="call_1",
+            content=[1, 2, 3],
+            image=None,
+        )
+        self.assertEqual(message.parts[0].content, "1\n2\n3")
+        self.assertEqual(agent.tools, {})
+
+    def test_scalar_is_formatted_as_text(self):
+        agent = Agentlys()
+        message = agent._format_callback_message(
+            function_name="fn",
+            function_call_id="call_1",
+            content=42,
+            image=None,
+        )
+        self.assertEqual(message.parts[0].content, "42")
+        self.assertEqual(agent.tools, {})
+
+
+class TestMcpServersConstructor(unittest.TestCase):
+    def test_constructor_rejects_mcp_servers(self):
+        # add_mcp_server is async; registering from __init__ silently did
+        # nothing, so passing servers here must fail loudly instead.
+        with self.assertRaisesRegex(ValueError, "add_mcp_server"):
+            Agentlys(mcp_servers=[object()])
+
+    def test_constructor_accepts_none(self):
+        agent = Agentlys(mcp_servers=None)
+        self.assertEqual(agent.messages, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -45,7 +45,9 @@ def limit_data_size(
             if len(result_data) == 0:
                 avg_chars_per_field = (character_limit - total_char_count) // len(row)
                 if avg_chars_per_field < 1:
-                    return "Error: Too many fields to display data within the character limit."
+                    raise ValueError(
+                        "Too many fields to display data within the character limit."
+                    )
                 limited_row = limit_row_chars(row, avg_chars_per_field)
                 result_data.append(limited_row)
             break
@@ -63,7 +65,10 @@ def csv_dumps(data: list[dict], character_limit: typing.Optional[int] = None) ->
         return "[]"
 
     if character_limit:
-        limited_data = limit_data_size(data, character_limit=character_limit)
+        try:
+            limited_data = limit_data_size(data, character_limit=character_limit)
+        except ValueError as e:
+            return f"Error: {e}"
     else:
         limited_data = data
 
@@ -73,7 +78,7 @@ def csv_dumps(data: list[dict], character_limit: typing.Optional[int] = None) ->
         writer.writeheader()
         writer.writerows(limited_data)
         output = output.getvalue().strip()
-        output.replace("\r\n", "\n").replace("\r", "\n")
+        output = output.replace("\r\n", "\n").replace("\r", "\n")
 
     csv_content = f"```csv\n{output}\n```"
 
@@ -108,17 +113,19 @@ def parse_function(text: str) -> dict:
     # Extracting the arguments
     arguments = {}
     for keyword in parsed.keywords:
-        if isinstance(keyword.value, ast.Str):
-            value = keyword.value.s
-            arguments[keyword.arg] = value
-        elif isinstance(keyword.value, ast.List):
-            arguments[keyword.arg] = [el.s for el in keyword.value.elts]
-        elif isinstance(keyword.value, ast.Dict):
-            dict_values = {}
-            for k, v in zip(keyword.value.keys, keyword.value.values):
-                if isinstance(v, ast.Str):
-                    dict_values[k.s] = v.s
-            arguments[keyword.arg] = dict_values
+        value = keyword.value
+        if isinstance(value, ast.Constant):
+            arguments[keyword.arg] = value.value
+        elif isinstance(value, ast.List):
+            arguments[keyword.arg] = [
+                el.value for el in value.elts if isinstance(el, ast.Constant)
+            ]
+        elif isinstance(value, ast.Dict):
+            arguments[keyword.arg] = {
+                k.value: v.value
+                for k, v in zip(value.keys, value.values)
+                if isinstance(k, ast.Constant) and isinstance(v, ast.Constant)
+            }
 
     if not arguments:
         raise ValueError("The function call does not contain any arguments.")
@@ -275,11 +282,14 @@ def inspect_schema(f):
 
 def get_event_loop_or_create():
     try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    try:
         return asyncio.get_event_loop()
-    except RuntimeError as e:
-        if str(e).startswith("There is no current event loop in thread"):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-        else:
-            raise
+    except RuntimeError:
+        # No current event loop in this thread (get_event_loop raises on
+        # non-main threads, and on every thread from Python 3.14 on)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop

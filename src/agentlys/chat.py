@@ -1,6 +1,4 @@
-"""Agentlys package."""
-
-__version__ = "0.4.1"
+"""Agentlys chat loop: agent state, tool registration and conversation runs."""
 
 import asyncio
 import copy
@@ -13,6 +11,7 @@ import traceback
 import typing
 import uuid
 import warnings
+import weakref
 from typing import TYPE_CHECKING, Type
 
 from PIL import Image as PILImage
@@ -75,6 +74,31 @@ def _resolve_thinking_for_model(
     return thinking
 
 
+_from_response_cache: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+
+def _accepts_from_response(func) -> bool:
+    """Whether the callable declares a ``from_response`` parameter.
+
+    Cached per underlying function: signature reflection on every tool
+    invocation adds up in long agent loops.
+    """
+    target = getattr(func, "__func__", func)
+    try:
+        return _from_response_cache[target]
+    except KeyError:
+        pass
+    except TypeError:
+        # Not weak-referenceable/hashable — fall back to direct inspection
+        return "from_response" in inspect.signature(func).parameters
+    result = "from_response" in inspect.signature(func).parameters
+    try:
+        _from_response_cache[target] = result
+    except TypeError:
+        pass
+    return result
+
+
 def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
     """Truncate text to limit and add warning if truncated."""
     if len(text) > limit:
@@ -115,7 +139,7 @@ class Agentlys(AgentlysBase):
         model=AGENTLYS_MODEL,
         provider: typing.Union[str, Type[BaseProvider], None] = None,
         use_tools_only: bool = False,
-        mcp_servers: typing.Union[list[object], None] = [],
+        mcp_servers: typing.Union[list[object], None] = None,
         thinking: typing.Optional[dict] = None,
         compaction: typing.Optional["CompactionHandler"] = None,
         cancel_event: typing.Optional[asyncio.Event] = None,
@@ -180,8 +204,14 @@ class Agentlys(AgentlysBase):
         self.on_sub_agent_event: typing.Optional[typing.Callable] = None
         self._tool_search_config = None
         self._tool_search_function_name: typing.Optional[str] = None
-        for m in mcp_servers:
-            self.add_mcp_server(m)
+        if mcp_servers:
+            # add_mcp_server is async; calling it from __init__ silently
+            # created never-awaited coroutines and registered nothing.
+            raise ValueError(
+                "mcp_servers cannot be registered from the constructor because "
+                "registration is async. Use `await agent.add_mcp_server(server)` "
+                "instead."
+            )
 
     def _check_cancel(self):
         """Raise StopLoopException if the cancel event has been set."""
@@ -218,13 +248,19 @@ class Agentlys(AgentlysBase):
             return False
         return any(part.type == "function_call" for part in (last.parts or []))
 
-    async def _maybe_compact(self, next_message: typing.Optional[Message]) -> bool:
-        """Run compaction if safe. Returns True if compaction executed."""
+    def _compaction_allowed(self, next_message: typing.Optional[Message]) -> bool:
+        """True if compaction is configured and safe to run right now."""
         if not (self.compaction and hasattr(self.compaction, "should_compact")):
             return False
         if self._is_tool_result_message(next_message):
             return False
         if self._has_unanswered_tool_use():
+            return False
+        return True
+
+    async def _maybe_compact(self, next_message: typing.Optional[Message]) -> bool:
+        """Run compaction if safe. Returns True if compaction executed."""
+        if not self._compaction_allowed(next_message):
             return False
         if not await self.compaction.should_compact(self):
             return False
@@ -284,20 +320,22 @@ class Agentlys(AgentlysBase):
         # If there are no tools, return None
         if not self.tools:
             return None
+        # When tool search is enabled, skip __llm__ for tools whose
+        # methods are ALL deferred — they haven't been discovered yet.
+        loaded_tool_names = None
+        if self._tool_search_config:
+            loaded_tool_names = {
+                s["name"].split("__", 1)[0]
+                for s in self.functions_schema
+                if not s.get("defer_loading")
+            }
+
         tool_reprs = []
         for tool_id, tool in self.tools.items():
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
 
-            # When tool search is enabled, skip __llm__ for tools whose
-            # methods are ALL deferred — they haven't been discovered yet.
-            if self._tool_search_config:
-                prefix = f"{tool_name}__"
-                has_loaded_method = any(
-                    s["name"].startswith(prefix) and not s.get("defer_loading")
-                    for s in self.functions_schema
-                )
-                if not has_loaded_method:
-                    continue
+            if loaded_tool_names is not None and tool_name not in loaded_tool_names:
+                continue
 
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
@@ -438,12 +476,17 @@ class Agentlys(AgentlysBase):
         return tool_id
 
     def remove_tool(self, tool_id: str):
-        del self.tools[tool_id]
+        tool = self.tools.pop(tool_id)
+        prefix = f"{tool.__class__.__name__}-{tool_id}__"
         self.functions_schema = [
-            schema for schema in self.functions_schema if schema["name"] != tool_id
+            schema
+            for schema in self.functions_schema
+            if not schema["name"].startswith(prefix)
         ]
         self.functions = {
-            name: func for name, func in self.functions.items() if name != tool_id
+            name: func
+            for name, func in self.functions.items()
+            if not name.startswith(prefix)
         }
 
     def add_sub_agent(
@@ -812,13 +855,11 @@ class Agentlys(AgentlysBase):
                 for item in content:
                     if isinstance(item, str):
                         formatted_content.append(item)
-                    elif isinstance(item, object):
-                        tool_id = self.add_tool(item)
-                        formatted_content.append(f"Added tool: {tool_id}")
-                    elif isinstance(item, (int, float, bool)):
+                    elif isinstance(item, (bool, int, float)):
                         formatted_content.append(str(item))
                     else:
-                        raise ValueError(f"Invalid item type: {type(item)}")
+                        tool_id = self.add_tool(item)
+                        formatted_content.append(f"Added tool: {tool_id}")
                 formatted_content = "\n".join(formatted_content)
                 # Limit the size of the content
                 if len(formatted_content) > OUTPUT_SIZE_LIMIT:
@@ -939,7 +980,7 @@ class Agentlys(AgentlysBase):
             with call_scope() as scoped_owner:
                 scoped_func = getattr(scoped_owner, func.__name__)
                 call_kwargs = kwargs
-                if "from_response" in inspect.signature(scoped_func).parameters:
+                if _accepts_from_response(scoped_func):
                     call_kwargs = {**kwargs, "from_response": from_response}
                 return scoped_func(**call_kwargs)
 
@@ -958,8 +999,7 @@ class Agentlys(AgentlysBase):
         )
 
     async def _invoke_func(self, func, from_response, **kwargs):
-        sig = inspect.signature(func)
-        if "from_response" in sig.parameters:
+        if _accepts_from_response(func):
             kwargs = {**kwargs, "from_response": from_response}
 
         # Async tools: await them directly on the event loop.
@@ -980,16 +1020,12 @@ class Agentlys(AgentlysBase):
     async def _resolve_and_call_function(
         self, name: str, args: dict, response: Message
     ) -> typing.Any:
-        """Resolve function/tool by name and call it with args."""
-        if name.startswith("tool-"):
-            tool_id, method_name = name.split("__")
-            tool = self.tools[tool_id]
-            method = getattr(tool, method_name)
-            return await self._call_with_signature(method, response, **args)
-        else:
-            return await self._call_with_signature(
-                self.functions[name], response, **args
-            )
+        """Resolve function/tool by name and call it with args.
+
+        Tool methods are registered in self.functions like any other
+        function (see add_tool), so a single lookup covers both.
+        """
+        return await self._call_with_signature(self.functions[name], response, **args)
 
     def _process_tool_result(self, result: typing.Any) -> tuple[typing.Any, typing.Any]:
         """Process tool result and handle tuple unpacking.
@@ -1007,34 +1043,6 @@ class Agentlys(AgentlysBase):
             content = result
 
         return content, image
-
-    async def _call_function_and_build_message(
-        self, function_name, function_arguments, response
-    ):
-        """
-        Encapsulate the 'call the function' logic & handle exceptions
-        plus building a function or tool response message.
-        """
-        content = None
-        image = None
-
-        try:
-            result = await self._resolve_and_call_function(
-                function_name, function_arguments, response
-            )
-            content, image = self._process_tool_result(result)
-        except StopLoopException:
-            raise
-        except Exception as e:
-            content = self._format_exception(e)
-
-        # Build next message
-        return self._format_callback_message(
-            function_name=function_name,
-            function_call_id=response.function_call_id,
-            content=content,
-            image=image,
-        )
 
     async def _execute_single_tool(
         self,
@@ -1238,12 +1246,8 @@ class Agentlys(AgentlysBase):
         # Run compaction before appending the new message so it is never
         # included in the summary — the LLM must see the exact user request.
         # Skipped mid tool exchange to avoid orphaning tool_use/tool_result.
-        if (
-            self.compaction
-            and hasattr(self.compaction, "should_compact")
-            and not self._is_tool_result_message(message)
-            and not self._has_unanswered_tool_use()
-            and await self.compaction.should_compact(self)
+        if self._compaction_allowed(message) and await self.compaction.should_compact(
+            self
         ):
             yield {"type": "compacting"}
             await self.compaction.compact(self)

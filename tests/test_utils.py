@@ -3,7 +3,7 @@ import unittest
 from pydantic import BaseModel
 
 from agentlys.model import Message
-from agentlys.utils import inspect_schema, limit_data_size, parse_function
+from agentlys.utils import csv_dumps, inspect_schema, limit_data_size, parse_function
 
 
 class TestLimitDataSizeUpdated(unittest.TestCase):
@@ -43,6 +43,18 @@ class TestLimitDataSizeUpdated(unittest.TestCase):
         result = limit_data_size(self.test_data_3, character_limit=80)
         expected = [{"name": "Alice", "age": "25", "city": "New York"}]
         self.assertEqual(result, expected)
+
+
+class TestCsvDumps(unittest.TestCase):
+    def test_normalizes_line_endings(self):
+        output = csv_dumps([{"a": "1", "b": "2"}])
+        self.assertNotIn("\r", output)
+
+    def test_too_many_fields_returns_error_string(self):
+        row = {f"col{i}": "x" for i in range(40)}
+        output = csv_dumps([row], character_limit=20)
+        self.assertIsInstance(output, str)
+        self.assertIn("character limit", output)
 
 
 plot_widget = """
@@ -147,6 +159,14 @@ class TestParseFunction(unittest.TestCase):
             },
         }
         self.assertEqual(result, expected)
+
+    def test_numeric_argument(self):
+        text = """
+        > FUNCTION(name="a", count=5, ratio=0.5)
+        """
+        result = parse_function(text)
+        self.assertEqual(result["arguments"]["count"], 5)
+        self.assertEqual(result["arguments"]["ratio"], 0.5)
 
     def test_parse_array(self):
         text = """

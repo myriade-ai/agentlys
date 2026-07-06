@@ -38,6 +38,19 @@ def test_add_tool():
     assert f"DummyTool-{tool_id}__class_method" in agent.functions
 
 
+def test_remove_tool():
+    agent = Agentlys()
+    tool_id = agent.add_tool(DummyTool)
+    prefix = f"DummyTool-{tool_id}__"
+    assert any(name.startswith(prefix) for name in agent.functions)
+
+    agent.remove_tool(tool_id)
+
+    assert tool_id not in agent.tools
+    assert not any(f["name"].startswith(prefix) for f in agent.functions_schema)
+    assert not any(name.startswith(prefix) for name in agent.functions)
+
+
 def test_add_tool_with_custom_id():
     agent = Agentlys()
     custom_id = "custom_tool_id"

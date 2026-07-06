@@ -93,6 +93,15 @@ def from_openai_object(
     return Message(role=role, content=content, id=id, usage=usage)
 
 
+def build_system_messages(chat: AgentlysBase) -> list[Message]:
+    """System prompt as role="system" Messages (instruction, context, tool states)."""
+    return [
+        Message(role="system", content=text)
+        for text in (chat.instruction, chat.context, chat.initial_tools_states)
+        if text
+    ]
+
+
 def parts_to_openai_dict(part: MessagePart) -> dict:
     if part.type == "text":
         return {
@@ -172,11 +181,21 @@ def return_image_as_user_message(messages: list[Message]) -> list[Message]:
     """
     Adaptation because OpenAI doesn't support image in function call.
     We return the image as a user message.
+
+    Builds new Message objects instead of mutating: the input list holds the
+    same references as chat.messages, and this runs on every request.
     """
-    for i in range(len(messages)):
-        if messages[i].role == "function" and messages[i].image is not None:
-            messages[i].role = "user"
-    return messages
+    result = []
+    for message in messages:
+        if message.role == "function" and message.image is not None:
+            message = Message(
+                role="user",
+                name=message.name,
+                id=message.id,
+                parts=message.parts,
+            )
+        result.append(message)
+    return result
 
 
 def split_function_results(messages: list[Message]) -> list[Message]:
@@ -230,28 +249,7 @@ class OpenAIProvider(BaseProvider):
             ),
         )
 
-        system_messages = []
-        if self.chat.instruction:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.instruction,
-                )
-            )
-        if self.chat.context:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.context,
-                )
-            )
-        if self.chat.initial_tools_states:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.initial_tools_states,
-                )
-            )
+        system_messages = build_system_messages(self.chat)
         messages = [self.message_transform(sm) for sm in system_messages] + messages
 
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
