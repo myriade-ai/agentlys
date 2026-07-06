@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
@@ -39,12 +41,18 @@ _STOP_WORDS = frozenset({
 })
 
 
-def _tokenize(text: str) -> set[str]:
-    """Split text into lowercase tokens, filtering stop words."""
-    import re
+_TOKEN_RE = re.compile(r"[^a-z0-9]+")
 
-    tokens = set(re.split(r"[^a-z0-9]+", text.lower())) - {""}
-    return tokens - _STOP_WORDS
+
+@lru_cache(maxsize=4096)
+def _tokenize(text: str) -> frozenset[str]:
+    """Split text into lowercase tokens, filtering stop words.
+
+    Cached because the catalog side of the search re-tokenizes the same
+    tool names/descriptions on every call.
+    """
+    tokens = set(_TOKEN_RE.split(text.lower())) - {""}
+    return frozenset(tokens - _STOP_WORDS)
 
 
 async def _default_search(
