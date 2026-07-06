@@ -4,6 +4,7 @@ that don't support them yet in the API (ie. o1).
 """
 
 import json
+import logging
 import typing
 
 from agentlys.model import Message
@@ -32,6 +33,11 @@ def parse_function_call_from_text(text: str):
             # Attempt to parse JSON in the curly braces
             arguments = json.loads(match.group(2))
         except json.JSONDecodeError:
+            logging.warning(
+                "Could not parse arguments of text function call %r; "
+                "falling back to empty arguments",
+                function_name,
+            )
             arguments = {}
         return function_name, arguments
     return None, None
@@ -73,22 +79,15 @@ def message_to_openai_dict(message: Message) -> dict:
 
 
 class OpenAIProviderFunctionShim(OpenAIProvider):
-    async def fetch_async(self):
+    async def fetch_async(self, **kwargs):
         """
         Calls the OpenAI ChatCompletion endpoint using ONLY text-based instructions for function usage.
         """
 
         messages = self.prepare_messages(transform_function=message_to_openai_dict)
-        # Add instruction as the first message
-        if self.chat.instruction:
-            instruction_message = Message(
-                role="user",
-                content=self.chat.instruction,
-            )
-            messages = [message_to_openai_dict(instruction_message)] + messages
 
-        # Inject function schema into the system message, if we haven't already
-        # or just append it to an existing system message. Example:
+        # Build one leading instruction message; it always embeds
+        # chat.instruction, plus the function schemas when there are any.
         if self.chat.functions_schema:
             function_schemas_text = json.dumps(self.chat.functions_schema, indent=2)
             augmented_instruction = (
@@ -124,6 +123,7 @@ class OpenAIProviderFunctionShim(OpenAIProvider):
         res = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,
+            **kwargs,
         )
         # OpenAI returns a structure. We'll parse out the text content
         message = res.choices[0].message
