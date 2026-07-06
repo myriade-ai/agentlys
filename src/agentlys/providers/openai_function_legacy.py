@@ -2,9 +2,13 @@ import json
 import typing
 
 from agentlys.base import AgentlysBase
-from agentlys.model import Message, MessagePart
+from agentlys.model import Message
 from agentlys.providers.base_provider import BaseProvider
-from agentlys.providers.openai import create_openai_client
+from agentlys.providers.openai import (
+    build_system_messages,
+    create_openai_client,
+    parts_to_openai_dict,
+)
 from agentlys.providers.utils import FunctionCallParsingError
 
 
@@ -26,45 +30,6 @@ def from_openai_object(
             raise FunctionCallParsingError(id, function_call)
 
     return Message(role=role, content=content, function_call=function_call_dict, id=id)
-
-
-def parts_to_openai_dict(part: MessagePart) -> dict:
-    if part.type == "text":
-        return {
-            "type": "text",
-            "text": part.content,
-        }
-    elif part.type == "image":
-        return {
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
-            },
-        }
-    elif part.type == "function_call":
-        return {
-            "name": part.function_call["name"],
-            "arguments": json.dumps(part.function_call["arguments"]),
-        }
-    elif part.type == "function_result":
-        return {
-            "type": "text",
-            "text": part.content,
-        }
-    elif part.type == "function_result_image":
-        return {
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
-            },
-        }
-    elif part.type == "compaction":
-        return {
-            "type": "text",
-            "text": f"[Previous conversation summary]\n{part.content}",
-        }
-
-    raise ValueError(f"Unknown part type: {part.type}")
 
 
 def message_to_openai_dict(message: Message) -> dict:
@@ -115,30 +80,8 @@ class OpenAIProviderFunctionLegacy(BaseProvider):
 
     async def fetch_async(self, **kwargs) -> Message:
         messages = self.prepare_messages(transform_function=message_to_openai_dict)
-        # Add instruction as the first message
-
-        system_messages = []
-        if self.chat.instruction:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.instruction,
-                )
-            )
-        if self.chat.context:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.context,
-                )
-            )
-        if self.chat.initial_tools_states:
-            system_messages.append(
-                Message(
-                    role="system",
-                    content=self.chat.initial_tools_states,
-                )
-            )
+        # Add the system prompt as the first messages
+        system_messages = build_system_messages(self.chat)
         messages = [message_to_openai_dict(sm) for sm in system_messages] + messages
 
         if self.chat.functions_schema:

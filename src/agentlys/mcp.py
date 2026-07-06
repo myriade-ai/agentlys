@@ -15,6 +15,18 @@ _TOOL_NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z0-9_-]")
 ToolFilter = typing.Callable[[typing.Any], bool]
 
 
+def _truncate_result(
+    text: str, max_result_chars: typing.Optional[int], hint: str = ""
+) -> str:
+    """Truncate an MCP result to max_result_chars with an explicit marker."""
+    if max_result_chars is None or len(text) <= max_result_chars:
+        return text
+    return (
+        text[:max_result_chars]
+        + f"\n[... truncated to {max_result_chars} characters.{hint}]"
+    )
+
+
 def sanitize_tool_name(name: str, prefix: str = "") -> str:
     """Make an MCP tool name safe for LLM providers.
 
@@ -56,13 +68,11 @@ def convert_tool_result(result, max_result_chars: typing.Optional[int] = None) -
     if not text:
         text = "(empty result)"
 
-    if max_result_chars is not None and len(text) > max_result_chars:
-        text = (
-            text[:max_result_chars]
-            + f"\n[... truncated to {max_result_chars} characters."
-            + " Refine the call (filters, pagination) to get less data.]"
-        )
-    return text
+    return _truncate_result(
+        text,
+        max_result_chars,
+        hint=" Refine the call (filters, pagination) to get less data.",
+    )
 
 
 async def fetch_mcp_server_tools(
@@ -192,12 +202,7 @@ async def fetch_mcp_server_resources(
                     else:
                         parts.append("[binary content omitted]")
                 text = "\n".join(parts) or "(empty result)"
-                if max_result_chars is not None and len(text) > max_result_chars:
-                    text = (
-                        text[:max_result_chars]
-                        + f"\n[... truncated to {max_result_chars} characters.]"
-                    )
-                return text
+                return _truncate_result(text, max_result_chars)
 
             return read_resource
 

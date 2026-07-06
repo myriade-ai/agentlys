@@ -184,103 +184,104 @@ class AnthropicProvider(BaseProvider):
                 result.append(msg)
         return result
 
-    def _prepare_request_params(self, **kwargs):
-        """Prepare messages, tools, and kwargs for Anthropic API request."""
-        messages = self.prepare_messages(
-            transform_function=lambda m: message_to_anthropic_dict(m),
-            transform_list_function=add_empty_function_result,
-        )
+    @staticmethod
+    def _merge_same_role_messages(messages: list[dict]) -> list[dict]:
+        """Merge consecutive messages sharing the same role.
 
-        if self.chat.instruction:
-            system = self.chat.instruction
-        else:
-            system = None
+        The Anthropic API rejects two consecutive messages with the same
+        role, e.g. a tool_result message directly followed by a user message.
+        """
+        merged_messages = []
+        for message in messages:
+            if merged_messages and merged_messages[-1]["role"] == message["role"]:
+                # Convert string content to list format for merging
+                if isinstance(merged_messages[-1]["content"], str):
+                    merged_messages[-1]["content"] = [
+                        {
+                            "type": "text",
+                            "text": merged_messages[-1]["content"],
+                        }
+                    ]
 
-        def merge_messages(messages):
-            """
-            When two messages are in the same role, we merge the following message into the previous.
-            {
-                "role": "user",
-                "content": [
-                    {
-                    "type": "tool_result",
-                    "tool_use_id": "example_19",
-                    "content": ""
-                    }
-                ]
-            },
-            {
-                "role": "user",
-                "content": "Plot distribution of stations per city"
-            }
-            """
-            merged_messages = []
-            for message in messages:
-                if merged_messages and merged_messages[-1]["role"] == message["role"]:
-                    # Convert string content to list format for merging
-                    if isinstance(merged_messages[-1]["content"], str):
-                        merged_messages[-1]["content"] = [
-                            {
-                                "type": "text",
-                                "text": merged_messages[-1]["content"],
-                            }
-                        ]
+                if not isinstance(merged_messages[-1]["content"], list):
+                    raise ValueError(
+                        f"Invalid content type: {type(merged_messages[-1]['content'])}"
+                    )
 
-                    if not isinstance(merged_messages[-1]["content"], list):
-                        raise ValueError(
-                            f"Invalid content type: {type(merged_messages[-1]['content'])}"
-                        )
+                # Track existing tool_use_ids to prevent duplicates
+                existing_tool_use_ids = {
+                    c.get("tool_use_id")
+                    for c in merged_messages[-1]["content"]
+                    if isinstance(c, dict) and c.get("type") == "tool_result"
+                }
+                # Only add content blocks that aren't duplicate tool_results
+                for content_block in message["content"]:
+                    if (
+                        isinstance(content_block, dict)
+                        and content_block.get("type") == "tool_result"
+                    ):
+                        tool_use_id = content_block.get("tool_use_id")
+                        if tool_use_id in existing_tool_use_ids:
+                            continue
+                        existing_tool_use_ids.add(tool_use_id)
+                    merged_messages[-1]["content"].append(content_block)
+            else:
+                merged_messages.append(message)
+        return merged_messages
 
-                    # Track existing tool_use_ids to prevent duplicates
-                    existing_tool_use_ids = {
-                        c.get("tool_use_id")
-                        for c in merged_messages[-1]["content"]
-                        if isinstance(c, dict) and c.get("type") == "tool_result"
-                    }
-                    # Only add content blocks that aren't duplicate tool_results
-                    for content_block in message["content"]:
-                        if (
-                            isinstance(content_block, dict)
-                            and content_block.get("type") == "tool_result"
-                        ):
-                            tool_use_id = content_block.get("tool_use_id")
-                            if tool_use_id in existing_tool_use_ids:
-                                continue
-                            existing_tool_use_ids.add(tool_use_id)
-                        merged_messages[-1]["content"].append(content_block)
-                else:
-                    merged_messages.append(message)
-            return merged_messages
+    def _build_tools(self) -> list[dict]:
+        """Translate function schemas to Anthropic tool definitions.
 
-        messages = merge_messages(messages)
-        messages = self._strip_thinking_from_prior_turns(messages)
-
-        # Need to map field "parameters" to "input_schema"
+        Maps "parameters" to "input_schema" and guarantees a description.
+        """
         tools = []
         for s in self.chat.functions_schema:
             tool_def = {
                 "name": s["name"],
-                "description": s["description"],
+                "description": s["description"] or "No description provided",
                 "input_schema": s["parameters"],
             }
             if s.get("defer_loading"):
                 tool_def["defer_loading"] = True
             tools.append(tool_def)
-        # Add description to the function is their description is empty
-        for tool in tools:
-            if not tool["description"]:
-                tool["description"] = "No description provided"
+        return tools
 
-        # === Add cache_controls ===
-        # Anthropic's prompt caching uses up to 4 breakpoints per request.
-        # We use all 4: system[-1], tools[-1], messages[-3], messages[-1].
-        #
-        # Why messages[-3]?  Each tool-loop iteration appends exactly 2
-        # messages (1 assistant + 1 tool_result).  So messages[-3] in the
-        # current call corresponds to messages[-1] from the *previous* call,
-        # whose prefix was already cached.  By keeping a breakpoint there,
-        # Anthropic can serve that prefix from cache_read instead of
-        # re-caching the entire message history on every iteration.
+    def _build_system_blocks(self) -> list[dict]:
+        """Assemble the system prompt blocks (instruction, context, tools).
+
+        cache_control goes on the LAST system block so the entire system
+        section is cached as a unit.  Anthropic uses cumulative hashes —
+        placing cache_control on system[0] while system[1] varies
+        invalidates every downstream block.
+        """
+        blocks = []
+        for text in (
+            self.chat.instruction,
+            self.chat.context,
+            self.chat.initial_tools_states,
+            self.chat.tool_search_categories_hint,
+        ):
+            if text:
+                blocks.append({"type": "text", "text": text})
+        if blocks:
+            blocks[-1]["cache_control"] = {"type": "ephemeral"}
+        return blocks
+
+    @staticmethod
+    def _apply_cache_control(messages: list[dict], tools: list[dict]) -> None:
+        """Place cache_control breakpoints on messages and tools (in place).
+
+        Anthropic's prompt caching uses up to 4 breakpoints per request.
+        We use all 4: system[-1] (see _build_system_blocks), tools[-1],
+        messages[-3], messages[-1].
+
+        Why messages[-3]?  Each tool-loop iteration appends exactly 2
+        messages (1 assistant + 1 tool_result).  So messages[-3] in the
+        current call corresponds to messages[-1] from the *previous* call,
+        whose prefix was already cached.  By keeping a breakpoint there,
+        Anthropic can serve that prefix from cache_read instead of
+        re-caching the entire message history on every iteration.
+        """
 
         def _set_cache_control(msg_index):
             """Add cache_control to the last content block of messages[msg_index]."""
@@ -309,43 +310,30 @@ class AnthropicProvider(BaseProvider):
             # re-caching the entire prefix (cache_creation).
             if len(messages) >= 3:
                 _set_cache_control(-3)
+
         # Tools: Add cache_control to the last tool function.
         # Tools with defer_loading=true cannot carry cache_control, so
         # walk backward to the last eligible tool.
-        if tools:
-            for tool in reversed(tools):
-                if not tool.get("defer_loading"):
-                    tool["cache_control"] = {"type": "ephemeral"}
-                    break
+        for tool in reversed(tools):
+            if not tool.get("defer_loading"):
+                tool["cache_control"] = {"type": "ephemeral"}
+                break
 
-        # System: add cache_control to the LAST system block so the entire
-        # system section (instruction + tool states) is cached as a unit.
-        # Anthropic uses cumulative hashes — placing cache_control on
-        # system[0] while system[1] varies invalidates every downstream block.
-        system_messages = []
-        if system is not None:
-            system_messages.append({"type": "text", "text": system})
+    def _prepare_request_params(self, **kwargs):
+        """Prepare messages, tools, and kwargs for Anthropic API request."""
+        messages = self.prepare_messages(
+            transform_function=message_to_anthropic_dict,
+            transform_list_function=add_empty_function_result,
+        )
+        messages = self._merge_same_role_messages(messages)
+        messages = self._strip_thinking_from_prior_turns(messages)
 
-        if self.chat.context:
-            system_messages.append({"type": "text", "text": self.chat.context})
+        tools = self._build_tools()
+        self._apply_cache_control(messages, tools)
 
-        if self.chat.initial_tools_states:
-            system_messages.append(
-                {"type": "text", "text": self.chat.initial_tools_states}
-            )
-
-        if hasattr(self.chat, "tool_search_categories_hint") and self.chat.tool_search_categories_hint:
-            system_messages.append(
-                {"type": "text", "text": self.chat.tool_search_categories_hint}
-            )
-
-        if system_messages:
-            system_messages[-1]["cache_control"] = {"type": "ephemeral"}
-
-        # === End of cache_control ===
-
-        if system_messages:
-            kwargs["system"] = system_messages
+        system_blocks = self._build_system_blocks()
+        if system_blocks:
+            kwargs["system"] = system_blocks
 
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = {"type": "any"}
