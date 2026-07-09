@@ -5,7 +5,11 @@ import typing
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
-from agentlys.providers.utils import FunctionCallParsingError, add_empty_function_result
+from agentlys.providers.utils import (
+    FunctionCallParsingError,
+    add_empty_function_result,
+    drop_orphaned_function_results,
+)
 
 OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
@@ -245,7 +249,9 @@ class OpenAIProvider(BaseProvider):
         messages = self.prepare_messages(
             transform_function=self.message_transform,
             transform_list_function=lambda x: split_function_results(
-                add_empty_function_result(return_image_as_user_message(x))
+                add_empty_function_result(
+                    return_image_as_user_message(drop_orphaned_function_results(x))
+                )
             ),
         )
 

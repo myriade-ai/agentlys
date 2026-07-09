@@ -10,7 +10,20 @@ class TestAnthropic(unittest.TestCase):
 
     def test_transform_conversation_anthropic(self):
         agent = Agentlys(instruction="Test instruction", provider=APIProvider.ANTHROPIC)
+        # A tool result must be preceded by its tool_use — an orphaned result
+        # (no matching call) is stripped before the request, so the history has
+        # to carry the assistant tool_use for the merge to be exercised.
         agent.messages = [
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "SUBMIT", "arguments": {}},
+                        function_call_id="example_16",
+                    )
+                ],
+            ),
             Message(
                 role="function",
                 name="SUBMIT",
@@ -22,6 +35,17 @@ class TestAnthropic(unittest.TestCase):
 
         expected_output = [
             {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "example_16",
+                        "name": "SUBMIT",
+                        "input": {},
+                    }
+                ],
+            },
+            {
                 "role": "user",
                 "content": [
                     {"type": "tool_result", "tool_use_id": "example_16", "content": ""},
@@ -31,7 +55,7 @@ class TestAnthropic(unittest.TestCase):
                         "cache_control": {"type": "ephemeral"},
                     },
                 ],
-            }
+            },
         ]
         agent.provider.client = self.mock_anthropic_client
 
@@ -255,7 +279,11 @@ class TestCacheControlPlacement(unittest.TestCase):
                 self.content = content
 
             def to_dict(self):
-                return {"role": self.role, "content": self.content, "usage": {"input_tokens": 100, "output_tokens": 50}}
+                return {
+                    "role": self.role,
+                    "content": self.content,
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
+                }
 
         mock_create = AsyncMock(
             return_value=FakeAnthropicMessage(role="assistant", content="test")
@@ -341,7 +369,9 @@ class TestContextInSystemPrompt(unittest.TestCase):
         if isinstance(first_msg_content, str):
             user_texts = [first_msg_content]
         else:
-            user_texts = [b.get("text", "") for b in first_msg_content if isinstance(b, dict)]
+            user_texts = [
+                b.get("text", "") for b in first_msg_content if isinstance(b, dict)
+            ]
         self.assertFalse(
             any(context in t for t in user_texts),
             "Context should NOT be in user messages",
@@ -565,9 +595,7 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
                     ),
                 ],
             ),
-            Message(
-                role="function", content="Alice,Bob", function_call_id="old_1"
-            ),
+            Message(role="function", content="Alice,Bob", function_call_id="old_1"),
             Message(role="assistant", content="Here are the users."),
         ]
         question = Message(role="user", content="Count orders per user")
@@ -589,7 +617,9 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
                         type="function_call",
                         function_call={
                             "name": "run_query",
-                            "arguments": {"sql": "SELECT user_id, COUNT(*) FROM orders GROUP BY 1"},
+                            "arguments": {
+                                "sql": "SELECT user_id, COUNT(*) FROM orders GROUP BY 1"
+                            },
                         },
                         function_call_id="call_1",
                     ),
@@ -663,7 +693,10 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
                     MessagePart(type="text", content="Let me check."),
                     MessagePart(
                         type="function_call",
-                        function_call={"name": "run_query", "arguments": {"sql": "SELECT 1"}},
+                        function_call={
+                            "name": "run_query",
+                            "arguments": {"sql": "SELECT 1"},
+                        },
                         function_call_id="call_1",
                     ),
                 ],
@@ -701,8 +734,12 @@ class TestCacheBreakpointOnPreviousIteration(unittest.TestCase):
         results = Message(
             role="function",
             parts=[
-                MessagePart(type="function_result", content="R1", function_call_id="p1"),
-                MessagePart(type="function_result", content="R2", function_call_id="p2"),
+                MessagePart(
+                    type="function_result", content="R1", function_call_id="p1"
+                ),
+                MessagePart(
+                    type="function_result", content="R2", function_call_id="p2"
+                ),
             ],
         )
 
@@ -776,10 +813,13 @@ class TestEmptyTextBlockFiltering(unittest.TestCase):
         """Empty text parts should be skipped when serializing to API format."""
         from agentlys.providers.anthropic import message_to_anthropic_dict
 
-        msg = Message(role="assistant", parts=[
-            MessagePart(type="text", content=""),
-            MessagePart(type="text", content="hello"),
-        ])
+        msg = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="text", content=""),
+                MessagePart(type="text", content="hello"),
+            ],
+        )
         result = message_to_anthropic_dict(msg)
         text_blocks = [b for b in result["content"] if b.get("type") == "text"]
         self.assertEqual(len(text_blocks), 1)
@@ -789,10 +829,13 @@ class TestEmptyTextBlockFiltering(unittest.TestCase):
         """Whitespace-only text parts should be skipped when serializing."""
         from agentlys.providers.anthropic import message_to_anthropic_dict
 
-        msg = Message(role="assistant", parts=[
-            MessagePart(type="text", content="  \n "),
-            MessagePart(type="text", content="valid"),
-        ])
+        msg = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="text", content="  \n "),
+                MessagePart(type="text", content="valid"),
+            ],
+        )
         result = message_to_anthropic_dict(msg)
         text_blocks = [b for b in result["content"] if b.get("type") == "text"]
         self.assertEqual(len(text_blocks), 1)

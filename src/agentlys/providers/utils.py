@@ -1,8 +1,11 @@
+import logging
 import os
 from typing import Type, Union
 
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import APIProvider, BaseProvider
+
+logger = logging.getLogger(__name__)
 
 
 class FunctionCallParsingError(Exception):
@@ -128,3 +131,64 @@ def add_empty_function_result(messages: list[Message]) -> list[Message]:
                 ),
             )
     return messages
+
+
+def drop_orphaned_function_results(messages: list[Message]) -> list[Message]:
+    """Remove ``function_result`` parts whose ``function_call_id`` matches no
+    ``function_call`` in the history — the mirror of
+    :func:`add_empty_function_result`.
+
+    That helper guards the forward direction (a call with no result); this
+    guards the reverse (a result with no call). Both OpenAI and Anthropic reject
+    a tool result whose id has no matching tool call ("unexpected tool_use_id
+    found in tool_result blocks", HTTP 400), which permanently blocks a
+    conversation whose persisted history was left with a dangling result: a
+    stream interrupted mid-tool-use, or an assistant tool_use turn deleted /
+    regenerated after the result row was saved.
+
+    Builds new ``Message`` objects instead of mutating: the input list holds the
+    same references as ``chat.messages`` and this runs on every request. A
+    message emptied by stripping only-orphaned results is dropped.
+    """
+    valid_call_ids = {
+        part.function_call_id
+        for message in messages
+        for part in message.parts
+        if part.type == "function_call" and part.function_call_id is not None
+    }
+
+    result: list[Message] = []
+    for message in messages:
+        kept_parts = []
+        dropped_parts = []
+        for part in message.parts:
+            is_result = part.type in ("function_result", "function_result_image")
+            if is_result and part.function_call_id not in valid_call_ids:
+                dropped_parts.append(part)
+            else:
+                kept_parts.append(part)
+
+        if not dropped_parts:
+            result.append(message)
+            continue
+
+        for part in dropped_parts:
+            logger.warning(
+                "Dropping orphaned %s (function_call_id=%s) with no matching "
+                "function_call in conversation history",
+                part.type,
+                part.function_call_id,
+            )
+
+        # A message emptied by removing only-orphaned results is dropped; an
+        # already-empty message is left untouched by the branch above.
+        if kept_parts:
+            result.append(
+                Message(
+                    role=message.role,
+                    name=message.name,
+                    id=message.id,
+                    parts=kept_parts,
+                )
+            )
+    return result
