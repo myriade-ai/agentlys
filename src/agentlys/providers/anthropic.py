@@ -4,7 +4,10 @@ import anthropic
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
-from agentlys.providers.utils import add_empty_function_result
+from agentlys.providers.utils import (
+    add_empty_function_result,
+    drop_orphaned_function_results,
+)
 
 
 def part_to_anthropic_dict(part: MessagePart) -> dict:
@@ -323,7 +326,9 @@ class AnthropicProvider(BaseProvider):
         """Prepare messages, tools, and kwargs for Anthropic API request."""
         messages = self.prepare_messages(
             transform_function=message_to_anthropic_dict,
-            transform_list_function=add_empty_function_result,
+            transform_list_function=lambda x: add_empty_function_result(
+                drop_orphaned_function_results(x)
+            ),
         )
         messages = self._merge_same_role_messages(messages)
         messages = self._strip_thinking_from_prior_turns(messages)
