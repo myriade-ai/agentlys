@@ -27,6 +27,20 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
                 "data": part.image.to_base64(),
             },
         }
+    elif part.type == "document":
+        if part.document is None:
+            raise ValueError("Document part must have a document")
+        block = {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": part.document.media_type,
+                "data": part.document.to_base64(),
+            },
+        }
+        if part.document.name:
+            block["title"] = part.document.name
+        return block
     elif part.type == "function_call":
         return {
             "type": "tool_use",
@@ -152,9 +166,7 @@ class AnthropicProvider(BaseProvider):
             next_content = messages[next_idx].get("content")
             if not isinstance(next_content, list):
                 return False
-            return any(
-                block.get("type") == "tool_result" for block in next_content
-            )
+            return any(block.get("type") == "tool_result" for block in next_content)
 
         # Find the index of the last assistant message
         last_assistant_idx = None
@@ -168,10 +180,7 @@ class AnthropicProvider(BaseProvider):
 
         result = []
         for i, msg in enumerate(messages):
-            if (
-                msg.get("role") == "assistant"
-                and isinstance(msg.get("content"), list)
-            ):
+            if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
                 # Preserve thinking only on the last assistant when a tool
                 # loop is pending (next message is a tool_result).
                 if i == last_assistant_idx and _has_tool_result_after(i):

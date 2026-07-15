@@ -876,5 +876,54 @@ class TestEmptyTextBlockFiltering(unittest.TestCase):
         self.assertEqual(len(tool_blocks), 1)
 
 
+class TestDocumentParts(unittest.TestCase):
+    def test_document_part_to_anthropic_dict(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+
+        pdf_bytes = b"%PDF-1.4 fake pdf payload"
+        msg = Message(
+            role="user",
+            parts=[
+                MessagePart(type="text", content="Summarize this document"),
+                MessagePart(
+                    type="document",
+                    document=Document(
+                        pdf_bytes, media_type="application/pdf", name="report.pdf"
+                    ),
+                ),
+            ],
+        )
+
+        result = message_to_anthropic_dict(msg)
+        self.assertEqual(result["role"], "user")
+        doc_blocks = [b for b in result["content"] if b.get("type") == "document"]
+        self.assertEqual(len(doc_blocks), 1)
+        block = doc_blocks[0]
+        self.assertEqual(block["source"]["type"], "base64")
+        self.assertEqual(block["source"]["media_type"], "application/pdf")
+        self.assertEqual(block["title"], "report.pdf")
+
+        import base64 as b64
+
+        self.assertEqual(b64.b64decode(block["source"]["data"]), pdf_bytes)
+
+    def test_document_base64_round_trip(self):
+        from agentlys.model import Document
+
+        original = Document(b"hello world", media_type="text/plain", name="a.txt")
+        restored = Document.from_base64(
+            original.to_base64(), media_type="text/plain", name="a.txt"
+        )
+        self.assertEqual(restored.data, b"hello world")
+        self.assertEqual(restored.media_type, "text/plain")
+
+    def test_document_part_without_document_raises(self):
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        with self.assertRaises(ValueError):
+            part_to_anthropic_dict(MessagePart(type="document"))
+
+
 if __name__ == "__main__":
     unittest.main()
