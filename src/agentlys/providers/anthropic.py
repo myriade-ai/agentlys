@@ -27,6 +27,41 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
                 "data": part.image.to_base64(),
             },
         }
+    elif part.type == "document":
+        if part.document is None:
+            raise ValueError("Document part must have a document")
+        # Document is bytes-based, which maps to two of Anthropic's document
+        # sources: "base64" (whose only supported binary format is PDF) and
+        # "text" (text/plain). The API also has url/content/file sources, but
+        # those aren't byte payloads and aren't modeled by Document (yet).
+        # Reject unsupported media types here so they fail early instead of
+        # at request time. Note: on Bedrock/Vertex only base64 is available.
+        if part.document.media_type == "application/pdf":
+            source = {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": part.document.to_base64(),
+            }
+        elif part.document.media_type == "text/plain":
+            source = {
+                "type": "text",
+                "media_type": "text/plain",
+                "data": part.document.data.decode("utf-8"),
+            }
+        else:
+            raise ValueError(
+                f"Unsupported document media_type {part.document.media_type!r}: "
+                "Anthropic accepts binary (base64) documents only as "
+                "application/pdf, and inline text documents as text/plain. "
+                "Convert other formats (e.g. .docx, .xlsx) to PDF or plain text."
+            )
+        block = {
+            "type": "document",
+            "source": source,
+        }
+        if part.document.name:
+            block["title"] = part.document.name
+        return block
     elif part.type == "function_call":
         return {
             "type": "tool_use",
@@ -152,9 +187,7 @@ class AnthropicProvider(BaseProvider):
             next_content = messages[next_idx].get("content")
             if not isinstance(next_content, list):
                 return False
-            return any(
-                block.get("type") == "tool_result" for block in next_content
-            )
+            return any(block.get("type") == "tool_result" for block in next_content)
 
         # Find the index of the last assistant message
         last_assistant_idx = None
@@ -168,10 +201,7 @@ class AnthropicProvider(BaseProvider):
 
         result = []
         for i, msg in enumerate(messages):
-            if (
-                msg.get("role") == "assistant"
-                and isinstance(msg.get("content"), list)
-            ):
+            if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
                 # Preserve thinking only on the last assistant when a tool
                 # loop is pending (next message is a tool_result).
                 if i == last_assistant_idx and _has_tool_result_after(i):

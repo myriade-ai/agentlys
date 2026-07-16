@@ -59,6 +59,41 @@ class Image:
         return "image/" + self.image.format.lower()
 
 
+class Document:
+    """A document attached to a message (e.g. a PDF), sent natively to
+    providers that support document blocks (Anthropic)."""
+
+    def __init__(
+        self,
+        data: bytes,
+        media_type: str = "application/pdf",
+        name: typing.Optional[str] = None,
+    ):
+        if not isinstance(data, bytes):
+            raise TypeError("data must be bytes")
+        self.data = data
+        self.media_type = media_type
+        self.name = name
+        self._base64_cache: typing.Optional[str] = None
+
+    def to_base64(self) -> str:
+        # Providers re-serialize the whole history on every request; encoding
+        # is memoized so each document is base64-encoded only once (same
+        # pattern as Image.to_base64).
+        if self._base64_cache is None:
+            self._base64_cache = base64.b64encode(self.data).decode()
+        return self._base64_cache
+
+    @classmethod
+    def from_base64(
+        cls,
+        data: str,
+        media_type: str = "application/pdf",
+        name: typing.Optional[str] = None,
+    ) -> "Document":
+        return cls(base64.b64decode(data), media_type=media_type, name=name)
+
+
 class MessagePart:
     def __init__(
         self,
@@ -66,6 +101,7 @@ class MessagePart:
         type: Literal[
             "text",
             "image",
+            "document",
             "function_call",
             "function_result",
             "function_result_image",
@@ -74,6 +110,7 @@ class MessagePart:
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
+        document: typing.Optional[Document] = None,
         function_call: typing.Optional[dict] = None,
         function_call_id: typing.Optional[str] = None,
         thinking: typing.Optional[str] = None,
@@ -84,6 +121,7 @@ class MessagePart:
         self.type = type
         self.content = content
         self.image = Image(image) if image else None
+        self.document = document
         self.function_call = function_call
         self.function_call_id = function_call_id
         self.thinking = thinking
@@ -412,6 +450,21 @@ class Message:
             elif part.type == "image":
                 image_data_url = f"data:image/png;base64,{part.image.to_base64()}"
                 text += f"> Image: ![Image]({image_data_url})\n"
+            elif part.type == "document":
+                doc_name = part.document.name if part.document else "document"
+                doc_type = part.document.media_type if part.document else "unknown"
+                # Inline text documents so downstream consumers (e.g. the
+                # compaction summarizer) see their content; binary documents
+                # (PDF) can't be rendered as markdown, so state that instead
+                # of silently dropping the content.
+                if part.document and part.document.media_type == "text/plain":
+                    doc_text = part.document.data.decode("utf-8", errors="replace")
+                    text += f"> Document: {doc_name}\n{doc_text}\n"
+                else:
+                    text += (
+                        f"> Document: {doc_name} ({doc_type}) "
+                        "[binary content not rendered]\n"
+                    )
             elif part.type == "compaction":
                 text += f"> [Previous conversation summary]\n{part.content}\n"
         if not self.parts:
@@ -432,6 +485,10 @@ class Message:
                 text += f"> {part.function_call['name']}({', '.join([f'{k}={v}' for k, v in part.function_call['arguments'].items()])})\n"
             elif part.type == "function_result":
                 text += f"> Result: {part.content}\n"
+            elif part.type == "document":
+                doc_name = part.document.name if part.document else "document"
+                doc_type = part.document.media_type if part.document else "unknown"
+                text += f"> Document: {doc_name} ({doc_type})\n"
             elif part.type == "function_result_image" or part.type == "image":
                 label = (
                     "Result image" if part.type == "function_result_image" else "Image"

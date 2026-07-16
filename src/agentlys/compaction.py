@@ -49,8 +49,17 @@ class TokenThresholdCompaction:
     Works with any provider implementing ``BaseProvider.complete()``
     (Anthropic, OpenAI, and any OpenAI-compatible API).
 
+    After a compaction, preserved attachments (e.g. PDF document parts) keep
+    contributing a fixed token floor to every request that no amount of
+    summarization can reduce. To avoid re-compacting on every turn once that
+    floor exceeds the threshold, ``should_compact`` measures the floor as the
+    first response's usage after the compaction message and triggers only when
+    the conversation has grown ``token_threshold`` tokens beyond it.
+
     Args:
-        token_threshold: Trigger compaction when input tokens exceed this value.
+        token_threshold: Trigger compaction when input tokens exceed this value
+            (after a compaction: when input tokens grow this much beyond the
+            post-compaction floor).
         summary_model: Model to use for generating summaries (cheap/fast
             recommended). Defaults to the provider's current model — pass a
             cheap model explicitly to reduce summarization cost.
@@ -61,23 +70,43 @@ class TokenThresholdCompaction:
     summary_model: Optional[str] = None
     instructions: Optional[str] = None
 
+    @staticmethod
+    def _total_input_tokens(usage: dict) -> int:
+        """Total input tokens including cached tokens (cache_creation_input_tokens,
+        cache_read_input_tokens), which are separate from input_tokens when
+        prompt caching is enabled."""
+        return (
+            usage["input_tokens"]
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+        )
+
     async def should_compact(self, chat: AgentlysBase) -> bool:
         """Check if compaction is needed based on the last API response's token usage.
 
         Each assistant Message from the provider carries a ``usage`` dict.
-        Total input tokens includes cached tokens (cache_creation_input_tokens,
-        cache_read_input_tokens) which are separate from input_tokens when
-        prompt caching is enabled.
         """
+        latest = None
         for msg in reversed(chat.messages):
             if msg.usage and "input_tokens" in msg.usage:
-                total = (
-                    msg.usage["input_tokens"]
-                    + msg.usage.get("cache_creation_input_tokens", 0)
-                    + msg.usage.get("cache_read_input_tokens", 0)
-                )
-                return total > self.token_threshold
-        return False
+                latest = self._total_input_tokens(msg.usage)
+                break
+        if latest is None:
+            return False
+
+        # Post-compaction floor: preserved document parts (and the summary
+        # itself) are re-sent with every request, so their tokens show up in
+        # usage without being reducible by another compaction. Subtract the
+        # first post-compaction response's usage so only real conversation
+        # growth counts toward the threshold.
+        baseline = 0
+        if chat.messages[0].has_compaction:
+            for msg in chat.messages:
+                if msg.usage and "input_tokens" in msg.usage:
+                    baseline = self._total_input_tokens(msg.usage)
+                    break
+
+        return latest - baseline > self.token_threshold
 
     async def compact(self, chat: AgentlysBase) -> None:
         """Summarize older messages and replace them with a compaction message."""
@@ -121,14 +150,38 @@ class TokenThresholdCompaction:
         if match:
             summary_text = match.group(1).strip()
 
+        # Preserve document attachments: their binary content can't be
+        # captured by the text summary, so re-attach them after the summary.
+        # The text history is compacted, but the model keeps direct access to
+        # the original documents.
+        document_parts = []
+        seen_documents = set()
+        for msg in messages:
+            for part in msg.parts:
+                if part.type != "document" or part.document is None:
+                    continue
+                key = (
+                    part.document.name,
+                    part.document.media_type,
+                    part.document.data,
+                )
+                if key in seen_documents:
+                    continue
+                seen_documents.add(key)
+                document_parts.append(part)
+
         # Build compaction message and replace conversation history
         compaction_message = Message(
             role="user",
-            parts=[MessagePart(type="compaction", content=summary_text)],
+            parts=[
+                MessagePart(type="compaction", content=summary_text),
+                *document_parts,
+            ],
         )
 
         chat.messages = [compaction_message]
         logger.info(
-            "Compacted %d messages into summary",
+            "Compacted %d messages into summary (%d documents preserved)",
             len(messages),
+            len(document_parts),
         )

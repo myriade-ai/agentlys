@@ -876,5 +876,125 @@ class TestEmptyTextBlockFiltering(unittest.TestCase):
         self.assertEqual(len(tool_blocks), 1)
 
 
+class TestDocumentParts(unittest.TestCase):
+    def test_document_part_to_anthropic_dict(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+
+        pdf_bytes = b"%PDF-1.4 fake pdf payload"
+        msg = Message(
+            role="user",
+            parts=[
+                MessagePart(type="text", content="Summarize this document"),
+                MessagePart(
+                    type="document",
+                    document=Document(
+                        pdf_bytes, media_type="application/pdf", name="report.pdf"
+                    ),
+                ),
+            ],
+        )
+
+        result = message_to_anthropic_dict(msg)
+        self.assertEqual(result["role"], "user")
+        doc_blocks = [b for b in result["content"] if b.get("type") == "document"]
+        self.assertEqual(len(doc_blocks), 1)
+        block = doc_blocks[0]
+        self.assertEqual(block["source"]["type"], "base64")
+        self.assertEqual(block["source"]["media_type"], "application/pdf")
+        self.assertEqual(block["title"], "report.pdf")
+
+        import base64 as b64
+
+        self.assertEqual(b64.b64decode(block["source"]["data"]), pdf_bytes)
+
+    def test_document_base64_round_trip(self):
+        from agentlys.model import Document
+
+        original = Document(b"hello world", media_type="text/plain", name="a.txt")
+        restored = Document.from_base64(
+            original.to_base64(), media_type="text/plain", name="a.txt"
+        )
+        self.assertEqual(restored.data, b"hello world")
+        self.assertEqual(restored.media_type, "text/plain")
+
+    def test_document_part_without_document_raises(self):
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        with self.assertRaises(ValueError):
+            part_to_anthropic_dict(MessagePart(type="document"))
+
+    def test_text_plain_document_uses_text_source(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        block = part_to_anthropic_dict(
+            MessagePart(
+                type="document",
+                document=Document(
+                    b"hello world", media_type="text/plain", name="notes.txt"
+                ),
+            )
+        )
+        self.assertEqual(block["source"]["type"], "text")
+        self.assertEqual(block["source"]["media_type"], "text/plain")
+        self.assertEqual(block["source"]["data"], "hello world")
+        self.assertEqual(block["title"], "notes.txt")
+
+    def test_unsupported_document_media_type_raises_early(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        with self.assertRaises(ValueError) as ctx:
+            part_to_anthropic_dict(
+                MessagePart(
+                    type="document",
+                    document=Document(b"GIF89a", media_type="image/gif"),
+                )
+            )
+        self.assertIn("image/gif", str(ctx.exception))
+
+    def test_document_base64_is_memoized(self):
+        from agentlys.model import Document
+
+        doc = Document(b"%PDF-1.4 payload")
+        first = doc.to_base64()
+        # Same cached string object on subsequent calls (no re-encoding)
+        self.assertIs(doc.to_base64(), first)
+
+    def test_text_document_content_survives_to_markdown(self):
+        # The compaction summarizer reads history via to_markdown(); text
+        # documents must expose their content there, and binary documents
+        # must say so explicitly instead of silently dropping content.
+        from agentlys.model import Document
+
+        text_msg = Message(
+            role="user",
+            parts=[
+                MessagePart(
+                    type="document",
+                    document=Document(
+                        b"quarterly revenue: 42", media_type="text/plain", name="q.txt"
+                    ),
+                )
+            ],
+        )
+        md = text_msg.to_markdown()
+        self.assertIn("quarterly revenue: 42", md)
+
+        pdf_msg = Message(
+            role="user",
+            parts=[
+                MessagePart(
+                    type="document",
+                    document=Document(b"%PDF-1.4", name="report.pdf"),
+                )
+            ],
+        )
+        md = pdf_msg.to_markdown()
+        self.assertIn("report.pdf", md)
+        self.assertIn("binary content not rendered", md)
+
+
 if __name__ == "__main__":
     unittest.main()
