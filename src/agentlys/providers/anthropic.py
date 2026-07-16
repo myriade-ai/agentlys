@@ -30,9 +30,12 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
     elif part.type == "document":
         if part.document is None:
             raise ValueError("Document part must have a document")
-        # Anthropic only accepts base64 document sources for PDFs; plain text
-        # uses the dedicated "text" source. Reject anything else here so bad
-        # media types fail early instead of at request time.
+        # Document is bytes-based, which maps to two of Anthropic's document
+        # sources: "base64" (whose only supported binary format is PDF) and
+        # "text" (text/plain). The API also has url/content/file sources, but
+        # those aren't byte payloads and aren't modeled by Document (yet).
+        # Reject unsupported media types here so they fail early instead of
+        # at request time. Note: on Bedrock/Vertex only base64 is available.
         if part.document.media_type == "application/pdf":
             source = {
                 "type": "base64",
@@ -47,8 +50,10 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             }
         else:
             raise ValueError(
-                "Anthropic documents only support media_type 'application/pdf' "
-                f"or 'text/plain', got {part.document.media_type!r}"
+                f"Unsupported document media_type {part.document.media_type!r}: "
+                "Anthropic accepts binary (base64) documents only as "
+                "application/pdf, and inline text documents as text/plain. "
+                "Convert other formats (e.g. .docx, .xlsx) to PDF or plain text."
             )
         block = {
             "type": "document",
