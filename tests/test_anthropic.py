@@ -962,6 +962,39 @@ class TestDocumentParts(unittest.TestCase):
         # Same cached string object on subsequent calls (no re-encoding)
         self.assertIs(doc.to_base64(), first)
 
+    def test_text_document_content_survives_to_markdown(self):
+        # The compaction summarizer reads history via to_markdown(); text
+        # documents must expose their content there, and binary documents
+        # must say so explicitly instead of silently dropping content.
+        from agentlys.model import Document
+
+        text_msg = Message(
+            role="user",
+            parts=[
+                MessagePart(
+                    type="document",
+                    document=Document(
+                        b"quarterly revenue: 42", media_type="text/plain", name="q.txt"
+                    ),
+                )
+            ],
+        )
+        md = text_msg.to_markdown()
+        self.assertIn("quarterly revenue: 42", md)
+
+        pdf_msg = Message(
+            role="user",
+            parts=[
+                MessagePart(
+                    type="document",
+                    document=Document(b"%PDF-1.4", name="report.pdf"),
+                )
+            ],
+        )
+        md = pdf_msg.to_markdown()
+        self.assertIn("report.pdf", md)
+        self.assertIn("binary content not rendered", md)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -453,7 +453,18 @@ class Message:
             elif part.type == "document":
                 doc_name = part.document.name if part.document else "document"
                 doc_type = part.document.media_type if part.document else "unknown"
-                text += f"> Document: {doc_name} ({doc_type})\n"
+                # Inline text documents so downstream consumers (e.g. the
+                # compaction summarizer) see their content; binary documents
+                # (PDF) can't be rendered as markdown, so state that instead
+                # of silently dropping the content.
+                if part.document and part.document.media_type == "text/plain":
+                    doc_text = part.document.data.decode("utf-8", errors="replace")
+                    text += f"> Document: {doc_name}\n{doc_text}\n"
+                else:
+                    text += (
+                        f"> Document: {doc_name} ({doc_type}) "
+                        "[binary content not rendered]\n"
+                    )
             elif part.type == "compaction":
                 text += f"> [Previous conversation summary]\n{part.content}\n"
         if not self.parts:
