@@ -121,14 +121,38 @@ class TokenThresholdCompaction:
         if match:
             summary_text = match.group(1).strip()
 
+        # Preserve document attachments: their binary content can't be
+        # captured by the text summary, so re-attach them after the summary.
+        # The text history is compacted, but the model keeps direct access to
+        # the original documents.
+        document_parts = []
+        seen_documents = set()
+        for msg in messages:
+            for part in msg.parts:
+                if part.type != "document" or part.document is None:
+                    continue
+                key = (
+                    part.document.name,
+                    part.document.media_type,
+                    part.document.data,
+                )
+                if key in seen_documents:
+                    continue
+                seen_documents.add(key)
+                document_parts.append(part)
+
         # Build compaction message and replace conversation history
         compaction_message = Message(
             role="user",
-            parts=[MessagePart(type="compaction", content=summary_text)],
+            parts=[
+                MessagePart(type="compaction", content=summary_text),
+                *document_parts,
+            ],
         )
 
         chat.messages = [compaction_message]
         logger.info(
-            "Compacted %d messages into summary",
+            "Compacted %d messages into summary (%d documents preserved)",
             len(messages),
+            len(document_parts),
         )

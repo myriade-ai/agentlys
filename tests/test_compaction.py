@@ -292,6 +292,56 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             agent.messages[0].parts[0].content, "Conversation summary here"
         )
 
+    def test_compact_preserves_document_attachments(self):
+        """Documents survive compaction: the text history is summarized but
+        document parts are re-attached so the model keeps access to them."""
+        from agentlys.model import Document
+
+        compaction = TokenThresholdCompaction()
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        pdf = Document(b"%PDF-1.4 payload", name="report.pdf")
+        agent.messages = [
+            Message(
+                role="user",
+                parts=[
+                    MessagePart(type="text", content="Summarize this report"),
+                    MessagePart(type="document", document=pdf),
+                ],
+            ),
+            Message(role="assistant", content="The report says X."),
+            # Same document attached twice: must be deduplicated
+            Message(
+                role="user",
+                parts=[MessagePart(type="document", document=pdf)],
+            ),
+        ]
+
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "<summary>Discussed report.pdf</summary>"
+        mock_response = MagicMock()
+        mock_response.content = [mock_text_block]
+
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
+
+        self.assertEqual(len(agent.messages), 1)
+        msg = agent.messages[0]
+        self.assertTrue(msg.has_compaction)
+        self.assertEqual(msg.parts[0].content, "Discussed report.pdf")
+        doc_parts = [p for p in msg.parts if p.type == "document"]
+        self.assertEqual(len(doc_parts), 1)  # deduplicated
+        self.assertEqual(doc_parts[0].document.name, "report.pdf")
+        self.assertEqual(doc_parts[0].document.data, b"%PDF-1.4 payload")
+
     def test_compact_skips_when_no_messages(self):
         compaction = TokenThresholdCompaction()
         agent = Agentlys(
