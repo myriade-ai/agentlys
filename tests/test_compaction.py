@@ -253,6 +253,78 @@ class TestTokenThresholdCompactionShouldCompact(unittest.TestCase):
 
         self.assertTrue(result)
 
+    def test_should_compact_false_when_documents_keep_usage_over_threshold(self):
+        """Preserved documents are a fixed token floor: right after a
+        compaction, usage over the threshold must not re-trigger compaction."""
+        from agentlys.model import Document
+
+        compaction = TokenThresholdCompaction(token_threshold=1000)
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        agent.messages = [
+            Message(
+                role="user",
+                parts=[
+                    MessagePart(type="compaction", content="Summary of history"),
+                    MessagePart(
+                        type="document",
+                        document=Document(b"%PDF-1.4 payload", name="report.pdf"),
+                    ),
+                ],
+            ),
+            Message(role="user", content="Next question"),
+            # The document alone keeps input tokens over the threshold
+            Message(
+                role="assistant",
+                content="Answer",
+                usage={"input_tokens": 5000, "output_tokens": 100},
+            ),
+        ]
+
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
+
+        self.assertFalse(result)
+
+    def test_should_compact_true_when_growth_after_compaction_exceeds_threshold(self):
+        """After a compaction, only growth beyond the post-compaction floor
+        counts toward the threshold."""
+        compaction = TokenThresholdCompaction(token_threshold=1000)
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        agent.messages = [
+            Message(
+                role="user",
+                parts=[MessagePart(type="compaction", content="Summary of history")],
+            ),
+            # Post-compaction floor: 5000 tokens (summary + preserved documents)
+            Message(
+                role="assistant",
+                content="Answer",
+                usage={"input_tokens": 5000, "output_tokens": 100},
+            ),
+            Message(role="user", content="More discussion..."),
+            # Conversation grew 1500 tokens beyond the floor: over threshold
+            Message(
+                role="assistant",
+                content="Answer",
+                usage={"input_tokens": 6500, "output_tokens": 100},
+            ),
+        ]
+
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(compaction.should_compact(agent))
+        finally:
+            loop.close()
+
+        self.assertTrue(result)
+
 
 class TestTokenThresholdCompactionCompact(unittest.TestCase):
     """Tests for TokenThresholdCompaction.compact."""
