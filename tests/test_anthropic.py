@@ -924,6 +924,44 @@ class TestDocumentParts(unittest.TestCase):
         with self.assertRaises(ValueError):
             part_to_anthropic_dict(MessagePart(type="document"))
 
+    def test_text_plain_document_uses_text_source(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        block = part_to_anthropic_dict(
+            MessagePart(
+                type="document",
+                document=Document(
+                    b"hello world", media_type="text/plain", name="notes.txt"
+                ),
+            )
+        )
+        self.assertEqual(block["source"]["type"], "text")
+        self.assertEqual(block["source"]["media_type"], "text/plain")
+        self.assertEqual(block["source"]["data"], "hello world")
+        self.assertEqual(block["title"], "notes.txt")
+
+    def test_unsupported_document_media_type_raises_early(self):
+        from agentlys.model import Document
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        with self.assertRaises(ValueError) as ctx:
+            part_to_anthropic_dict(
+                MessagePart(
+                    type="document",
+                    document=Document(b"GIF89a", media_type="image/gif"),
+                )
+            )
+        self.assertIn("image/gif", str(ctx.exception))
+
+    def test_document_base64_is_memoized(self):
+        from agentlys.model import Document
+
+        doc = Document(b"%PDF-1.4 payload")
+        first = doc.to_base64()
+        # Same cached string object on subsequent calls (no re-encoding)
+        self.assertIs(doc.to_base64(), first)
+
 
 if __name__ == "__main__":
     unittest.main()

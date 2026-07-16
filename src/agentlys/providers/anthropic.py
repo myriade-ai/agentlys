@@ -30,13 +30,29 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
     elif part.type == "document":
         if part.document is None:
             raise ValueError("Document part must have a document")
+        # Anthropic only accepts base64 document sources for PDFs; plain text
+        # uses the dedicated "text" source. Reject anything else here so bad
+        # media types fail early instead of at request time.
+        if part.document.media_type == "application/pdf":
+            source = {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": part.document.to_base64(),
+            }
+        elif part.document.media_type == "text/plain":
+            source = {
+                "type": "text",
+                "media_type": "text/plain",
+                "data": part.document.data.decode("utf-8"),
+            }
+        else:
+            raise ValueError(
+                "Anthropic documents only support media_type 'application/pdf' "
+                f"or 'text/plain', got {part.document.media_type!r}"
+            )
         block = {
             "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": part.document.media_type,
-                "data": part.document.to_base64(),
-            },
+            "source": source,
         }
         if part.document.name:
             block["title"] = part.document.name

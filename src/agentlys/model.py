@@ -74,9 +74,15 @@ class Document:
         self.data = data
         self.media_type = media_type
         self.name = name
+        self._base64_cache: typing.Optional[str] = None
 
     def to_base64(self) -> str:
-        return base64.b64encode(self.data).decode()
+        # Providers re-serialize the whole history on every request; encoding
+        # is memoized so each document is base64-encoded only once (same
+        # pattern as Image.to_base64).
+        if self._base64_cache is None:
+            self._base64_cache = base64.b64encode(self.data).decode()
+        return self._base64_cache
 
     @classmethod
     def from_base64(
