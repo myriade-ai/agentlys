@@ -445,13 +445,31 @@ class Agentlys(AgentlysBase):
         ):
             function_schema["defer_loading"] = True
 
-        self.functions_schema.append(function_schema)
-        self.functions[function_schema["name"]] = function
+        # Re-registering a name replaces the previous function. Dispatch
+        # (self.functions) is last-wins, so the schema list must follow:
+        # a duplicate name in functions_schema reaches the provider payload
+        # and Anthropic/OpenAI reject the whole request ("tool names must
+        # be unique").
+        name = function_schema["name"]
+        existing_index = next(
+            (i for i, s in enumerate(self.functions_schema) if s["name"] == name),
+            None,
+        )
+        if existing_index is not None:
+            self.functions_schema[existing_index] = function_schema
+        else:
+            self.functions_schema.append(function_schema)
+        self.functions[name] = function
 
     def add_tool(
         self, tool: typing.Union[type, object], tool_id: typing.Optional[str] = None
     ) -> str:
-        """Add a tool class or instance to the chat instance and return the tool id"""
+        """Add a tool class or instance to the chat instance and return the tool id.
+
+        Re-registering an existing tool_id replaces the previous tool: its
+        registrations are removed first, so methods that only existed on the
+        old tool (e.g. when the class differs) don't linger.
+        """
         if isinstance(tool, type):
             # If a class is provided, instantiate it
             tool = tool()
@@ -459,6 +477,8 @@ class Agentlys(AgentlysBase):
         if tool_id is None:
             tool_id = str(id(tool))
 
+        if tool_id in self.tools:
+            self.remove_tool(tool_id)
         self.tools[tool_id] = tool
 
         class_name = tool.__class__.__name__
