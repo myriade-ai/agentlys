@@ -12,6 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v2
+        with:
+          # Keep in sync with the ruff version locked in uv.lock — "latest"
+          # breaks every open PR whenever a ruff release changes the rule set.
+          version: "0.15.17"
 
   test:
     runs-on: ubuntu-latest
