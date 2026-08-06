@@ -3,7 +3,7 @@ interactions:
       body:
         '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
         are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"additionalProperties\": false,\n      \"properties\":
         {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
         {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
         [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
@@ -59,7 +59,7 @@ interactions:
       body:
         '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
         are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"additionalProperties\": false,\n      \"properties\":
         {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
         {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
         [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
@@ -122,7 +122,7 @@ interactions:
       body:
         '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
         are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"additionalProperties\": false,\n      \"properties\":
         {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
         {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
         [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":
@@ -188,7 +188,7 @@ interactions:
       body:
         '{"messages":[{"role":"user","content":[{"type":"text","text":"\n\nHere
         are the available functions you can call, in JSON format:\n[\n  {\n    \"name\":
-        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"properties\":
+        \"multiply\",\n    \"description\": null,\n    \"parameters\": {\n      \"additionalProperties\": false,\n      \"properties\":
         {\n        \"a\": {\n          \"title\": \"A\",\n          \"type\": \"integer\"\n        },\n        \"b\":
         {\n          \"title\": \"B\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\":
         [\n        \"a\",\n        \"b\"\n      ],\n      \"title\": \"Input for `multiply`\",\n      \"type\":

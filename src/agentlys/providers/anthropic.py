@@ -10,6 +10,52 @@ from agentlys.providers.utils import (
 )
 
 
+# Anthropic strict tool use relies on structured outputs and is only available
+# on these model families. Keep older models and Anthropic-compatible proxies
+# on best-effort tool calling instead of turning a valid request into a 400.
+_STRICT_TOOL_MODEL_PREFIXES = (
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def _supports_strict_tool_use(model: str) -> bool:
+    return model.lower().startswith(_STRICT_TOOL_MODEL_PREFIXES)
+
+
+def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
+    """Return Anthropic's counted optional-property and union totals."""
+    optional_properties = 0
+    unions = 0
+
+    def visit(value):
+        nonlocal optional_properties, unions
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                required = set(value.get("required", []))
+                optional_properties += len(set(properties) - required)
+            if "anyOf" in value or isinstance(value.get("type"), list):
+                unions += 1
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(schema)
+    return optional_properties, unions
+
+
 def part_to_anthropic_dict(part: MessagePart) -> dict:
     if part.type == "text":
         return {
@@ -266,14 +312,52 @@ class AnthropicProvider(BaseProvider):
         """Translate function schemas to Anthropic tool definitions.
 
         Maps "parameters" to "input_schema" and guarantees a description.
+        Closed schemas use strict tool calling on supported models, within
+        Anthropic's documented per-request complexity limits.
         """
         tools = []
+        explicit_strict_schemas = [
+            s["parameters"]
+            for s in self.chat.functions_schema
+            if s.get("strict") is True
+        ]
+        strict_tools = len(explicit_strict_schemas)
+        strict_optional_properties = 0
+        strict_unions = 0
+        for schema in explicit_strict_schemas:
+            optional_properties, unions = _strict_schema_complexity(schema)
+            strict_optional_properties += optional_properties
+            strict_unions += unions
+        supports_strict = _supports_strict_tool_use(self.model)
+
         for s in self.chat.functions_schema:
+            input_schema = s["parameters"]
             tool_def = {
                 "name": s["name"],
                 "description": s["description"] or "No description provided",
-                "input_schema": s["parameters"],
+                "input_schema": input_schema,
             }
+
+            explicit_strict = s.get("strict")
+            auto_strict = (
+                explicit_strict is None
+                and supports_strict
+                and input_schema.get("additionalProperties") is False
+            )
+            optional_properties, unions = _strict_schema_complexity(input_schema)
+            within_limits = (
+                strict_tools < 20
+                and strict_optional_properties + optional_properties <= 24
+                and strict_unions + unions <= 16
+            )
+            if explicit_strict is True:
+                tool_def["strict"] = True
+            elif auto_strict and within_limits:
+                tool_def["strict"] = True
+                strict_tools += 1
+                strict_optional_properties += optional_properties
+                strict_unions += unions
+
             if s.get("defer_loading"):
                 tool_def["defer_loading"] = True
             tools.append(tool_def)

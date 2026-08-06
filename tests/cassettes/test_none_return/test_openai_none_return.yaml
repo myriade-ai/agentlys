@@ -3,7 +3,7 @@ interactions:
     body: '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
       a helpful assistant that can call functions."}]},{"role":"user","content":[{"type":"text","text":"Call
       the function_returning_none function"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"function_returning_none","description":"A
-      simple function that returns None.","parameters":{"properties":{},"title":"Input
+      simple function that returns None.","parameters": {"additionalProperties": false, "properties":{},"title":"Input
       for `function_returning_none`","type":"object"}}}]}'
     headers:
       content-type:
@@ -55,7 +55,7 @@ interactions:
     body: '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
       a helpful assistant that can call functions."}]},{"role":"user","content":[{"type":"text","text":"Call
       the function_returning_none function"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_tTIPpDY2tlQlMLf9Si4qbEwF","type":"function","function":{"name":"function_returning_none","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_tTIPpDY2tlQlMLf9Si4qbEwF","content":[{"type":"text","text":""}],"name":"function_returning_none"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"function_returning_none","description":"A
-      simple function that returns None.","parameters":{"properties":{},"title":"Input
+      simple function that returns None.","parameters": {"additionalProperties": false, "properties":{},"title":"Input
       for `function_returning_none`","type":"object"}}}]}'
     headers:
       content-type:

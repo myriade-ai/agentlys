@@ -3,8 +3,8 @@ interactions:
     body: '{"max_tokens":10000,"messages":[{"role":"user","content":[{"type":"text","text":"Hello,
       read book ''the great gatsby''","cache_control":{"type":"ephemeral"}}]}],"model":"claude-3-7-sonnet-latest","system":[{"type":"text","text":"You
       are a helpful assistant that can read books.","cache_control":{"type":"ephemeral"}}],"tools":[{"name":"list_books","description":"No
-      description provided","input_schema":{"properties":{},"title":"Input for `list_books`","type":"object"}},{"name":"read_book","description":"No
-      description provided","input_schema":{"properties":{"book_name":{"title":"Book
+      description provided","input_schema": {"additionalProperties": false, "properties":{},"title":"Input for `list_books`","type":"object"}},{"name":"read_book","description":"No
+      description provided","input_schema": {"additionalProperties": false, "properties":{"book_name":{"title":"Book
       Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"},"cache_control":{"type":"ephemeral"}}]}'
     headers:
       anthropic-beta:
@@ -57,8 +57,8 @@ interactions:
       "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You are a helpful
       assistant that can read books.", "cache_control": {"type": "ephemeral"}}], "tools":
       [{"name": "list_books", "description": "No description provided", "input_schema":
-      {"properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
-      "read_book", "description": "No description provided", "input_schema": {"properties":
+      {"additionalProperties": false, "properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
+      "read_book", "description": "No description provided", "input_schema": {"additionalProperties": false, "properties":
       {"book_name": {"title": "Book Name", "type": "string"}}, "required": ["book_name"],
       "title": "Input for `read_book`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'
@@ -118,8 +118,8 @@ interactions:
       "model": "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You
       are a helpful assistant that can read books.", "cache_control": {"type": "ephemeral"}}],
       "tools": [{"name": "list_books", "description": "No description provided", "input_schema":
-      {"properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
-      "read_book", "description": "No description provided", "input_schema": {"properties":
+      {"additionalProperties": false, "properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
+      "read_book", "description": "No description provided", "input_schema": {"additionalProperties": false, "properties":
       {"book_name": {"title": "Book Name", "type": "string"}}, "required": ["book_name"],
       "title": "Input for `read_book`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'
@@ -187,8 +187,8 @@ interactions:
       "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You are a helpful
       assistant that can read books.", "cache_control": {"type": "ephemeral"}}], "tools":
       [{"name": "list_books", "description": "No description provided", "input_schema":
-      {"properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
-      "read_book", "description": "No description provided", "input_schema": {"properties":
+      {"additionalProperties": false, "properties": {}, "title": "Input for `list_books`", "type": "object"}}, {"name":
+      "read_book", "description": "No description provided", "input_schema": {"additionalProperties": false, "properties":
       {"book_name": {"title": "Book Name", "type": "string"}}, "required": ["book_name"],
       "title": "Input for `read_book`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'

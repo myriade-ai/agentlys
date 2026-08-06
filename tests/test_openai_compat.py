@@ -88,6 +88,45 @@ class TestClientConfiguration:
         assert agent.provider.client.api_key == "k"
 
 
+class TestToolSchemas:
+    def test_generated_schema_is_closed_for_openai(self):
+        def archive_live_block(
+            reason: str, name: str = "", live_block_id: str = ""
+        ) -> str:
+            return "ok"
+
+        agent = Agentlys(provider="openai", model="gpt-4o")
+        agent.add_function(archive_live_block)
+
+        _, tools, _ = agent.provider._prepare_request_params()
+        function = tools[0]["function"]
+        assert function["parameters"]["additionalProperties"] is False
+        # OpenAI strict mode requires every property to be required, which is
+        # incompatible with this function's Python defaults. Do not enable it
+        # implicitly; explicitly supplied compatible schemas still pass it.
+        assert "strict" not in function
+
+    def test_explicit_openai_strict_flag_is_preserved(self):
+        agent = Agentlys(provider="openai", model="gpt-4o")
+        agent.add_function(
+            lambda value: value,
+            {
+                "name": "echo",
+                "description": "Echo a value",
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                    "additionalProperties": False,
+                },
+            },
+        )
+
+        _, tools, _ = agent.provider._prepare_request_params()
+        assert tools[0]["function"]["strict"] is True
+
+
 def _tool_call(id, name, arguments):
     return SimpleNamespace(
         id=id,

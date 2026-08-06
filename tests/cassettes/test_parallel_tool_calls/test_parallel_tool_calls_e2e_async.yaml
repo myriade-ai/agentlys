@@ -6,10 +6,10 @@ interactions:
       "text", "text": "You are a helpful assistant. When asked for multiple pieces
       of information, call all relevant tools in parallel in a single response.",
       "cache_control": {"type": "ephemeral"}}], "tools": [{"name": "get_weather",
-      "description": "Get the current weather for a city.", "input_schema": {"properties":
+      "description": "Get the current weather for a city.", "input_schema": {"additionalProperties": false, "properties":
       {"city": {"title": "City", "type": "string"}}, "required": ["city"], "title":
       "Input for `get_weather`", "type": "object"}}, {"name": "get_time", "description":
-      "Get the current time for a city.", "input_schema": {"properties": {"city":
+      "Get the current time for a city.", "input_schema": {"additionalProperties": false, "properties": {"city":
       {"title": "City", "type": "string"}}, "required": ["city"], "title": "Input
       for `get_time`", "type": "object"}, "cache_control": {"type": "ephemeral"}}]}'
     headers:
@@ -130,10 +130,10 @@ interactions:
       assistant. When asked for multiple pieces of information, call all relevant
       tools in parallel in a single response.", "cache_control": {"type": "ephemeral"}}],
       "tools": [{"name": "get_weather", "description": "Get the current weather for
-      a city.", "input_schema": {"properties": {"city": {"title": "City", "type":
+      a city.", "input_schema": {"additionalProperties": false, "properties": {"city": {"title": "City", "type":
       "string"}}, "required": ["city"], "title": "Input for `get_weather`", "type":
       "object"}}, {"name": "get_time", "description": "Get the current time for a
-      city.", "input_schema": {"properties": {"city": {"title": "City", "type": "string"}},
+      city.", "input_schema": {"additionalProperties": false, "properties": {"city": {"title": "City", "type": "string"}},
       "required": ["city"], "title": "Input for `get_time`", "type": "object"}, "cache_control":
       {"type": "ephemeral"}}]}'
     headers:
