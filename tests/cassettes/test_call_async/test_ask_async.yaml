@@ -1,7 +1,7 @@
 interactions:
 - request:
     body: '{"messages":[{"role":"user","content":[{"type":"text","text":"What is 1
-      + 2?"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
+      + 2?"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters": {"additionalProperties": false, "properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
       for `async_calculator`","type":"object"}}}]}'
     headers:
       content-type:

@@ -4,6 +4,110 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from agentlys import Agentlys, APIProvider, Message, MessagePart
 
 
+class TestStrictToolSchemas(unittest.TestCase):
+    @staticmethod
+    def _archive_live_block(
+        reason: str, name: str = "", live_block_id: str = ""
+    ) -> str:
+        return "ok"
+
+    def _tool_for_model(self, model):
+        agent = Agentlys(provider="anthropic", model=model, api_key="test")
+        agent.add_function(self._archive_live_block)
+        return agent.provider._build_tools()[0]
+
+    def test_supported_model_uses_strict_closed_schema(self):
+        tool = self._tool_for_model("claude-haiku-4-5-20251001")
+
+        self.assertIs(tool["strict"], True)
+        self.assertIs(tool["input_schema"]["additionalProperties"], False)
+        self.assertEqual(
+            set(tool["input_schema"]["properties"]),
+            {"reason", "name", "live_block_id"},
+        )
+
+    def test_unsupported_model_keeps_closed_schema_without_strict(self):
+        tool = self._tool_for_model("claude-3-7-sonnet-latest")
+
+        self.assertNotIn("strict", tool)
+        self.assertIs(tool["input_schema"]["additionalProperties"], False)
+
+    def test_open_manual_schema_is_not_automatically_strict(self):
+        agent = Agentlys(
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="test",
+        )
+        agent.functions_schema = [
+            {
+                "name": "open_tool",
+                "description": "Accept arbitrary keys",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+
+        self.assertNotIn("strict", agent.provider._build_tools()[0])
+
+    def test_automatic_strict_tools_respect_provider_limit(self):
+        agent = Agentlys(
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="test",
+        )
+        agent.functions_schema = [
+            {
+                "name": f"tool_{index}",
+                "description": "Tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+            for index in range(21)
+        ]
+
+        tools = agent.provider._build_tools()
+        self.assertEqual(sum(tool.get("strict", False) for tool in tools), 20)
+        self.assertNotIn("strict", tools[-1])
+
+    def test_explicit_strict_tool_reserves_provider_capacity(self):
+        agent = Agentlys(
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="test",
+        )
+        agent.functions_schema = [
+            {
+                "name": f"tool_{index}",
+                "description": "Tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+            for index in range(20)
+        ]
+        agent.functions_schema.append(
+            {
+                "name": "explicit_tool",
+                "description": "Must be strict",
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        )
+
+        tools = agent.provider._build_tools()
+        self.assertEqual(sum(tool.get("strict", False) for tool in tools), 20)
+        self.assertNotIn("strict", tools[19])
+        self.assertIs(tools[-1]["strict"], True)
+
+
 class TestAnthropic(unittest.TestCase):
     def setUp(self):
         self.mock_anthropic_client = MagicMock()

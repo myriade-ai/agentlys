@@ -221,7 +221,13 @@ def parse_chat_template(filename) -> list[Message]:
 
 
 # Replace the old class with a ConfigDict
-AllowNonTypedParamsConfig = ConfigDict(arbitrary_types_allowed=True)
+AllowNonTypedParamsConfig = ConfigDict(
+    arbitrary_types_allowed=True,
+    # Function arguments are ultimately expanded as ``func(**arguments)``.
+    # Close the root object so providers know that invented keyword arguments
+    # are invalid instead of letting them reach Python as a TypeError.
+    extra="forbid",
+)
 
 
 class OmitClassJsonSchema(GenerateJsonSchema):

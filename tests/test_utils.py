@@ -276,6 +276,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "sums",
             "description": "Adds a + b",
             "parameters": {
+                "additionalProperties": False,
                 "properties": {
                     "a": {"title": "A", "type": "integer"},
                     "b": {"default": 1, "title": "B", "type": "integer"},
@@ -293,6 +294,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "empty_function",
             "description": None,
             "parameters": {
+                "additionalProperties": False,
                 "properties": {
                     "test": {"title": "Test"},
                 },
@@ -309,6 +311,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "function_with_description_and_default_value",
             "description": "Adds a + b",
             "parameters": {
+                "additionalProperties": False,
                 "properties": {
                     "a": {
                         "title": "A",
@@ -335,6 +338,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "function_with_from_response",
             "description": None,
             "parameters": {
+                "additionalProperties": False,
                 "properties": {
                     "a": {
                         "title": "A",
@@ -358,6 +362,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "function_with_class",
             "description": None,
             "parameters": {
+                "additionalProperties": False,
                 "properties": {
                     "a": {
                         "description": "The number to return",
@@ -378,6 +383,7 @@ class TestInspectSchema(unittest.TestCase):
             "name": "function_with_class_inherited_from_base_model",
             "description": None,
             "parameters": {
+                "additionalProperties": False,
                 "$defs": {
                     "RandomClassInheritedFromBaseModel": {
                         "properties": {},

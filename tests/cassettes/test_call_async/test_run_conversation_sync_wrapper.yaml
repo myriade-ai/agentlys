@@ -1,7 +1,7 @@
 interactions:
 - request:
     body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Calculate
-      1 + 2"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
+      1 + 2"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters": {"additionalProperties": false, "properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
       for `async_calculator`","type":"object"}}}]}'
     headers:
       content-type:
@@ -52,7 +52,7 @@ interactions:
 - request:
     body: '{"messages":[{"role":"user","content":[{"type":"text","text":"Calculate
       1 + 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_NLM9NsgH8HYaHOsxLLVVtBEz","type":"function","function":{"name":"async_calculator","arguments":"{\"kwargs\":
-      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_NLM9NsgH8HYaHOsxLLVVtBEz","content":[{"type":"text","text":"0"}],"name":"async_calculator"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
+      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_NLM9NsgH8HYaHOsxLLVVtBEz","content":[{"type":"text","text":"0"}],"name":"async_calculator"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters": {"additionalProperties": false, "properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
       for `async_calculator`","type":"object"}}}]}'
     headers:
       content-type:
@@ -106,7 +106,7 @@ interactions:
       1 + 2"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_NLM9NsgH8HYaHOsxLLVVtBEz","type":"function","function":{"name":"async_calculator","arguments":"{\"kwargs\":
       {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_NLM9NsgH8HYaHOsxLLVVtBEz","content":[{"type":"text","text":"0"}],"name":"async_calculator"},{"role":"assistant","content":[{"type":"text","text":"The
       result of \\(1 + 2\\) is incorrect. Let me try again."}],"tool_calls":[{"id":"call_qMx8w5jGQrrdU6a9Mg1IcFVt","type":"function","function":{"name":"async_calculator","arguments":"{\"kwargs\":
-      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_qMx8w5jGQrrdU6a9Mg1IcFVt","content":[{"type":"text","text":"0"}],"name":"async_calculator"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters":{"properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
+      {\"expression\": \"1 + 2\"}}"}}]},{"role":"tool","tool_call_id":"call_qMx8w5jGQrrdU6a9Mg1IcFVt","content":[{"type":"text","text":"0"}],"name":"async_calculator"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"async_calculator","description":null,"parameters": {"additionalProperties": false, "properties":{"kwargs":{"title":"Kwargs"}},"required":["kwargs"],"title":"Input
       for `async_calculator`","type":"object"}}}]}'
     headers:
       content-type:

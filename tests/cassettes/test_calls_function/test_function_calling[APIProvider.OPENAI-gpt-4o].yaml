@@ -3,8 +3,8 @@ interactions:
       body:
         '{"messages":[{"role":"system","content":[{"type":"text","text":"You are
         a helpful assistant that can read books."}]},{"role":"user","content":[{"type":"text","text":"Hello,
-        read book ''the great gatsby''"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
-        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
+        read book ''the great gatsby''"}]}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters": {"additionalProperties": false, "properties":{},"title":"Input
+        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters": {"additionalProperties": false, "properties":{"book_name":{"title":"Book
         Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
       headers:
         content-type:
@@ -61,8 +61,8 @@ interactions:
         \"the great gatsby\"}"}}]},{"role":"tool","tool_call_id":"call_tABYaKifOP7V0Z8whruPFlnP","content":[{"type":"text","text":"Traceback
         (most recent call last):\n  File \"/Users/smileos/Workspaces/catalys/agentlys/tests/test_calls_function.py\",
         line 17, in read_book\n    return BOOKS[book_name]\n           ~~~~~^^^^^^^^^^^\n\nKeyError:
-        ''the great gatsby''"}],"name":"read_book"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters":{"properties":{},"title":"Input
-        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters":{"properties":{"book_name":{"title":"Book
+        ''the great gatsby''"}],"name":"read_book"}],"model":"gpt-4o","tools":[{"type":"function","function":{"name":"list_books","description":null,"parameters": {"additionalProperties": false, "properties":{},"title":"Input
+        for `list_books`","type":"object"}}},{"type":"function","function":{"name":"read_book","description":null,"parameters": {"additionalProperties": false, "properties":{"book_name":{"title":"Book
         Name","type":"string"}},"required":["book_name"],"title":"Input for `read_book`","type":"object"}}}]}'
       headers:
         content-type:

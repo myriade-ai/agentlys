@@ -4,9 +4,9 @@ interactions:
       "text", "text": "First calculate 1 + 2, then process the result", "cache_control":
       {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest", "tools": [{"name":
       "async_calculator", "description": "No description provided", "input_schema":
-      {"properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title":
+      {"additionalProperties": false, "properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title":
       "Input for `async_calculator`", "type": "object"}}, {"name": "async_data_processor",
-      "description": "No description provided", "input_schema": {"properties": {"kwargs":
+      "description": "No description provided", "input_schema": {"additionalProperties": false, "properties": {"kwargs":
       {"title": "Kwargs"}}, "required": ["kwargs"], "title": "Input for `async_data_processor`",
       "type": "object"}, "cache_control": {"type": "ephemeral"}}]}'
     headers:
@@ -59,10 +59,10 @@ interactions:
       {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_019jQhsj6vvi41wpWhwofqWH",
       "content": "0", "cache_control": {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest",
       "tools": [{"name": "async_calculator", "description": "No description provided",
-      "input_schema": {"properties": {"kwargs": {"title": "Kwargs"}}, "required":
+      "input_schema": {"additionalProperties": false, "properties": {"kwargs": {"title": "Kwargs"}}, "required":
       ["kwargs"], "title": "Input for `async_calculator`", "type": "object"}}, {"name":
       "async_data_processor", "description": "No description provided", "input_schema":
-      {"properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title":
+      {"additionalProperties": false, "properties": {"kwargs": {"title": "Kwargs"}}, "required": ["kwargs"], "title":
       "Input for `async_data_processor`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'
     headers:
@@ -118,10 +118,10 @@ interactions:
       "content": [{"type": "tool_result", "tool_use_id": "toolu_01KrkPpcKuhkCcXy7HL3w7t5",
       "content": "{\"result\": \"processed data\"}", "cache_control": {"type": "ephemeral"}}]}],
       "model": "claude-3-7-sonnet-latest", "tools": [{"name": "async_calculator",
-      "description": "No description provided", "input_schema": {"properties": {"kwargs":
+      "description": "No description provided", "input_schema": {"additionalProperties": false, "properties": {"kwargs":
       {"title": "Kwargs"}}, "required": ["kwargs"], "title": "Input for `async_calculator`",
       "type": "object"}}, {"name": "async_data_processor", "description": "No description
-      provided", "input_schema": {"properties": {"kwargs": {"title": "Kwargs"}}, "required":
+      provided", "input_schema": {"additionalProperties": false, "properties": {"kwargs": {"title": "Kwargs"}}, "required":
       ["kwargs"], "title": "Input for `async_data_processor`", "type": "object"},
       "cache_control": {"type": "ephemeral"}}]}'
     headers:

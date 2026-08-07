@@ -5,7 +5,7 @@ interactions:
       {"type": "ephemeral"}}]}], "model": "claude-3-7-sonnet-latest", "system": [{"type":
       "text", "text": "You are a helpful assistant that can call functions.", "cache_control":
       {"type": "ephemeral"}}], "tools": [{"name": "function_returning_none", "description":
-      "A simple function that returns None.", "input_schema": {"properties": {}, "title":
+      "A simple function that returns None.", "input_schema": {"additionalProperties": false, "properties": {}, "title":
       "Input for `function_returning_none`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'
     headers:
@@ -61,7 +61,7 @@ interactions:
       "model": "claude-3-7-sonnet-latest", "system": [{"type": "text", "text": "You
       are a helpful assistant that can call functions.", "cache_control": {"type":
       "ephemeral"}}], "tools": [{"name": "function_returning_none", "description":
-      "A simple function that returns None.", "input_schema": {"properties": {}, "title":
+      "A simple function that returns None.", "input_schema": {"additionalProperties": false, "properties": {}, "title":
       "Input for `function_returning_none`", "type": "object"}, "cache_control": {"type":
       "ephemeral"}}]}'
     headers:
