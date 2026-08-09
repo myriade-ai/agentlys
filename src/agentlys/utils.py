@@ -61,6 +61,25 @@ def limit_data_size(
     return result_data
 
 
+def _dump_rows_csv(rows: list[dict]) -> str:
+    # Use the union of keys across rows: heterogeneous dicts are a routine
+    # shape for query results, and DictWriter raises on keys missing from
+    # fieldnames.
+    header = []
+    seen_keys = set()
+    for row in rows:
+        for key in row:
+            if key not in seen_keys:
+                seen_keys.add(key)
+                header.append(key)
+    with StringIO() as output:
+        writer = csv.DictWriter(output, fieldnames=header, restval="")
+        writer.writeheader()
+        writer.writerows(rows)
+        value = output.getvalue().strip()
+    return value.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def csv_dumps(data: list[dict], character_limit: typing.Optional[int] = None) -> str:
     # Dumps to CSV, with header row
     if not data:
@@ -74,22 +93,18 @@ def csv_dumps(data: list[dict], character_limit: typing.Optional[int] = None) ->
     else:
         limited_data = data
 
-    # Use the union of keys across rows: heterogeneous dicts are a routine
-    # shape for query results, and DictWriter raises on keys missing from
-    # fieldnames.
-    header = []
-    seen_keys = set()
-    for row in limited_data:
-        for key in row:
-            if key not in seen_keys:
-                seen_keys.add(key)
-                header.append(key)
-    with StringIO() as output:
-        writer = csv.DictWriter(output, fieldnames=header, restval="")
-        writer.writeheader()
-        writer.writerows(limited_data)
-        output = output.getvalue().strip()
-        output = output.replace("\r\n", "\n").replace("\r", "\n")
+    output = _dump_rows_csv(limited_data)
+
+    if character_limit:
+        # limit_data_size only counts populated key/value pairs, but the union
+        # header pads every row with one cell per column: rows with mostly
+        # disjoint keys can blow past the limit after serialization. Drop rows
+        # until the CSV fits.
+        while len(output) > character_limit and len(limited_data) > 1:
+            limited_data = limited_data[: len(limited_data) // 2]
+            output = _dump_rows_csv(limited_data)
+        if len(output) > character_limit:
+            return "Error: Too many fields to display data within the character limit."
 
     csv_content = f"```csv\n{output}\n```"
 
@@ -329,6 +344,9 @@ def _parse_docstring(func_name, docstring, signature_params):
                 f"{line!r} in the Args block to a parameter; it is ignored.",
                 stacklevel=3,
             )
+            # Lines indented under an unattributable line (eg an unknown
+            # subsection) must not leak into the previous parameter either
+            current_param = None
 
     description = " ".join(description_lines) if description_lines else None
     return description, param_descriptions

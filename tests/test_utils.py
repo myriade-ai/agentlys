@@ -62,6 +62,15 @@ class TestCsvDumps(unittest.TestCase):
         expected = "```csv\na,b,c\n1,,\n,2,3\n```"
         self.assertEqual(output, expected)
 
+    def test_disjoint_keys_respect_character_limit(self):
+        # The union header pads every row with one cell per column, so rows
+        # with mostly disjoint keys can exceed the limit after serialization
+        data = [{f"key{i}": "v"} for i in range(200)]
+        output = csv_dumps(data, character_limit=1000)
+        self.assertLessEqual(len(output), 1200)
+        self.assertTrue(output.startswith("```csv"))
+        self.assertIn("rows displayed", output)
+
 
 plot_widget = """
 > PLOT_WIDGET(
@@ -326,6 +335,17 @@ def function_with_stray_args_line(a: int):
     return a
 
 
+def function_with_unknown_subsection(a: int):
+    """Adds things.
+
+    Args:
+        a: The first number.
+        See Also:
+            unrelated body that must not leak into the description
+    """
+    return a
+
+
 class TestInspectSchema(unittest.TestCase):
     maxDiff = None
 
@@ -479,6 +499,14 @@ class TestInspectSchema(unittest.TestCase):
         with self.assertWarns(UserWarning) as ctx:
             result = inspect_schema(function_with_stray_args_line)
         self.assertIn("stray line", str(ctx.warning))
+        self.assertEqual(
+            result["parameters"]["properties"]["a"]["description"],
+            "The first number.",
+        )
+
+    def test_unknown_subsection_does_not_leak_into_previous_param(self):
+        with self.assertWarns(UserWarning):
+            result = inspect_schema(function_with_unknown_subsection)
         self.assertEqual(
             result["parameters"]["properties"]["a"]["description"],
             "The first number.",
