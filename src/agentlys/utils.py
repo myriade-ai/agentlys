@@ -2,7 +2,9 @@ import ast
 import asyncio
 import csv
 import inspect
+import re
 import typing
+import warnings
 from inspect import Parameter
 from io import StringIO
 from typing import Any
@@ -72,9 +74,18 @@ def csv_dumps(data: list[dict], character_limit: typing.Optional[int] = None) ->
     else:
         limited_data = data
 
-    header = list(data[0].keys())
+    # Use the union of keys across rows: heterogeneous dicts are a routine
+    # shape for query results, and DictWriter raises on keys missing from
+    # fieldnames.
+    header = []
+    seen_keys = set()
+    for row in limited_data:
+        for key in row:
+            if key not in seen_keys:
+                seen_keys.add(key)
+                header.append(key)
     with StringIO() as output:
-        writer = csv.DictWriter(output, fieldnames=header)
+        writer = csv.DictWriter(output, fieldnames=header, restval="")
         writer.writeheader()
         writer.writerows(limited_data)
         output = output.getvalue().strip()
@@ -235,36 +246,108 @@ class OmitClassJsonSchema(GenerateJsonSchema):
         raise PydanticOmit
 
 
+# Google-style Args entry: `name: description` or `name (type): description`
+_ARGS_PARAM_RE = re.compile(r"^(\*{0,2}\w+)\s*(?:\([^)]*\))?\s*:\s*(.*)$")
+
+# Section headers that end the Args block when they appear where a new
+# parameter entry would be expected.
+_DOCSTRING_SECTIONS = frozenset(
+    [
+        "returns",
+        "return",
+        "raises",
+        "yields",
+        "yield",
+        "examples",
+        "example",
+        "note",
+        "notes",
+        "attributes",
+    ]
+)
+
+
+def _parse_docstring(func_name, docstring, signature_params):
+    """Extract (description, param_descriptions) from a Google-style docstring.
+
+    The Args block is parsed indentation-aware: a line indented deeper than
+    the parameter entry it follows is accumulated into that parameter's
+    description. `(type)` suffixes are stripped from parameter names, and
+    names are validated against the function signature — a documented
+    parameter missing from the signature (or an unattributable line) emits
+    a warning instead of silently corrupting the schema.
+    """
+    description_lines = []
+    param_descriptions = {}
+    in_args = False
+    current_param = None  # parameter whose description is being accumulated
+    current_indent = 0
+
+    for raw_line in inspect.cleandoc(docstring).split("\n"):
+        line = raw_line.strip()
+        if not in_args:
+            if line.lower().startswith("args:"):
+                in_args = True
+            elif line:  # Only add non-empty lines to description
+                description_lines.append(line)
+            continue
+
+        if not line:
+            break
+        indent = len(raw_line) - len(raw_line.lstrip())
+        if current_param is not None and indent > current_indent:
+            # Indented continuation line of the current parameter entry
+            if current_param in param_descriptions:
+                param_descriptions[current_param] = (
+                    param_descriptions[current_param] + " " + line
+                ).strip()
+            continue
+
+        match = _ARGS_PARAM_RE.match(line)
+        if match:
+            param_name, param_desc = match.groups()
+            lookup_name = param_name.lstrip("*")
+            if lookup_name in signature_params:
+                current_param = lookup_name
+                current_indent = indent
+                param_descriptions[lookup_name] = param_desc.strip()
+                continue
+            if param_name.lower() in _DOCSTRING_SECTIONS:
+                break  # End of the Args block (Returns:, Raises:, ...)
+            warnings.warn(
+                f"Docstring of `{func_name}` documents parameter "
+                f"'{param_name}' which is not in the function signature; "
+                "it is ignored.",
+                stacklevel=3,
+            )
+            # Consume its continuation lines without attributing them
+            current_param = param_name
+            current_indent = indent
+        else:
+            warnings.warn(
+                f"Docstring of `{func_name}`: cannot attribute line "
+                f"{line!r} in the Args block to a parameter; it is ignored.",
+                stacklevel=3,
+            )
+
+    description = " ".join(description_lines) if description_lines else None
+    return description, param_descriptions
+
+
 def inspect_schema(f):
     kw = {}
     param_descriptions = {}
+    signature = inspect.signature(f)
 
     # Parse docstring and clean up the description
     description = None
     if f.__doc__:
-        doc_lines = f.__doc__.split("\n")
-        description_lines = []
-        in_args = False
-
-        for line in doc_lines:
-            line = line.strip()
-            if line.lower().startswith("args:"):
-                in_args = True
-                continue
-            if in_args:
-                if not line or line.lower().startswith("returns:"):
-                    break
-                if ":" in line:
-                    param_name, param_desc = line.split(":", 1)
-                    param_descriptions[param_name.strip()] = param_desc.strip()
-            else:
-                if line:  # Only add non-empty lines to description
-                    description_lines.append(line)
-
-        description = " ".join(description_lines) if description_lines else None
+        description, param_descriptions = _parse_docstring(
+            f.__name__, f.__doc__, set(signature.parameters)
+        )
 
     # Get function parameters
-    for n, o in inspect.signature(f).parameters.items():
+    for n, o in signature.parameters.items():
         # Skip 'self' parameter and 'from_response' parameter
         if n in ["self", "from_response"]:
             continue

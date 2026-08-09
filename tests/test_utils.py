@@ -1,4 +1,5 @@
 import unittest
+import warnings
 
 from pydantic import BaseModel
 
@@ -55,6 +56,11 @@ class TestCsvDumps(unittest.TestCase):
         output = csv_dumps([row], character_limit=20)
         self.assertIsInstance(output, str)
         self.assertIn("character limit", output)
+
+    def test_heterogeneous_dicts_use_union_of_keys(self):
+        output = csv_dumps([{"a": 1}, {"b": 2, "c": 3}])
+        expected = "```csv\na,b,c\n1,,\n,2,3\n```"
+        self.assertEqual(output, expected)
 
 
 plot_widget = """
@@ -267,6 +273,59 @@ def function_with_class_inherited_from_base_model(
     return a
 
 
+def function_with_multiline_param_description(query: str, limit: int = 10):
+    """Run a SQL query.
+
+    Args:
+        query: The SQL query to execute.
+            Only a single statement is allowed;
+            multiple statements raise an error.
+        limit: Maximum number of rows returned.
+    Returns:
+        The query results.
+    """
+    return query
+
+
+def function_with_colon_in_continuation(query: str):
+    """Run a SQL query.
+
+    Args:
+        query: The SQL query to execute.
+            Note: only SELECT statements are supported.
+    """
+    return query
+
+
+def function_with_type_suffix(count: int):
+    """Count things.
+
+    Args:
+        count (int): Number of items to count.
+    """
+    return count
+
+
+def function_with_unknown_param(a: int):
+    """Adds things.
+
+    Args:
+        a: The first number.
+        b: A parameter that does not exist in the signature.
+    """
+    return a
+
+
+def function_with_stray_args_line(a: int):
+    """Adds things.
+
+    Args:
+        a: The first number.
+    stray line that belongs to no parameter
+    """
+    return a
+
+
 class TestInspectSchema(unittest.TestCase):
     maxDiff = None
 
@@ -376,6 +435,62 @@ class TestInspectSchema(unittest.TestCase):
             },
         }
         self.assertEqual(result, expected)
+
+    def test_multiline_param_description_is_accumulated(self):
+        result = inspect_schema(function_with_multiline_param_description)
+        properties = result["parameters"]["properties"]
+        self.assertEqual(
+            properties["query"]["description"],
+            "The SQL query to execute. Only a single statement is allowed; "
+            "multiple statements raise an error.",
+        )
+        self.assertEqual(
+            properties["limit"]["description"],
+            "Maximum number of rows returned.",
+        )
+
+    def test_continuation_line_with_colon_is_not_a_ghost_parameter(self):
+        result = inspect_schema(function_with_colon_in_continuation)
+        properties = result["parameters"]["properties"]
+        self.assertEqual(list(properties), ["query"])
+        self.assertEqual(
+            properties["query"]["description"],
+            "The SQL query to execute. Note: only SELECT statements are supported.",
+        )
+
+    def test_type_suffix_is_stripped_from_parameter_name(self):
+        result = inspect_schema(function_with_type_suffix)
+        self.assertEqual(
+            result["parameters"]["properties"]["count"]["description"],
+            "Number of items to count.",
+        )
+
+    def test_documented_parameter_missing_from_signature_warns(self):
+        with self.assertWarns(UserWarning) as ctx:
+            result = inspect_schema(function_with_unknown_param)
+        self.assertIn("'b'", str(ctx.warning))
+        self.assertNotIn("b", result["parameters"]["properties"])
+        self.assertEqual(
+            result["parameters"]["properties"]["a"]["description"],
+            "The first number.",
+        )
+
+    def test_unattributable_args_line_warns(self):
+        with self.assertWarns(UserWarning) as ctx:
+            result = inspect_schema(function_with_stray_args_line)
+        self.assertIn("stray line", str(ctx.warning))
+        self.assertEqual(
+            result["parameters"]["properties"]["a"]["description"],
+            "The first number.",
+        )
+
+    def test_correct_docstrings_do_not_warn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            inspect_schema(sums)
+            inspect_schema(function_with_description_and_default_value)
+            inspect_schema(function_with_from_response)
+            inspect_schema(function_with_multiline_param_description)
 
     def test_inspect_schema_with_class_inherited_from_base_model(self):
         result = inspect_schema(function_with_class_inherited_from_base_model)
