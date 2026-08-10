@@ -888,7 +888,9 @@ class Agentlys(AgentlysBase):
                         + f"\n... ({len(formatted_content)} characters)"
                     )
         elif isinstance(content, dict):
-            content_dump = json.dumps(content)
+            # default=str: tool results routinely carry values json doesn't
+            # know (Decimal, datetime, UUID, ...); stringify instead of crashing
+            content_dump = json.dumps(content, default=str)
             if len(content_dump) > OUTPUT_SIZE_LIMIT:
                 formatted_content = (
                     content_dump[:OUTPUT_SIZE_LIMIT]
@@ -943,6 +945,37 @@ class Agentlys(AgentlysBase):
             )
 
         return Message(name=function_name, role="function", parts=[part])
+
+    def _format_callback_message_safe(
+        self, function_name, function_call_id, content, image
+    ):
+        """Format a tool result under the same error boundary as tool execution.
+
+        Formatting runs after _execute_single_tool's try/except, so a return
+        value that can't be formatted must become an error function_result the
+        model can react to — not an exception that kills the whole turn.
+        """
+        try:
+            return self._format_callback_message(
+                function_name=function_name,
+                function_call_id=function_call_id,
+                content=content,
+                image=image,
+            )
+        except StopLoopException:
+            raise
+        except Exception as e:
+            return Message(
+                name=function_name,
+                role="function",
+                parts=[
+                    MessagePart(
+                        type="function_result",
+                        content=self._format_exception(e),
+                        function_call_id=function_call_id,
+                    )
+                ],
+            )
 
     def _format_exception(self, e):
         # We clean the traceback to remove frames from __init__.py, plus the
@@ -1130,7 +1163,7 @@ class Agentlys(AgentlysBase):
                 continue
 
             function_call_id, function_name, content, image = result
-            formatted_msg = self._format_callback_message(
+            formatted_msg = self._format_callback_message_safe(
                 function_name=function_name,
                 function_call_id=function_call_id,
                 content=content,
@@ -1194,7 +1227,7 @@ class Agentlys(AgentlysBase):
                     continue
 
                 function_call_id, function_name, content, image = result
-                formatted_msg = self._format_callback_message(
+                formatted_msg = self._format_callback_message_safe(
                     function_name=function_name,
                     function_call_id=function_call_id,
                     content=content,
