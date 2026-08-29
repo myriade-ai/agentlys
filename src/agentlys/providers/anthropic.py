@@ -125,6 +125,15 @@ def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
     return optional_properties, unions
 
 
+def _canonical_key_order(value):
+    """Rebuild dicts with sorted keys, recursively.  List order is preserved."""
+    if isinstance(value, dict):
+        return {key: _canonical_key_order(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_canonical_key_order(item) for item in value]
+    return value
+
+
 def part_to_anthropic_dict(part: MessagePart) -> dict:
     if part.type == "text":
         return {
@@ -182,7 +191,13 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "type": "tool_use",
             "id": part.function_call_id,
             "name": part.function_call["name"],
-            "input": part.function_call["arguments"],
+            # Canonical key order.  A caller that round-trips its history
+            # through a store which reorders object keys — Postgres jsonb sorts
+            # them by length then bytewise — would otherwise serialize a
+            # reloaded tool call differently from the live one and lose the
+            # cached prefix from that message on.  Key order carries no
+            # meaning in JSON, so imposing one costs nothing.
+            "input": _canonical_key_order(part.function_call["arguments"]),
         }
     elif part.type == "function_result_image":
         if part.image is None:

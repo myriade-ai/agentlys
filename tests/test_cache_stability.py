@@ -211,6 +211,32 @@ def _storage_roundtrip(messages):
     return rebuilt
 
 
+class TestToolCallSerialization(unittest.TestCase):
+    def test_tool_use_input_keys_are_in_canonical_order(self):
+        from agentlys.providers.anthropic import part_to_anthropic_dict
+
+        part = MessagePart(
+            type="function_call",
+            function_call={
+                "name": "sql_query",
+                "arguments": {
+                    "query": "select 1",
+                    "database_id": 3,
+                    "a": [{"z": 1, "b": 2}],
+                },
+                "id": "t1",
+            },
+            function_call_id="t1",
+        )
+
+        block = part_to_anthropic_dict(part)
+
+        # A store that reorders object keys (Postgres jsonb) must not change
+        # the bytes of a reloaded tool call.
+        self.assertEqual(list(block["input"]), ["a", "database_id", "query"])
+        self.assertEqual(list(block["input"]["a"][0]), ["b", "z"])
+
+
 class TestCrossTurnStability(unittest.TestCase):
     """A reloaded conversation must serialize exactly as it was sent."""
 
@@ -587,10 +613,20 @@ if __name__ == "__main__":
 def test_auto_strict_skips_schemas_with_nested_open_objects():
     from agentlys.providers.anthropic import _schema_is_closed
 
-    closed = {"type": "object", "additionalProperties": False,
-              "properties": {"a": {"type": "object", "additionalProperties": False}}}
-    nested_open = {"type": "object", "additionalProperties": False,
-                   "properties": {"pipeline": {"type": "array",
-                                               "items": {"type": "object", "additionalProperties": True}}}}
+    closed = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"a": {"type": "object", "additionalProperties": False}},
+    }
+    nested_open = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "pipeline": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            }
+        },
+    }
     assert _schema_is_closed(closed)
     assert not _schema_is_closed(nested_open)
