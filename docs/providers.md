@@ -315,6 +315,60 @@ anthropic_agent = Agentlys(
 )
 ```
 
+### Prompt Caching, Effort and Debugging (Anthropic)
+
+The Anthropic provider places its four cache breakpoints on the last system
+block, the last non-deferred tool, `messages[-3]` and `messages[-1]`. The TTL
+of those breakpoints, the reasoning effort and a cache debug trace are
+configurable — every one of them is off/default unless set:
+
+| Setting | Env var | Constructor | Values | Default |
+|---|---|---|---|---|
+| System + tools cache TTL | `AGENTLYS_CACHE_TTL` | `cache_ttl` | `5m`, `1h` | `5m` |
+| Message cache TTL | `AGENTLYS_CACHE_TTL_MESSAGES` | `cache_ttl_messages` | `5m`, `1h` | same as `cache_ttl` |
+| 1h-cache beta header | `AGENTLYS_CACHE_TTL_BETA` | — | `1`, `0` | `1` (sent only when a 1h TTL is used) |
+| Reasoning effort | `AGENTLYS_EFFORT` | `effort` | `low` … `max` | not sent |
+| Cache debug logs | `AGENTLYS_CACHE_DEBUG` | — | `1` | off |
+
+```python
+agent = Agentlys(
+    provider="anthropic",
+    model="claude-opus-5",
+    cache_ttl="1h",           # system + tools survive a 20-minute pause
+    cache_ttl_messages="5m",  # the conversation tail turns over fast anyway
+    effort="medium",          # per-call override: agent.ask(msg, effort="max")
+)
+```
+
+A 1-hour write costs 2x base input against 1.25x for 5 minutes, so it pays
+off only when requests sharing the prefix are more than 5 minutes apart — that
+is why the system/tools and message breakpoints are configured separately. The
+API also requires longer-lived entries to come first, so a 1h message TTL
+under a 5m system TTL is refused and clamped back to 5m with a warning.
+
+### Keeping the cache across turns (`load_messages`)
+
+Caching is a prefix match across turns too, not only within one tool loop. An
+assistant message that was *sent* with its thinking blocks and is later
+reloaded without them changes the prefix at that position, so the first call of
+each new question rewrites the whole conversation instead of reading it from
+cache. If your storage keeps `thinking` and `thinking_signature` verbatim, in
+their original order, opt in:
+
+```python
+agent.load_messages(messages, keep_thinking=True)
+```
+
+Blocks that lost their signature are dropped either way — the API rejects
+those. No model check is needed: regular thinking blocks are not origin-locked,
+the server renders them into the target model's prompt. The default stays
+`False`, which strips thinking from every reloaded assistant message.
+
+`AGENTLYS_CACHE_DEBUG=1` logs, at INFO on `agentlys.providers.anthropic`, the
+sha256 of the system blocks, of the tools array and of each message, plus the
+usage token counts of the response — enough to spot which section of the
+prefix drifted between two requests without patching the library.
+
 ## Error Handling
 
 Handle provider-specific errors gracefully:

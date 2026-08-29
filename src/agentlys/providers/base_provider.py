@@ -27,36 +27,49 @@ class BaseProvider(ABC):
         field, OpenAI's system messages).
 
         ``user_context`` (untrusted, user-provided content) is prepended to
-        the last user message so the model sees it as user input, not as
-        system instructions.
+        the FIRST user message of the conversation so the model sees it as
+        user input, not as system instructions.
+
+        Position matters for prompt caching: caching is a prefix match, so a
+        block that moves invalidates every message after its old position.
+        Anchoring it to the first user message keeps it in a slot that never
+        moves — across the iterations of a tool loop *and* across turns —
+        instead of hopping to each new human message and re-writing the
+        cached prefix from the previous turn onward.  A system block would be
+        equally stable but would give untrusted content system authority,
+        which is exactly what this indirection avoids.
         """
         all_messages = self.chat.examples + self.chat.messages
 
-        # Prepend user_context to the last user message.  Build a new
+        # Prepend user_context to the first user message.  Build a new
         # Message to avoid mutating the original (prepare_messages is
-        # called on every LLM round-trip within a tool loop).
-        if self.chat.user_context and all_messages:
-            last_user_idx = None
-            for i in range(len(all_messages) - 1, -1, -1):
-                if all_messages[i].role == "user":
-                    last_user_idx = i
+        # called on every LLM round-trip within a tool loop).  Examples are
+        # few-shot templates, so only real conversation messages qualify.
+        if self.chat.user_context and self.chat.messages:
+            offset = len(self.chat.examples)
+            first_user_idx = None
+            for i, message in enumerate(self.chat.messages):
+                if message.role == "user":
+                    first_user_idx = offset + i
                     break
 
-            if last_user_idx is not None:
-                orig = all_messages[last_user_idx]
-                context_part = MessagePart(
-                    type="text", content=self.chat.user_context
-                )
+            if first_user_idx is not None:
+                orig = all_messages[first_user_idx]
+                context_part = MessagePart(type="text", content=self.chat.user_context)
                 patched = Message(
                     role=orig.role,
                     name=orig.name,
                     id=orig.id,
                     parts=[context_part, *orig.parts],
                 )
+                # Rebuilding a Message drops every flag not passed to the
+                # constructor; is_live decides whether thinking blocks are
+                # replayed, so it has to travel with the parts.
+                patched.is_live = orig.is_live
                 all_messages = (
-                    all_messages[:last_user_idx]
+                    all_messages[:first_user_idx]
                     + [patched]
-                    + all_messages[last_user_idx + 1 :]
+                    + all_messages[first_user_idx + 1 :]
                 )
 
         messages = all_messages

@@ -145,6 +145,9 @@ class Agentlys(AgentlysBase):
         cancel_event: typing.Optional[asyncio.Event] = None,
         base_url: typing.Optional[str] = None,
         api_key: typing.Optional[str] = None,
+        cache_ttl: typing.Optional[str] = None,
+        cache_ttl_messages: typing.Optional[str] = None,
+        effort: typing.Optional[str] = None,
     ) -> None:
         """
         Initialize the Agentlys instance.
@@ -168,9 +171,29 @@ class Agentlys(AgentlysBase):
                 API key for the endpoint. Defaults to the AGENTLYS_API_KEY
                 environment variable, then the provider's own env var
                 (OPENAI_API_KEY / ANTHROPIC_API_KEY).
+            cache_ttl: Optional[str] = None,
+                Anthropic prompt-cache TTL for the system + tools
+                breakpoints: "5m" (default) or "1h". Defaults to the
+                AGENTLYS_CACHE_TTL environment variable.
+            cache_ttl_messages: Optional[str] = None,
+                Same, for the message breakpoints (a 1h write costs 2x base
+                input against 1.25x for 5m, so the conversation tail is
+                configured separately). Defaults to
+                AGENTLYS_CACHE_TTL_MESSAGES, then cache_ttl.
+            effort: Optional[str] = None,
+                output_config.effort: "low", "medium", "high", "xhigh" or
+                "max". Defaults to the AGENTLYS_EFFORT environment variable;
+                unset means the field is not sent at all.
         """
         self.provider, self.model = get_provider_and_model(
-            self, provider, model, base_url=base_url, api_key=api_key
+            self,
+            provider,
+            model,
+            base_url=base_url,
+            api_key=api_key,
+            cache_ttl=cache_ttl,
+            cache_ttl_messages=cache_ttl_messages,
+            effort=effort,
         )  # TODO: rename register ?
         self.simple_response_callback = simple_response_default_callback
         if use_tools_only:
@@ -306,14 +329,30 @@ class Agentlys(AgentlysBase):
             return None
         return self.messages[-1].content
 
+    def _capture_tools_states(self, message: typing.Optional[Message] = None):
+        """Freeze the tool states used by the system prompt for this turn.
+
+        Tool ``__llm__()`` values are live (row counts, background-filled
+        hints, today's date, ...), so recomputing them between the iterations
+        of one turn rewrites the system prompt and invalidates the whole
+        cached prefix mid-loop.  Capture once and reuse: a new human message
+        starts a new turn and takes a fresh snapshot, tool results (role
+        "function") keep the current one.  reset() / refresh_tools_states()
+        clear it explicitly.
+        """
+        if message is not None and getattr(message, "role", None) == "user":
+            self._initial_tools_states = None
+        if self._initial_tools_states is None:
+            self._initial_tools_states = self.initial_tools_states
+
     @property
     def initial_tools_states(self) -> typing.Optional[str]:
         """Captured tool states included in the system prompt.
 
-        Returns the cached snapshot if available, otherwise computes
-        from the current tools.  The value is captured once on the first
-        run_conversation call and stays static until reset() or
-        refresh_tools_states() is called.
+        Returns the snapshot taken for the current turn if there is one,
+        otherwise computes from the current tools.  The snapshot is taken by
+        _capture_tools_states() on each new user message and stays static for
+        every iteration of that turn.
         """
         if self._initial_tools_states is not None:
             return self._initial_tools_states
@@ -397,7 +436,21 @@ class Agentlys(AgentlysBase):
             + "\n".join(lines)
         )
 
-    def load_messages(self, messages: list[Message]):
+    def load_messages(self, messages: list[Message], keep_thinking: bool = False):
+        """Restore a conversation from the caller's storage.
+
+        ``keep_thinking`` replays the stored thinking blocks instead of
+        dropping them.  Anthropic's cache is a prefix match, so an assistant
+        message that is serialized without its thinking blocks after having
+        been *sent* with them changes the prefix at that point: every new
+        question then rewrites the whole conversation instead of reading it
+        from cache.  Regular thinking blocks are not origin-locked — the
+        server renders them into the target model's prompt, so replaying one
+        produced by another Claude model is safe — but a block whose
+        signature was lost in storage is rejected, so those are still
+        dropped.  Opt in only if you persist ``thinking`` and
+        ``thinking_signature`` byte-for-byte, in their original order.
+        """
         # If compaction checkpoints exist, only load from the latest one onward
         # (older messages were already summarized into the compaction message)
         latest_compaction_idx = None
@@ -408,14 +461,23 @@ class Agentlys(AgentlysBase):
         if latest_compaction_idx is not None:
             messages = messages[latest_compaction_idx:]
 
-        # Strip thinking blocks from loaded messages — they may have stale
-        # signatures from an older model version or be modified by DB
-        # serialization.  The Anthropic docs confirm omitting thinking from
-        # prior turns is safe.  Live tool-loop thinking is never loaded
-        # through this path (it's appended via self.messages.append).
         for msg in messages:
-            if msg.role == "assistant":
+            if msg.role != "assistant":
+                continue
+            if not keep_thinking:
+                # Default: drop them.  A caller that re-serializes thinking
+                # from storage may have lost the signature or the ordering,
+                # and the Anthropic docs confirm omitting thinking from prior
+                # turns is accepted.
                 msg.parts = [p for p in msg.parts if p.type != "thinking"]
+                continue
+            # A thinking block needs its signature — send one without and the
+            # API rejects the request.
+            msg.parts = [
+                p for p in msg.parts if p.type != "thinking" or p.thinking_signature
+            ]
+            # Tell the provider these blocks are replayable as-is.
+            msg.is_live = any(p.type == "thinking" for p in msg.parts)
 
         # Remove messages that became empty after thinking block removal
         # (e.g. assistant messages that contained only thinking parts)
@@ -816,6 +878,8 @@ class Agentlys(AgentlysBase):
 
         if message:
             self.messages.append(message)
+
+        self._capture_tools_states(message)
 
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
@@ -1250,10 +1314,6 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
-        # Capture tool states once on first run; stays static across all subsequent runs
-        if self._initial_tools_states is None:
-            self._initial_tools_states = self.initial_tools_states
-
         for _ in range(self.max_interactions):
             self._check_cancel()
             # Ask the LLM with the current message (if any)
@@ -1313,6 +1373,8 @@ class Agentlys(AgentlysBase):
         if message:
             self.messages.append(message)
 
+        self._capture_tools_states(message)
+
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
             if chunk["type"] == "message":
@@ -1343,10 +1405,6 @@ class Agentlys(AgentlysBase):
             yield {"type": "user", "message": message}
         else:
             message = question
-
-        # Capture tool states once on first run; stays static across all subsequent runs
-        if self._initial_tools_states is None:
-            self._initial_tools_states = self.initial_tools_states
 
         for _ in range(self.max_interactions):
             self._check_cancel()

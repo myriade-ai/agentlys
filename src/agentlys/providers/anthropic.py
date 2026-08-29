@@ -1,3 +1,6 @@
+import hashlib
+import json
+import logging
 import os
 
 import anthropic
@@ -8,6 +11,52 @@ from agentlys.providers.utils import (
     add_empty_function_result,
     drop_orphaned_function_results,
 )
+
+logger = logging.getLogger(__name__)
+
+# Prompt-cache TTLs supported by the API. "5m" is the API default and is
+# emitted as a bare {"type": "ephemeral"} so requests stay byte-identical to
+# the pre-TTL behaviour when nothing is configured.
+_VALID_CACHE_TTLS = ("5m", "1h")
+_EXTENDED_TTL_BETA = "extended-cache-ttl-2025-04-11"
+
+# output_config.effort levels. Unset means "don't send", i.e. the model's
+# own default.
+_VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _resolve_cache_ttl(value: str | None, env_var: str, default: str) -> str:
+    ttl = value or os.getenv(env_var) or default
+    if ttl not in _VALID_CACHE_TTLS:
+        raise ValueError(
+            f"Invalid cache TTL {ttl!r} (from {env_var} or constructor): "
+            f"expected one of {_VALID_CACHE_TTLS}"
+        )
+    return ttl
+
+
+def _cache_control(ttl: str) -> dict:
+    """Build a cache_control block for the given TTL.
+
+    The 5-minute TTL is the API default, so it is emitted without an explicit
+    ``ttl`` key — that keeps the request bytes identical to what previous
+    versions sent, and to what any already-warm cache entry was written with.
+    """
+    if ttl == "1h":
+        return {"type": "ephemeral", "ttl": "1h"}
+    return {"type": "ephemeral"}
+
+
+def _resolve_effort(value: str | None) -> str | None:
+    effort = value or os.getenv("AGENTLYS_EFFORT") or None
+    if effort is not None and effort not in _VALID_EFFORTS:
+        raise ValueError(f"Invalid effort {effort!r}: expected one of {_VALID_EFFORTS}")
+    return effort
+
+
+def _sha(payload) -> str:
+    dump = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(dump.encode("utf-8")).hexdigest()[:16]
 
 
 # Anthropic strict tool use relies on structured outputs and is only available
@@ -29,7 +78,27 @@ _STRICT_TOOL_MODEL_PREFIXES = (
 
 
 def _supports_strict_tool_use(model: str) -> bool:
+    # AGENTLYS_STRICT_TOOLS=0 disables auto-strict entirely (e.g. to mirror a
+    # proxy deployment where the model is a logical role and strict never fires).
+    if os.getenv("AGENTLYS_STRICT_TOOLS", "1") in ("0", "false", "no"):
+        return False
     return model.lower().startswith(_STRICT_TOOL_MODEL_PREFIXES)
+
+
+def _schema_is_closed(schema) -> bool:
+    """True iff no object in the schema tree allows additional properties.
+
+    Anthropic rejects ``strict: true`` tools whose nested objects carry
+    ``additionalProperties: true`` (400 "not supported"), so auto-strict must
+    look past the top level.
+    """
+    if isinstance(schema, dict):
+        if schema.get("additionalProperties") is True:
+            return False
+        return all(_schema_is_closed(v) for v in schema.values())
+    if isinstance(schema, list):
+        return all(_schema_is_closed(v) for v in schema)
+    return True
 
 
 def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
@@ -54,6 +123,15 @@ def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
 
     visit(schema)
     return optional_properties, unions
+
+
+def _canonical_key_order(value):
+    """Rebuild dicts with sorted keys, recursively.  List order is preserved."""
+    if isinstance(value, dict):
+        return {key: _canonical_key_order(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_canonical_key_order(item) for item in value]
+    return value
 
 
 def part_to_anthropic_dict(part: MessagePart) -> dict:
@@ -113,7 +191,13 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
             "type": "tool_use",
             "id": part.function_call_id,
             "name": part.function_call["name"],
-            "input": part.function_call["arguments"],
+            # Canonical key order.  A caller that round-trips its history
+            # through a store which reorders object keys — Postgres jsonb sorts
+            # them by length then bytewise — would otherwise serialize a
+            # reloaded tool call differently from the live one and lose the
+            # cached prefix from that message on.  Key order carries no
+            # meaning in JSON, so imposing one costs nothing.
+            "input": _canonical_key_order(part.function_call["arguments"]),
         }
     elif part.type == "function_result_image":
         if part.image is None:
@@ -180,8 +264,21 @@ def message_to_anthropic_dict(message: Message) -> dict:
         "content": [],
     }
 
+    # Thinking blocks are replayed only for messages flagged is_live: those
+    # this process received from the API, and those a caller restored
+    # byte-for-byte through load_messages(keep_thinking=True).  Replaying them
+    # is what keeps the cached prefix intact — dropping a block rewrites the
+    # assistant message it belongs to, invalidating the cache from there on,
+    # within a tool loop and across turns alike.  Anything else rebuilt from
+    # storage is stripped: a re-serialized block may have lost its signature
+    # or its position, and the docs confirm omitting thinking from prior turns
+    # is accepted.
+    keep_thinking = getattr(message, "is_live", False)
+
     for part in message.parts:
         if part.type == "text" and (not part.content or not part.content.strip()):
+            continue
+        if part.type == "thinking" and not keep_thinking:
             continue
         res["content"].append(part_to_anthropic_dict(part))
 
@@ -199,6 +296,9 @@ class AnthropicProvider(BaseProvider):
         max_tokens: int | None = None,
         base_url: str | None = None,
         api_key: str | None = None,
+        cache_ttl: str | None = None,
+        cache_ttl_messages: str | None = None,
+        effort: str | None = None,
     ):
         self.model = model
         env_host = os.getenv("AGENTLYS_HOST")
@@ -209,59 +309,25 @@ class AnthropicProvider(BaseProvider):
         )
         self.chat = chat
         self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
-
-    @staticmethod
-    def _strip_thinking_from_prior_turns(messages: list[dict]) -> list[dict]:
-        """Strip thinking/redacted_thinking blocks from assistant messages.
-
-        Anthropic's thinking signatures are cryptographic proofs tied to the
-        model version that generated them.  When the model is upgraded, old
-        signatures become invalid and the API returns 400.  The docs confirm
-        it is safe to omit thinking blocks from prior assistant turns.
-
-        The last assistant message's thinking is only preserved when followed
-        by a tool_result (active tool-use loop), since in that case the
-        thinking was just generated by the current model.  Otherwise it is
-        also stripped (e.g. conversation resumed from DB after a model upgrade).
-        """
-
-        def _has_tool_result_after(idx: int) -> bool:
-            """Check if the message after idx contains a tool_result."""
-            next_idx = idx + 1
-            if next_idx >= len(messages):
-                return False
-            next_content = messages[next_idx].get("content")
-            if not isinstance(next_content, list):
-                return False
-            return any(block.get("type") == "tool_result" for block in next_content)
-
-        # Find the index of the last assistant message
-        last_assistant_idx = None
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i].get("role") == "assistant":
-                last_assistant_idx = i
-                break
-
-        if last_assistant_idx is None:
-            return messages
-
-        result = []
-        for i, msg in enumerate(messages):
-            if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
-                # Preserve thinking only on the last assistant when a tool
-                # loop is pending (next message is a tool_result).
-                if i == last_assistant_idx and _has_tool_result_after(i):
-                    result.append(msg)
-                else:
-                    filtered_content = [
-                        block
-                        for block in msg["content"]
-                        if block.get("type") not in ("thinking", "redacted_thinking")
-                    ]
-                    result.append({**msg, "content": filtered_content})
-            else:
-                result.append(msg)
-        return result
+        # System + tools breakpoints, then the message breakpoints.  They are
+        # configured separately because a 1h write costs 2x base input against
+        # 1.25x for 5m: the system/tools prefix is worth the premium far more
+        # often than the conversation tail is.
+        self.cache_ttl = _resolve_cache_ttl(cache_ttl, "AGENTLYS_CACHE_TTL", "5m")
+        self.cache_ttl_messages = _resolve_cache_ttl(
+            cache_ttl_messages, "AGENTLYS_CACHE_TTL_MESSAGES", self.cache_ttl
+        )
+        if self.cache_ttl_messages == "1h" and self.cache_ttl == "5m":
+            # The API requires longer-TTL entries to come first, and tools +
+            # system are always rendered before messages.
+            logger.warning(
+                "AGENTLYS_CACHE_TTL_MESSAGES=1h needs AGENTLYS_CACHE_TTL=1h "
+                "(longer-lived cache entries must come first); using 5m for "
+                "the message breakpoints."
+            )
+            self.cache_ttl_messages = "5m"
+        self.effort = _resolve_effort(effort)
+        self.cache_debug = os.getenv("AGENTLYS_CACHE_DEBUG") == "1"
 
     @staticmethod
     def _merge_same_role_messages(messages: list[dict]) -> list[dict]:
@@ -343,6 +409,7 @@ class AnthropicProvider(BaseProvider):
                 explicit_strict is None
                 and supports_strict
                 and input_schema.get("additionalProperties") is False
+                and _schema_is_closed(input_schema)
             )
             optional_properties, unions = _strict_schema_complexity(input_schema)
             within_limits = (
@@ -381,11 +448,10 @@ class AnthropicProvider(BaseProvider):
             if text:
                 blocks.append({"type": "text", "text": text})
         if blocks:
-            blocks[-1]["cache_control"] = {"type": "ephemeral"}
+            blocks[-1]["cache_control"] = _cache_control(self.cache_ttl)
         return blocks
 
-    @staticmethod
-    def _apply_cache_control(messages: list[dict], tools: list[dict]) -> None:
+    def _apply_cache_control(self, messages: list[dict], tools: list[dict]) -> None:
         """Place cache_control breakpoints on messages and tools (in place).
 
         Anthropic's prompt caching uses up to 4 breakpoints per request.
@@ -400,6 +466,8 @@ class AnthropicProvider(BaseProvider):
         re-caching the entire message history on every iteration.
         """
 
+        message_cache_control = _cache_control(self.cache_ttl_messages)
+
         def _set_cache_control(msg_index):
             """Add cache_control to the last content block of messages[msg_index]."""
             msg = messages[msg_index]
@@ -408,13 +476,13 @@ class AnthropicProvider(BaseProvider):
                 and len(msg["content"]) > 0
                 and isinstance(msg["content"][-1], dict)
             ):
-                msg["content"][-1]["cache_control"] = {"type": "ephemeral"}
+                msg["content"][-1]["cache_control"] = dict(message_cache_control)
             elif isinstance(msg["content"], str):
                 msg["content"] = [
                     {
                         "type": "text",
                         "text": msg["content"],
-                        "cache_control": {"type": "ephemeral"},
+                        "cache_control": dict(message_cache_control),
                     }
                 ]
 
@@ -433,8 +501,62 @@ class AnthropicProvider(BaseProvider):
         # walk backward to the last eligible tool.
         for tool in reversed(tools):
             if not tool.get("defer_loading"):
-                tool["cache_control"] = {"type": "ephemeral"}
+                tool["cache_control"] = _cache_control(self.cache_ttl)
                 break
+
+    def _apply_extended_ttl_beta(self, kwargs: dict) -> None:
+        """Advertise the 1h-cache beta on the direct Anthropic path.
+
+        The 1-hour TTL is GA, but the beta flag is still accepted and is
+        required by older gateways.  Set AGENTLYS_CACHE_TTL_BETA=0 to skip it
+        (e.g. a proxy that rejects unknown betas).  Existing extra_headers —
+        the auth headers a proxy provider injects — are preserved.
+        """
+        if "1h" not in (self.cache_ttl, self.cache_ttl_messages):
+            return
+        if os.getenv("AGENTLYS_CACHE_TTL_BETA", "1") == "0":
+            return
+        headers = dict(kwargs.get("extra_headers") or {})
+        existing = headers.get("anthropic-beta", "")
+        betas = [b.strip() for b in existing.split(",") if b.strip()]
+        if _EXTENDED_TTL_BETA not in betas:
+            betas.append(_EXTENDED_TTL_BETA)
+        headers["anthropic-beta"] = ",".join(betas)
+        kwargs["extra_headers"] = headers
+
+    def _apply_effort(self, kwargs: dict) -> None:
+        """Send output_config.effort when configured.
+
+        Passed through extra_body so it works with SDK versions that predate
+        the typed `output_config` parameter.  A per-call ``effort=`` kwarg
+        (e.g. a higher effort for the final answer) wins over the provider
+        default; unset means the field is not sent at all.
+        """
+        effort = _resolve_effort(kwargs.pop("effort", None)) or self.effort
+        if not effort:
+            return
+        extra_body = dict(kwargs.get("extra_body") or {})
+        output_config = dict(extra_body.get("output_config") or {})
+        output_config.setdefault("effort", effort)
+        extra_body["output_config"] = output_config
+        kwargs["extra_body"] = extra_body
+
+    def _log_cache_debug(self, system_blocks, tools, messages) -> None:
+        """Log per-section hashes so prefix drift is visible without a patch."""
+        logger.info(
+            "agentlys cache request: system=%s tools=%s messages=%s",
+            _sha(system_blocks),
+            _sha(tools),
+            [_sha(m) for m in messages],
+        )
+
+    def _log_cache_usage(self, usage) -> None:
+        if not self.cache_debug or not usage:
+            return
+        logger.info(
+            "agentlys cache usage: %s",
+            {k: v for k, v in usage.items() if "token" in k},
+        )
 
     def _prepare_request_params(self, **kwargs):
         """Prepare messages, tools, and kwargs for Anthropic API request."""
@@ -444,8 +566,12 @@ class AnthropicProvider(BaseProvider):
                 drop_orphaned_function_results(x)
             ),
         )
+        # A message whose parts were all filtered out (an assistant turn
+        # holding nothing but a non-replayable thinking block, say) would go
+        # out as content=[], which the API rejects. Drop it before merging so
+        # its neighbours can still collapse into a single turn.
+        messages = [m for m in messages if m["content"]]
         messages = self._merge_same_role_messages(messages)
-        messages = self._strip_thinking_from_prior_turns(messages)
 
         tools = self._build_tools()
         self._apply_cache_control(messages, tools)
@@ -460,6 +586,12 @@ class AnthropicProvider(BaseProvider):
         # Add thinking config if set at class level and not already in kwargs
         if getattr(self.chat, "thinking", None) and "thinking" not in kwargs:
             kwargs["thinking"] = self.chat.thinking
+
+        self._apply_effort(kwargs)
+        self._apply_extended_ttl_beta(kwargs)
+
+        if self.cache_debug:
+            self._log_cache_debug(system_blocks, tools, messages)
 
         return messages, tools, kwargs
 
@@ -479,6 +611,7 @@ class AnthropicProvider(BaseProvider):
             content=res_dict["content"],
         )
         msg.usage = res_dict.get("usage")
+        self._log_cache_usage(msg.usage)
         return msg
 
     async def complete(
@@ -539,4 +672,5 @@ class AnthropicProvider(BaseProvider):
                 content=res_dict["content"],
             )
             final_message.usage = res_dict.get("usage")
+            self._log_cache_usage(final_message.usage)
             yield {"type": "message", "message": final_message}

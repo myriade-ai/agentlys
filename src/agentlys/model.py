@@ -135,6 +135,12 @@ class Message:
     parts: list[MessagePart]
     name: typing.Optional[str] = None
     id: typing.Optional[int] = None
+    # True when this message's thinking blocks may be replayed to the API
+    # verbatim: set by from_anthropic_dict (the process received them from the
+    # provider) and by load_messages(keep_thinking=True) (the caller restored
+    # them byte-for-byte from storage).  Messages rebuilt from storage
+    # otherwise keep the default, which is how providers know to strip them.
+    is_live: bool = False
 
     def __init__(
         self,
@@ -346,6 +352,18 @@ class Message:
 
     @classmethod
     def from_anthropic_dict(cls, **kwargs):
+        """Build a Message from an API response payload.
+
+        Messages built here were produced by the current model in this
+        process, so their thinking signatures are valid and are replayed
+        as-is (see ``is_live``).
+        """
+        message = cls._from_anthropic_dict(**kwargs)
+        message.is_live = True
+        return message
+
+    @classmethod
+    def _from_anthropic_dict(cls, **kwargs):
         role = kwargs.get("role")
         content = kwargs.get("content")
 
