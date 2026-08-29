@@ -62,6 +62,10 @@ class BaseProvider(ABC):
                     id=orig.id,
                     parts=[context_part, *orig.parts],
                 )
+                # Rebuilding a Message drops every flag not passed to the
+                # constructor; is_live decides whether thinking blocks are
+                # replayed, so it has to travel with the parts.
+                patched.is_live = orig.is_live
                 all_messages = (
                     all_messages[:first_user_idx]
                     + [patched]

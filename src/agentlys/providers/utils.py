@@ -187,12 +187,15 @@ def drop_orphaned_function_results(messages: list[Message]) -> list[Message]:
         # A message emptied by removing only-orphaned results is dropped; an
         # already-empty message is left untouched by the branch above.
         if kept_parts:
-            result.append(
-                Message(
-                    role=message.role,
-                    name=message.name,
-                    id=message.id,
-                    parts=kept_parts,
-                )
+            rebuilt = Message(
+                role=message.role,
+                name=message.name,
+                id=message.id,
+                parts=kept_parts,
             )
+            # Carry the replay flag over: stripping an orphaned tool result
+            # must not silently demote the message's thinking blocks, which
+            # would rewrite the assistant turn and break the cached prefix.
+            rebuilt.is_live = message.is_live
+            result.append(rebuilt)
     return result

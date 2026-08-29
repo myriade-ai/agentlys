@@ -606,6 +606,134 @@ class TestCacheDebug(unittest.TestCase):
         _prepare(agent)  # must not raise, must not log
 
 
+class TestIsLiveSurvivesRebuilds(unittest.TestCase):
+    """Every place that rebuilds a Message must carry ``is_live`` over.
+
+    ``Message.__init__`` does not take it, so a rebuild silently demotes the
+    message: its thinking blocks stop being replayed and the assistant turn
+    they belong to is rewritten, invalidating the cached prefix from there on.
+    """
+
+    def test_dropping_an_orphaned_result_keeps_thinking_replayable(self):
+        from agentlys.providers.anthropic import message_to_anthropic_dict
+        from agentlys.providers.utils import drop_orphaned_function_results
+
+        message = Message(
+            role="assistant",
+            parts=[
+                MessagePart(
+                    type="thinking", thinking="reasoned", thinking_signature="s1"
+                ),
+                MessagePart(type="text", content="answer"),
+                MessagePart(
+                    type="function_result", content="stale", function_call_id="gone"
+                ),
+            ],
+        )
+        message.is_live = True
+
+        kept = drop_orphaned_function_results([message])
+
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0].is_live)
+        self.assertEqual(
+            message_to_anthropic_dict(kept[0])["content"][0],
+            {"type": "thinking", "thinking": "reasoned", "signature": "s1"},
+        )
+
+    def test_user_context_patch_keeps_the_flag(self):
+        agent = _agent(user_context="Project description.")
+        original = Message(role="user", content="hello")
+        original.is_live = True
+        agent.messages = [original]
+
+        prepared = agent.provider.prepare_messages(transform_function=lambda m: m)
+
+        self.assertEqual(prepared[0].parts[0].content, "Project description.")
+        self.assertTrue(prepared[0].is_live)
+
+
+def _live_assistant(thinking, signature, text=None):
+    parts = [
+        MessagePart(type="thinking", thinking=thinking, thinking_signature=signature)
+    ]
+    if text is not None:
+        parts.append(MessagePart(type="text", content=text))
+    message = Message(role="assistant", parts=parts)
+    message.is_live = True
+    return message
+
+
+class TestMergedAssistantThinking(unittest.TestCase):
+    def test_two_thinking_turns_merge_into_a_valid_content_list(self):
+        """Merging two assistant turns must keep each thinking block in place.
+
+        The API accepts several thinking blocks inside one assistant turn
+        (that is what interleaved thinking produces), and dropping a regular
+        thinking block is what triggers ordering/signature 400s — so both are
+        replayed, each still ahead of the text it produced.
+        """
+        agent = _agent()
+        agent.messages = [
+            Message(role="user", content="q"),
+            _live_assistant("one", "s1", "a"),
+            _live_assistant("two", "s2", "b"),
+        ]
+
+        messages, _, _ = _prepare(agent)
+
+        self.assertEqual([m["role"] for m in messages], ["user", "assistant"])
+        self.assertEqual(
+            _content_only(messages[1]["content"]),
+            [
+                {"type": "thinking", "thinking": "one", "signature": "s1"},
+                {"type": "text", "text": "a"},
+                {"type": "thinking", "thinking": "two", "signature": "s2"},
+                {"type": "text", "text": "b"},
+            ],
+        )
+
+
+class TestThinkingOnlyAssistantMessage(unittest.TestCase):
+    """An assistant turn holding nothing but a thinking block."""
+
+    def test_replayable_one_is_serialized(self):
+        agent = _agent()
+        agent.messages = [
+            Message(role="user", content="q"),
+            _live_assistant("alone", "s1"),
+        ]
+
+        messages, _, _ = _prepare(agent)
+
+        self.assertEqual(
+            _content_only(messages[1]["content"]),
+            [{"type": "thinking", "thinking": "alone", "signature": "s1"}],
+        )
+
+    def test_non_replayable_one_is_dropped_not_sent_empty(self):
+        agent = _agent()
+        stale = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="thinking", thinking="alone", thinking_signature="s1")
+            ],
+        )
+        agent.messages = [
+            Message(role="user", content="q1"),
+            stale,
+            Message(role="user", content="q2"),
+        ]
+
+        messages, _, _ = _prepare(agent)
+
+        # Its only block is stripped, so the turn has nothing left to say:
+        # it is dropped, never sent as an assistant turn with content=[].
+        for message in messages:
+            self.assertTrue(message["content"], message)
+        self.assertNotIn("assistant", [m["role"] for m in messages])
+
+
 if __name__ == "__main__":
     unittest.main()
 

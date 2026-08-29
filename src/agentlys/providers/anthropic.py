@@ -566,6 +566,11 @@ class AnthropicProvider(BaseProvider):
                 drop_orphaned_function_results(x)
             ),
         )
+        # A message whose parts were all filtered out (an assistant turn
+        # holding nothing but a non-replayable thinking block, say) would go
+        # out as content=[], which the API rejects. Drop it before merging so
+        # its neighbours can still collapse into a single turn.
+        messages = [m for m in messages if m["content"]]
         messages = self._merge_same_role_messages(messages)
 
         tools = self._build_tools()
