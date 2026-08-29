@@ -6,7 +6,6 @@ the four things that used to move (system tool states, user_context position,
 thinking blocks, breakpoint TTLs) plus the effort and debug knobs.
 """
 
-import asyncio
 import json
 import os
 import unittest
@@ -14,6 +13,18 @@ from unittest.mock import AsyncMock, patch
 
 from agentlys import Agentlys, APIProvider, Message
 from agentlys.model import MessagePart
+from agentlys.utils import get_event_loop_or_create
+
+
+def _run(coro):
+    """Drive *coro* to completion, leaving the thread's event loop installed.
+
+    asyncio.run() unsets the current event loop on its way out, so a test that
+    later reaches for the ambient one — test_anthropic and test_parse_template
+    both call bare asyncio.get_event_loop() — would fail with "no current event
+    loop" purely because of the order the files happen to run in.
+    """
+    return get_event_loop_or_create().run_until_complete(coro)
 
 
 class LiveTool:
@@ -131,7 +142,7 @@ class TestIntraTurnStability(unittest.TestCase):
                 async for _ in agent.run_conversation_async("hello"):
                     pass
 
-        asyncio.run(drive())
+        _run(drive())
         self.assertEqual(create.await_count, 3)
         self.assertEqual(tool.calls, 2, "the tool must have run between the calls")
         return [call.kwargs for call in create.await_args_list]
@@ -283,7 +294,7 @@ class TestCrossTurnStability(unittest.TestCase):
                 async for _ in agent.run_conversation_async("first question"):
                     pass
 
-        asyncio.run(drive())
+        _run(drive())
         self.assertEqual(create.await_count, 2)
         return create.await_args_list[-1].kwargs, agent.messages
 
@@ -298,7 +309,7 @@ class TestCrossTurnStability(unittest.TestCase):
                 async for _ in agent.run_conversation_async("second question"):
                     pass
 
-        asyncio.run(drive())
+        _run(drive())
         return create.await_args_list[0].kwargs
 
     def test_reloaded_turn_serializes_byte_identically(self):
@@ -592,7 +603,7 @@ class TestCacheDebug(unittest.TestCase):
 
             with self.assertLogs("agentlys.providers.anthropic", level="INFO") as logs:
                 with patch.object(agent.provider.client.messages, "create", create):
-                    asyncio.run(agent.provider.fetch_async())
+                    _run(agent.provider.fetch_async())
 
         request_log = next(m for m in logs.output if "cache request" in m)
         usage_log = next(m for m in logs.output if "cache usage" in m)

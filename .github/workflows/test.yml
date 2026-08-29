@@ -13,8 +13,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v2
         with:
-          # Keep in sync with the ruff version locked in uv.lock — "latest"
-          # breaks every open PR whenever a ruff release changes the rule set.
+          # Keep in sync with the ruff pin in pyproject.toml's dev group —
+          # "latest" breaks every open PR whenever a ruff release changes the
+          # rule set, and so does a floating spec on the local side.
           version: "0.15.17"
 
   test:

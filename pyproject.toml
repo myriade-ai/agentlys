@@ -65,7 +65,10 @@ dev = [
     "vcrpy",
     "pytest-recording>=0.13.2",
     "pytest>=8.3.4",
-    "ruff>=0.8.3",
+    # Pinned: a ruff minor release changes the default rule set, so a floating
+    # spec silently turns `uv run ruff check` red on every open branch.  Keep in
+    # sync with the version the ruff job installs in .github/workflows/test.yml.
+    "ruff==0.15.17",
     "mcp>=1.6.0; python_version >= '3.10'",
     "pre-commit>=4.2.0",
     "build>=1.2.2.post1",
