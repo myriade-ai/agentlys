@@ -135,9 +135,11 @@ class Message:
     parts: list[MessagePart]
     name: typing.Optional[str] = None
     id: typing.Optional[int] = None
-    # True only for messages this process received from the provider (set by
-    # from_anthropic_dict).  Messages rebuilt from storage keep the default,
-    # which is how providers know their thinking signatures may be stale.
+    # True when this message's thinking blocks may be replayed to the API
+    # verbatim: set by from_anthropic_dict (the process received them from the
+    # provider) and by load_messages(keep_thinking=True) (the caller restored
+    # them byte-for-byte from storage).  Messages rebuilt from storage
+    # otherwise keep the default, which is how providers know to strip them.
     is_live: bool = False
 
     def __init__(

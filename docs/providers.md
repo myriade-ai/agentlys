@@ -346,6 +346,24 @@ is why the system/tools and message breakpoints are configured separately. The
 API also requires longer-lived entries to come first, so a 1h message TTL
 under a 5m system TTL is refused and clamped back to 5m with a warning.
 
+### Keeping the cache across turns (`load_messages`)
+
+Caching is a prefix match across turns too, not only within one tool loop. An
+assistant message that was *sent* with its thinking blocks and is later
+reloaded without them changes the prefix at that position, so the first call of
+each new question rewrites the whole conversation instead of reading it from
+cache. If your storage keeps `thinking` and `thinking_signature` verbatim, in
+their original order, opt in:
+
+```python
+agent.load_messages(messages, keep_thinking=True)
+```
+
+Blocks that lost their signature are dropped either way — the API rejects
+those. No model check is needed: regular thinking blocks are not origin-locked,
+the server renders them into the target model's prompt. The default stays
+`False`, which strips thinking from every reloaded assistant message.
+
 `AGENTLYS_CACHE_DEBUG=1` logs, at INFO on `agentlys.providers.anthropic`, the
 sha256 of the system blocks, of the tools array and of each message, plus the
 usage token counts of the response — enough to spot which section of the

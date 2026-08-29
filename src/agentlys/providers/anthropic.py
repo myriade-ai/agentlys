@@ -249,14 +249,15 @@ def message_to_anthropic_dict(message: Message) -> dict:
         "content": [],
     }
 
-    # Thinking blocks are only replayed for messages this process received
-    # from the API (Message.is_live).  Their signatures are cryptographic
-    # proofs tied to the model version that produced them, so replaying one
-    # from storage after a model upgrade returns a 400 — and the docs confirm
-    # omitting thinking from prior turns is safe.  Live blocks, on the other
-    # hand, must be replayed unchanged during a tool loop; dropping them would
-    # also rewrite the previous assistant message on every iteration and
-    # invalidate the cached prefix from that point on.
+    # Thinking blocks are replayed only for messages flagged is_live: those
+    # this process received from the API, and those a caller restored
+    # byte-for-byte through load_messages(keep_thinking=True).  Replaying them
+    # is what keeps the cached prefix intact — dropping a block rewrites the
+    # assistant message it belongs to, invalidating the cache from there on,
+    # within a tool loop and across turns alike.  Anything else rebuilt from
+    # storage is stripped: a re-serialized block may have lost its signature
+    # or its position, and the docs confirm omitting thinking from prior turns
+    # is accepted.
     keep_thinking = getattr(message, "is_live", False)
 
     for part in message.parts:

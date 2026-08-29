@@ -436,7 +436,21 @@ class Agentlys(AgentlysBase):
             + "\n".join(lines)
         )
 
-    def load_messages(self, messages: list[Message]):
+    def load_messages(self, messages: list[Message], keep_thinking: bool = False):
+        """Restore a conversation from the caller's storage.
+
+        ``keep_thinking`` replays the stored thinking blocks instead of
+        dropping them.  Anthropic's cache is a prefix match, so an assistant
+        message that is serialized without its thinking blocks after having
+        been *sent* with them changes the prefix at that point: every new
+        question then rewrites the whole conversation instead of reading it
+        from cache.  Regular thinking blocks are not origin-locked — the
+        server renders them into the target model's prompt, so replaying one
+        produced by another Claude model is safe — but a block whose
+        signature was lost in storage is rejected, so those are still
+        dropped.  Opt in only if you persist ``thinking`` and
+        ``thinking_signature`` byte-for-byte, in their original order.
+        """
         # If compaction checkpoints exist, only load from the latest one onward
         # (older messages were already summarized into the compaction message)
         latest_compaction_idx = None
@@ -447,14 +461,23 @@ class Agentlys(AgentlysBase):
         if latest_compaction_idx is not None:
             messages = messages[latest_compaction_idx:]
 
-        # Strip thinking blocks from loaded messages — they may have stale
-        # signatures from an older model version or be modified by DB
-        # serialization.  The Anthropic docs confirm omitting thinking from
-        # prior turns is safe.  Live tool-loop thinking is never loaded
-        # through this path (it's appended via self.messages.append).
         for msg in messages:
-            if msg.role == "assistant":
+            if msg.role != "assistant":
+                continue
+            if not keep_thinking:
+                # Default: drop them.  A caller that re-serializes thinking
+                # from storage may have lost the signature or the ordering,
+                # and the Anthropic docs confirm omitting thinking from prior
+                # turns is accepted.
                 msg.parts = [p for p in msg.parts if p.type != "thinking"]
+                continue
+            # A thinking block needs its signature — send one without and the
+            # API rejects the request.
+            msg.parts = [
+                p for p in msg.parts if p.type != "thinking" or p.thinking_signature
+            ]
+            # Tell the provider these blocks are replayable as-is.
+            msg.is_live = any(p.type == "thinking" for p in msg.parts)
 
         # Remove messages that became empty after thinking block removal
         # (e.g. assistant messages that contained only thinking parts)

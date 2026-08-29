@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from agentlys import Agentlys, APIProvider, Message
+from agentlys.model import MessagePart
 
 
 class LiveTool:
@@ -183,6 +184,179 @@ class TestIntraTurnStability(unittest.TestCase):
         self.assertEqual(
             last["messages"][3]["content"][0],
             {"type": "thinking", "thinking": "ping twice", "signature": "s2"},
+        )
+
+
+def _storage_roundtrip(messages):
+    """Rebuild the history the way a consumer reloading it from a DB would.
+
+    Same shape as agentlys' own model, but freshly built objects: no is_live,
+    exactly what a caller gets back from its own tables.
+    """
+    rebuilt = []
+    for message in messages:
+        parts = [
+            MessagePart(
+                type=part.type,
+                content=part.content,
+                function_call=part.function_call,
+                function_call_id=part.function_call_id,
+                thinking=part.thinking,
+                thinking_signature=part.thinking_signature,
+                is_redacted=part.is_redacted,
+            )
+            for part in message.parts
+        ]
+        rebuilt.append(Message(role=message.role, name=message.name, parts=parts))
+    return rebuilt
+
+
+class TestCrossTurnStability(unittest.TestCase):
+    """A reloaded conversation must serialize exactly as it was sent."""
+
+    @staticmethod
+    def _ping() -> str:
+        """Ping.
+
+        Returns: the string "pong"
+        """
+        return "pong"
+
+    def _agent_with_tool(self):
+        agent = Agentlys(
+            instruction="You are a test agent.",
+            context="Static context.",
+            provider=APIProvider.ANTHROPIC,
+            model="claude-sonnet-4-5",
+            api_key="test",
+        )
+        agent.add_function(self._ping)
+        return agent
+
+    def _turn_one(self):
+        """Run a full turn and return (last request, agent messages)."""
+        agent = self._agent_with_tool()
+        responses = [
+            FakeResponse(
+                [
+                    {"type": "thinking", "thinking": "let me ping", "signature": "s1"},
+                    {"type": "tool_use", "id": "t1", "name": "_ping", "input": {}},
+                ]
+            ),
+            FakeResponse(
+                [
+                    {"type": "thinking", "thinking": "got pong", "signature": "s2"},
+                    {"type": "text", "text": "it answered pong"},
+                ]
+            ),
+        ]
+        create = AsyncMock(side_effect=responses)
+
+        async def drive():
+            with patch.object(agent.provider.client.messages, "create", create):
+                async for _ in agent.run_conversation_async("first question"):
+                    pass
+
+        asyncio.run(drive())
+        self.assertEqual(create.await_count, 2)
+        return create.await_args_list[-1].kwargs, agent.messages
+
+    def _turn_two(self, history, keep_thinking):
+        """Reload `history` from storage, ask again, return the request."""
+        agent = self._agent_with_tool()
+        agent.load_messages(_storage_roundtrip(history), keep_thinking=keep_thinking)
+        create = AsyncMock(side_effect=[FakeResponse([{"type": "text", "text": "ok"}])])
+
+        async def drive():
+            with patch.object(agent.provider.client.messages, "create", create):
+                async for _ in agent.run_conversation_async("second question"):
+                    pass
+
+        asyncio.run(drive())
+        return create.await_args_list[0].kwargs
+
+    def test_reloaded_turn_serializes_byte_identically(self):
+        first, history = self._turn_one()
+        second = self._turn_two(history, keep_thinking=True)
+
+        # Turn 1 sent 3 messages (question, assistant+tool_use, tool_result);
+        # its last request also carried the trailing assistant message, which
+        # only exists in the history. Compare what both requests share.
+        shared = len(first["messages"])
+        self.assertEqual(len(second["messages"]), shared + 2)
+        self.assertEqual(
+            json.dumps(_content_only(second["messages"][:shared])),
+            json.dumps(_content_only(first["messages"][:shared])),
+        )
+
+        # And the thinking blocks are the ones the API produced, in place.
+        self.assertEqual(
+            second["messages"][1]["content"][0],
+            {"type": "thinking", "thinking": "let me ping", "signature": "s1"},
+        )
+
+    def test_without_the_opt_in_the_prefix_breaks_at_the_first_answer(self):
+        first, history = self._turn_one()
+        second = self._turn_two(history, keep_thinking=False)
+
+        # The regression this guards: the assistant message loses its thinking
+        # block, so every byte from there on is rewritten on the new question.
+        self.assertNotEqual(
+            json.dumps(_content_only(second["messages"][1])),
+            json.dumps(_content_only(first["messages"][1])),
+        )
+
+    def test_unsigned_thinking_is_dropped_even_when_kept(self):
+        agent = self._agent_with_tool()
+        agent.load_messages(
+            [
+                Message(role="user", content="q"),
+                Message(
+                    role="assistant",
+                    parts=[
+                        MessagePart(type="thinking", thinking="legacy row"),
+                        MessagePart(type="text", content="answer"),
+                    ],
+                ),
+            ],
+            keep_thinking=True,
+        )
+
+        messages, _, _ = _prepare(agent)
+
+        # Rows persisted before signatures were stored would be rejected.
+        self.assertEqual(
+            _content_only(messages[1]["content"]),
+            [{"type": "text", "text": "answer"}],
+        )
+        self.assertFalse(agent.messages[1].is_live)
+
+    def test_redacted_thinking_survives_the_reload(self):
+        agent = self._agent_with_tool()
+        agent.load_messages(
+            [
+                Message(role="user", content="q"),
+                Message(
+                    role="assistant",
+                    parts=[
+                        MessagePart(
+                            type="thinking",
+                            thinking=None,
+                            thinking_signature="encrypted-blob",
+                            is_redacted=True,
+                        ),
+                        MessagePart(type="text", content="answer"),
+                    ],
+                ),
+            ],
+            keep_thinking=True,
+        )
+
+        messages, _, _ = _prepare(agent)
+
+        self.assertEqual(
+            messages[1]["content"][0],
+            {"type": "redacted_thinking", "data": "encrypted-blob"},
         )
 
 
