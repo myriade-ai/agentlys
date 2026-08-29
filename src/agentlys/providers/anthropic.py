@@ -78,6 +78,10 @@ _STRICT_TOOL_MODEL_PREFIXES = (
 
 
 def _supports_strict_tool_use(model: str) -> bool:
+    # AGENTLYS_STRICT_TOOLS=0 disables auto-strict entirely (e.g. to mirror a
+    # proxy deployment where the model is a logical role and strict never fires).
+    if os.getenv("AGENTLYS_STRICT_TOOLS", "1") in ("0", "false", "no"):
+        return False
     return model.lower().startswith(_STRICT_TOOL_MODEL_PREFIXES)
 
 
