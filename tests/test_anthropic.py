@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentlys import Agentlys, APIProvider, Message, MessagePart
+from agentlys.providers.anthropic import message_to_anthropic_dict
 
 
 class TestStrictToolSchemas(unittest.TestCase):
@@ -192,176 +193,92 @@ class TestAnthropic(unittest.TestCase):
             self.assertEqual(actual_messages, expected_output)
 
 
-class TestStripThinkingFromPriorTurns(unittest.TestCase):
-    """Tests for AnthropicProvider._strip_thinking_from_prior_turns."""
+class TestThinkingReplay(unittest.TestCase):
+    """Thinking blocks are replayed for live messages, dropped for stored ones.
 
-    def _call(self, messages):
-        from agentlys.providers.anthropic import AnthropicProvider
+    Replaces the old TestStripThinkingFromPriorTurns suite, which asserted
+    that thinking survived only on the last assistant message: that rule
+    rewrote the previous assistant turn on every tool-loop iteration and
+    invalidated the cached prefix from that point on.  Provenance
+    (Message.is_live) is what actually matters — a stale signature can only
+    come from a message rebuilt outside this process.
+    """
 
-        return AnthropicProvider._strip_thinking_from_prior_turns(messages)
-
-    def test_strips_thinking_from_all_assistants_without_tool_loop(self):
-        messages = [
-            {"role": "user", "content": "hello"},
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "thinking",
-                        "thinking": "old thought",
-                        "signature": "sig1",
-                    },
-                    {"type": "text", "text": "response 1"},
-                ],
-            },
-            {"role": "user", "content": "follow up"},
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "thinking",
-                        "thinking": "new thought",
-                        "signature": "sig2",
-                    },
-                    {"type": "text", "text": "response 2"},
-                ],
-            },
-        ]
-        result = self._call(messages)
-        # Both assistants stripped — no tool_result follows the last one
-        self.assertEqual(
-            result[1]["content"],
-            [{"type": "text", "text": "response 1"}],
-        )
-        self.assertEqual(
-            result[3]["content"],
-            [{"type": "text", "text": "response 2"}],
+    @staticmethod
+    def _live_assistant():
+        return Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "thinking", "thinking": "thought", "signature": "sig"},
+                {"type": "text", "text": "answer"},
+            ],
         )
 
-    def test_strips_last_assistant_thinking_when_no_tool_loop(self):
-        messages = [
-            {"role": "user", "content": "hi"},
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "thinking", "thinking": "my thought", "signature": "sig"},
-                    {"type": "text", "text": "answer"},
-                ],
-            },
-        ]
-        result = self._call(messages)
-        # Last assistant but no tool_result follows — thinking stripped
+    def test_live_message_replays_thinking_unchanged(self):
+        message = self._live_assistant()
+
+        blocks = message_to_anthropic_dict(message)["content"]
+
         self.assertEqual(
-            result[1]["content"],
-            [{"type": "text", "text": "answer"}],
+            blocks[0],
+            {"type": "thinking", "thinking": "thought", "signature": "sig"},
         )
 
-    def test_preserves_last_assistant_thinking_in_tool_loop(self):
-        messages = [
-            {"role": "user", "content": "query the database"},
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "thinking", "thinking": "thought", "signature": "sig"},
-                    {"type": "text", "text": "I'll run a query"},
-                    {
-                        "type": "tool_use",
-                        "id": "t1",
-                        "name": "query",
-                        "input": {"sql": "SELECT 1"},
-                    },
-                ],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "t1", "content": "1"},
-                ],
-            },
-        ]
-        result = self._call(messages)
-        # Last assistant followed by tool_result — thinking preserved
-        self.assertEqual(result[1]["content"], messages[1]["content"])
-
-    def test_non_thinking_blocks_untouched(self):
-        messages = [
-            {"role": "user", "content": "do something"},
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "I'll use a tool"},
-                    {
-                        "type": "tool_use",
-                        "id": "t1",
-                        "name": "query",
-                        "input": {},
-                    },
-                ],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "t1", "content": "result"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "done"}],
-            },
-        ]
-        result = self._call(messages)
-        # First assistant has no thinking, should be unchanged
-        self.assertEqual(result[1]["content"], messages[1]["content"])
-        # User message unchanged
-        self.assertEqual(result[2], messages[2])
-        # Last assistant unchanged
-        self.assertEqual(result[3], messages[3])
-
-    def test_user_and_function_messages_untouched(self):
-        messages = [
-            {"role": "user", "content": "question"},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "t1", "content": "data"},
-                ],
-            },
-        ]
-        result = self._call(messages)
-        self.assertEqual(result, messages)
-
-    def test_strips_redacted_thinking(self):
-        messages = [
-            {"role": "user", "content": "hello"},
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "redacted_thinking", "data": "encrypted"},
-                    {"type": "text", "text": "response"},
-                ],
-            },
-            {"role": "user", "content": "more"},
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "final"}],
-            },
-        ]
-        result = self._call(messages)
-        # First assistant: redacted_thinking stripped
-        self.assertEqual(
-            result[1]["content"],
-            [{"type": "text", "text": "response"}],
+    def test_live_message_replays_redacted_thinking(self):
+        message = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "redacted_thinking", "data": "encrypted"},
+                {"type": "text", "text": "answer"},
+            ],
         )
 
-    def test_no_assistant_messages(self):
-        messages = [
-            {"role": "user", "content": "hello"},
-        ]
-        result = self._call(messages)
-        self.assertEqual(result, messages)
+        blocks = message_to_anthropic_dict(message)["content"]
 
-    def test_empty_messages(self):
-        self.assertEqual(self._call([]), [])
+        self.assertEqual(blocks[0], {"type": "redacted_thinking", "data": "encrypted"})
+
+    def test_stored_message_drops_thinking(self):
+        """A message rebuilt from storage may carry a signature from another
+        model version, which the API rejects."""
+        message = Message(
+            role="assistant",
+            parts=[
+                MessagePart(
+                    type="thinking", thinking="thought", thinking_signature="sig"
+                ),
+                MessagePart(type="text", content="answer"),
+            ],
+        )
+
+        blocks = message_to_anthropic_dict(message)["content"]
+
+        self.assertEqual(blocks, [{"type": "text", "text": "answer"}])
+
+    def test_earlier_live_turns_keep_their_thinking(self):
+        """The whole point: an earlier assistant turn is not rewritten when a
+        new one arrives, so the cached prefix stays valid."""
+        first, second = self._live_assistant(), self._live_assistant()
+
+        self.assertEqual(
+            message_to_anthropic_dict(first)["content"][0]["type"], "thinking"
+        )
+        self.assertEqual(
+            message_to_anthropic_dict(second)["content"][0]["type"], "thinking"
+        )
+
+    def test_load_messages_marks_history_as_stored(self):
+        agent = Agentlys(provider=APIProvider.ANTHROPIC, api_key="test")
+        live = self._live_assistant()
+        self.assertTrue(live.is_live)
+
+        agent.load_messages([Message(role="user", content="hi"), live])
+
+        # load_messages strips thinking outright; whatever it keeps must not
+        # claim to be a fresh signature.
+        self.assertEqual(
+            [p.type for p in agent.messages[1].parts],
+            ["text"],
+        )
 
 
 class TestCacheControlPlacement(unittest.TestCase):

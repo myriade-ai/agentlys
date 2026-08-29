@@ -25,6 +25,7 @@ def get_provider_and_model(  # TODO: get_provider_and_model ?
     model: str = None,
     base_url: str = None,
     api_key: str = None,
+    **provider_kwargs,
 ) -> list[str, BaseProvider]:  # TODO: rename
     """
     Returns the correct LLM provider based on a string or env vars.
@@ -44,6 +45,9 @@ def get_provider_and_model(  # TODO: get_provider_and_model ?
         client_kwargs["base_url"] = base_url
     if api_key is not None:
         client_kwargs["api_key"] = api_key
+    # Same rule for provider-specific options (cache_ttl, effort, ...): only
+    # forward what the caller actually set.
+    client_kwargs.update({k: v for k, v in provider_kwargs.items() if v is not None})
 
     if isinstance(provider_name, type) and issubclass(provider_name, BaseProvider):
         # Supports custom provider
