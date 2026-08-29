@@ -408,3 +408,15 @@ class TestCacheDebug(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_auto_strict_skips_schemas_with_nested_open_objects():
+    from agentlys.providers.anthropic import _schema_is_closed
+
+    closed = {"type": "object", "additionalProperties": False,
+              "properties": {"a": {"type": "object", "additionalProperties": False}}}
+    nested_open = {"type": "object", "additionalProperties": False,
+                   "properties": {"pipeline": {"type": "array",
+                                               "items": {"type": "object", "additionalProperties": True}}}}
+    assert _schema_is_closed(closed)
+    assert not _schema_is_closed(nested_open)

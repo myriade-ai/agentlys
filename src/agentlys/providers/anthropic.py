@@ -81,6 +81,22 @@ def _supports_strict_tool_use(model: str) -> bool:
     return model.lower().startswith(_STRICT_TOOL_MODEL_PREFIXES)
 
 
+def _schema_is_closed(schema) -> bool:
+    """True iff no object in the schema tree allows additional properties.
+
+    Anthropic rejects ``strict: true`` tools whose nested objects carry
+    ``additionalProperties: true`` (400 "not supported"), so auto-strict must
+    look past the top level.
+    """
+    if isinstance(schema, dict):
+        if schema.get("additionalProperties") is True:
+            return False
+        return all(_schema_is_closed(v) for v in schema.values())
+    if isinstance(schema, list):
+        return all(_schema_is_closed(v) for v in schema)
+    return True
+
+
 def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
     """Return Anthropic's counted optional-property and union totals."""
     optional_properties = 0
@@ -373,6 +389,7 @@ class AnthropicProvider(BaseProvider):
                 explicit_strict is None
                 and supports_strict
                 and input_schema.get("additionalProperties") is False
+                and _schema_is_closed(input_schema)
             )
             optional_properties, unions = _strict_schema_complexity(input_schema)
             within_limits = (
