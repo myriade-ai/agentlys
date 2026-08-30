@@ -59,72 +59,6 @@ def _sha(payload) -> str:
     return hashlib.sha256(dump.encode("utf-8")).hexdigest()[:16]
 
 
-# Anthropic strict tool use relies on structured outputs and is only available
-# on these model families. Keep older models and Anthropic-compatible proxies
-# on best-effort tool calling instead of turning a valid request into a 400.
-_STRICT_TOOL_MODEL_PREFIXES = (
-    "claude-haiku-4-5",
-    "claude-opus-4-5",
-    "claude-opus-4-6",
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-opus-5",
-    "claude-sonnet-4-5",
-    "claude-sonnet-4-6",
-    "claude-sonnet-5",
-    "claude-fable-5",
-    "claude-mythos-5",
-)
-
-
-def _supports_strict_tool_use(model: str) -> bool:
-    # AGENTLYS_STRICT_TOOLS=0 disables auto-strict entirely (e.g. to mirror a
-    # proxy deployment where the model is a logical role and strict never fires).
-    if os.getenv("AGENTLYS_STRICT_TOOLS", "1") in ("0", "false", "no"):
-        return False
-    return model.lower().startswith(_STRICT_TOOL_MODEL_PREFIXES)
-
-
-def _schema_is_closed(schema) -> bool:
-    """True iff no object in the schema tree allows additional properties.
-
-    Anthropic rejects ``strict: true`` tools whose nested objects carry
-    ``additionalProperties: true`` (400 "not supported"), so auto-strict must
-    look past the top level.
-    """
-    if isinstance(schema, dict):
-        if schema.get("additionalProperties") is True:
-            return False
-        return all(_schema_is_closed(v) for v in schema.values())
-    if isinstance(schema, list):
-        return all(_schema_is_closed(v) for v in schema)
-    return True
-
-
-def _strict_schema_complexity(schema: dict) -> tuple[int, int]:
-    """Return Anthropic's counted optional-property and union totals."""
-    optional_properties = 0
-    unions = 0
-
-    def visit(value):
-        nonlocal optional_properties, unions
-        if isinstance(value, dict):
-            properties = value.get("properties")
-            if isinstance(properties, dict):
-                required = set(value.get("required", []))
-                optional_properties += len(set(properties) - required)
-            if "anyOf" in value or isinstance(value.get("type"), list):
-                unions += 1
-            for child in value.values():
-                visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-
-    visit(schema)
-    return optional_properties, unions
-
-
 def _canonical_key_order(value):
     """Rebuild dicts with sorted keys, recursively.  List order is preserved."""
     if isinstance(value, dict):
@@ -378,53 +312,26 @@ class AnthropicProvider(BaseProvider):
         """Translate function schemas to Anthropic tool definitions.
 
         Maps "parameters" to "input_schema" and guarantees a description.
-        Closed schemas use strict tool calling on supported models, within
-        Anthropic's documented per-request complexity limits.
+
+        ``strict`` is forwarded when the caller sets it and never inferred.
+        Deciding it here meant reading the model name, which is not something
+        a provider can rely on knowing: behind a gateway it is a logical role
+        or absent entirely, so the guess was wrong exactly where the schemas
+        were most worth constraining. Closed schemas
+        (``additionalProperties: false``, set in ``utils.inspect_schema``)
+        already tell the model which arguments exist; ``strict`` on top of
+        that is the caller's call, along with the per-request limits it has
+        to stay inside.
         """
         tools = []
-        explicit_strict_schemas = [
-            s["parameters"]
-            for s in self.chat.functions_schema
-            if s.get("strict") is True
-        ]
-        strict_tools = len(explicit_strict_schemas)
-        strict_optional_properties = 0
-        strict_unions = 0
-        for schema in explicit_strict_schemas:
-            optional_properties, unions = _strict_schema_complexity(schema)
-            strict_optional_properties += optional_properties
-            strict_unions += unions
-        supports_strict = _supports_strict_tool_use(self.model)
-
         for s in self.chat.functions_schema:
-            input_schema = s["parameters"]
             tool_def = {
                 "name": s["name"],
                 "description": s["description"] or "No description provided",
-                "input_schema": input_schema,
+                "input_schema": s["parameters"],
             }
-
-            explicit_strict = s.get("strict")
-            auto_strict = (
-                explicit_strict is None
-                and supports_strict
-                and input_schema.get("additionalProperties") is False
-                and _schema_is_closed(input_schema)
-            )
-            optional_properties, unions = _strict_schema_complexity(input_schema)
-            within_limits = (
-                strict_tools < 20
-                and strict_optional_properties + optional_properties <= 24
-                and strict_unions + unions <= 16
-            )
-            if explicit_strict is True:
+            if s.get("strict") is True:
                 tool_def["strict"] = True
-            elif auto_strict and within_limits:
-                tool_def["strict"] = True
-                strict_tools += 1
-                strict_optional_properties += optional_properties
-                strict_unions += unions
-
             if s.get("defer_loading"):
                 tool_def["defer_loading"] = True
             tools.append(tool_def)

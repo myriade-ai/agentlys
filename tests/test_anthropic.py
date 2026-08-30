@@ -6,6 +6,15 @@ from agentlys.providers.anthropic import message_to_anthropic_dict
 
 
 class TestStrictToolSchemas(unittest.TestCase):
+    """Closed schemas are automatic; ``strict`` is not.
+
+    Auto-strict used to be inferred from the model name. That guess is not
+    available to a provider pointed at a gateway -- the model is a logical
+    role, or None -- where it first silently never fired, then crashed on
+    ``None.lower()``. Schemas stay closed either way; the flag is the
+    caller's.
+    """
+
     @staticmethod
     def _archive_live_block(
         reason: str, name: str = "", live_block_id: str = ""
@@ -17,23 +26,35 @@ class TestStrictToolSchemas(unittest.TestCase):
         agent.add_function(self._archive_live_block)
         return agent.provider._build_tools()[0]
 
-    def test_supported_model_uses_strict_closed_schema(self):
+    def test_a_strict_capable_model_is_not_made_strict_implicitly(self):
         tool = self._tool_for_model("claude-haiku-4-5-20251001")
 
-        self.assertIs(tool["strict"], True)
+        self.assertNotIn("strict", tool)
         self.assertIs(tool["input_schema"]["additionalProperties"], False)
         self.assertEqual(
             set(tool["input_schema"]["properties"]),
             {"reason", "name", "live_block_id"},
         )
 
-    def test_unsupported_model_keeps_closed_schema_without_strict(self):
+    def test_an_older_model_also_keeps_the_closed_schema(self):
         tool = self._tool_for_model("claude-3-7-sonnet-latest")
 
         self.assertNotIn("strict", tool)
         self.assertIs(tool["input_schema"]["additionalProperties"], False)
 
-    def test_open_manual_schema_is_not_automatically_strict(self):
+    def test_a_model_the_gateway_resolves_builds_a_request(self):
+        """``provider.model`` is None whenever the caller leaves it to a
+        gateway; reading it to decide strict raised AttributeError on every
+        request, tools or not."""
+        agent = Agentlys(provider="anthropic", model=None, api_key="test")
+        agent.add_function(self._archive_live_block)
+
+        tools = agent.provider._build_tools()
+
+        self.assertEqual([tool["name"] for tool in tools], ["_archive_live_block"])
+        self.assertNotIn("strict", tools[0])
+
+    def test_an_explicit_strict_flag_is_forwarded(self):
         agent = Agentlys(
             provider="anthropic",
             model="claude-haiku-4-5-20251001",
@@ -41,15 +62,22 @@ class TestStrictToolSchemas(unittest.TestCase):
         )
         agent.functions_schema = [
             {
-                "name": "open_tool",
-                "description": "Accept arbitrary keys",
-                "parameters": {"type": "object", "properties": {}},
+                "name": "explicit_tool",
+                "description": "Must be strict",
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
             }
         ]
 
-        self.assertNotIn("strict", agent.provider._build_tools()[0])
+        self.assertIs(agent.provider._build_tools()[0]["strict"], True)
 
-    def test_automatic_strict_tools_respect_provider_limit(self):
+    def test_many_tools_are_all_forwarded_unchanged(self):
+        """No implicit flag means no per-request budget to run out of: the
+        21st tool is built exactly like the first."""
         agent = Agentlys(
             provider="anthropic",
             model="claude-haiku-4-5-20251001",
@@ -69,44 +97,9 @@ class TestStrictToolSchemas(unittest.TestCase):
         ]
 
         tools = agent.provider._build_tools()
-        self.assertEqual(sum(tool.get("strict", False) for tool in tools), 20)
-        self.assertNotIn("strict", tools[-1])
 
-    def test_explicit_strict_tool_reserves_provider_capacity(self):
-        agent = Agentlys(
-            provider="anthropic",
-            model="claude-haiku-4-5-20251001",
-            api_key="test",
-        )
-        agent.functions_schema = [
-            {
-                "name": f"tool_{index}",
-                "description": "Tool",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-            for index in range(20)
-        ]
-        agent.functions_schema.append(
-            {
-                "name": "explicit_tool",
-                "description": "Must be strict",
-                "strict": True,
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-        )
-
-        tools = agent.provider._build_tools()
-        self.assertEqual(sum(tool.get("strict", False) for tool in tools), 20)
-        self.assertNotIn("strict", tools[19])
-        self.assertIs(tools[-1]["strict"], True)
+        self.assertEqual(len(tools), 21)
+        self.assertTrue(all("strict" not in tool for tool in tools))
 
 
 class TestAnthropic(unittest.TestCase):
