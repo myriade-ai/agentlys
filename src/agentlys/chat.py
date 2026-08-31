@@ -220,6 +220,7 @@ class Agentlys(AgentlysBase):
         self.compaction = compaction
         self.cancel_event = cancel_event
         self._initial_tools_states = None
+        self._tools_states_pinned = False
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
@@ -311,6 +312,7 @@ class Agentlys(AgentlysBase):
         self._sub_agents = {}
         self.on_sub_agent_event = None
         self._initial_tools_states = None
+        self._tools_states_pinned = False
         self._tool_search_config = None
         self._tool_search_function_name = None
 
@@ -318,10 +320,28 @@ class Agentlys(AgentlysBase):
         """Clear and re-capture tool states.
 
         Useful when tools have mutated and you want to pick up the new state
-        without resetting the entire conversation.
+        without resetting the entire conversation.  Also lifts a
+        pin_tools_states() pin.
         """
+        self._tools_states_pinned = False
         self._initial_tools_states = None
         self._initial_tools_states = self.initial_tools_states
+
+    def pin_tools_states(self, states: str):
+        """Pin the tool-states system block to a caller-provided snapshot.
+
+        A new user message normally takes a fresh snapshot of the live
+        ``__llm__()`` values (see _capture_tools_states), which rewrites the
+        system prompt — and thus invalidates the whole cached prefix — as
+        soon as any of them drifted.  A caller that persists the block across
+        turns (e.g. per conversation, alongside its history) can pin it back
+        here before running: the block then stays byte-identical from turn to
+        turn and the cache survives.  Pass the exact string a previous
+        ``initial_tools_states`` returned.  The pin holds until
+        refresh_tools_states() or reset() lifts it.
+        """
+        self._initial_tools_states = states
+        self._tools_states_pinned = True
 
     @property
     def last_message(self):
@@ -338,9 +358,14 @@ class Agentlys(AgentlysBase):
         cached prefix mid-loop.  Capture once and reuse: a new human message
         starts a new turn and takes a fresh snapshot, tool results (role
         "function") keep the current one.  reset() / refresh_tools_states()
-        clear it explicitly.
+        clear it explicitly; a pin_tools_states() pin blocks the new-turn
+        recapture entirely.
         """
-        if message is not None and getattr(message, "role", None) == "user":
+        if (
+            message is not None
+            and getattr(message, "role", None) == "user"
+            and not self._tools_states_pinned
+        ):
             self._initial_tools_states = None
         if self._initial_tools_states is None:
             self._initial_tools_states = self.initial_tools_states
