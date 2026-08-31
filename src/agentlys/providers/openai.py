@@ -49,13 +49,56 @@ def create_openai_client(
 
 
 def usage_to_dict(usage) -> typing.Optional[dict]:
-    """Normalize OpenAI usage to the input/output_tokens naming used by Message."""
+    """Normalize OpenAI usage to the naming used by Message.
+
+    OpenAI-compatible APIs report ``prompt_tokens`` as the *total* prompt size,
+    with cached and cache-written tokens as subsets of it
+    (``ordinary = prompt_tokens - cached_tokens - cache_write_tokens``), while
+    Anthropic reports ``input_tokens`` as the uncached remainder
+    (``total = input_tokens + cache_read + cache_creation``). We subtract both
+    subsets so the two providers share one shape — the shape
+    ``compaction.should_compact`` already sums.
+    """
     if usage is None:
         return None
-    return {
-        "input_tokens": usage.prompt_tokens,
-        "output_tokens": usage.completion_tokens,
+
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    details = getattr(usage, "prompt_tokens_details", None)
+
+    def _detail(name: str) -> int:
+        if details is None:
+            return 0
+        value = (
+            details.get(name)
+            if isinstance(details, dict)
+            else getattr(details, name, None)
+        )
+        return value or 0
+
+    # Cached reads are billed at a reduced rate, cache writes at a premium:
+    # keeping them separate is what makes cost attribution possible.
+    cache_read = _detail("cached_tokens")
+    cache_creation = _detail("cache_write_tokens")
+
+    # DeepSeek does not use prompt_tokens_details: it reports the same split as
+    # top-level fields, with the same invariant
+    # (prompt_tokens == prompt_cache_hit_tokens + prompt_cache_miss_tokens).
+    if not cache_read:
+        cache_read = getattr(usage, "prompt_cache_hit_tokens", None) or 0
+
+    # Guard against providers reporting subsets larger than the total.
+    cache_read = min(cache_read, prompt_tokens)
+    cache_creation = min(cache_creation, prompt_tokens - cache_read)
+
+    result = {
+        "input_tokens": prompt_tokens - cache_read - cache_creation,
+        "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
     }
+    if cache_read:
+        result["cache_read_input_tokens"] = cache_read
+    if cache_creation:
+        result["cache_creation_input_tokens"] = cache_creation
+    return result
 
 
 def from_openai_object(
