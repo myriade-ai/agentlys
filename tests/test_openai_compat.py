@@ -14,6 +14,7 @@ from agentlys.providers.openai import (
     from_openai_object,
     message_to_openai_dict,
     split_function_results,
+    usage_to_dict,
 )
 
 
@@ -558,3 +559,81 @@ def test_return_image_as_user_message_does_not_mutate_history():
     transformed = return_image_as_user_message([original])
     assert transformed[0].role == "user"
     assert original.role == "function"
+
+
+class TestUsageToDict:
+    """Cached prompt tokens must be reported, not silently dropped."""
+
+    def test_none_usage(self):
+        assert usage_to_dict(None) is None
+
+    def test_without_cache(self):
+        usage = SimpleNamespace(
+            prompt_tokens=100, completion_tokens=20, prompt_tokens_details=None
+        )
+        assert usage_to_dict(usage) == {"input_tokens": 100, "output_tokens": 20}
+
+    def test_cached_tokens_are_split_out(self):
+        """prompt_tokens includes cached tokens; we report the Anthropic shape."""
+        usage = SimpleNamespace(
+            prompt_tokens=1000,
+            completion_tokens=20,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=768),
+        )
+        assert usage_to_dict(usage) == {
+            "input_tokens": 232,
+            "output_tokens": 20,
+            "cache_read_input_tokens": 768,
+        }
+
+    def test_cache_write_tokens_are_split_out(self):
+        """cache_write_tokens is also a subset of prompt_tokens (billed 1.25x)."""
+        usage = SimpleNamespace(
+            prompt_tokens=1000,
+            completion_tokens=20,
+            prompt_tokens_details=SimpleNamespace(
+                cached_tokens=600, cache_write_tokens=300
+            ),
+        )
+        assert usage_to_dict(usage) == {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cache_read_input_tokens": 600,
+            "cache_creation_input_tokens": 300,
+        }
+
+    def test_total_is_preserved(self):
+        """compaction sums the three fields: they must add back up to the total."""
+        usage = SimpleNamespace(
+            prompt_tokens=1000,
+            completion_tokens=20,
+            prompt_tokens_details=SimpleNamespace(
+                cached_tokens=600, cache_write_tokens=300
+            ),
+        )
+        result = usage_to_dict(usage)
+        assert (
+            result["input_tokens"]
+            + result["cache_read_input_tokens"]
+            + result["cache_creation_input_tokens"]
+            == 1000
+        )
+
+    def test_details_as_dict(self):
+        """Some OpenAI-compatible servers return plain dicts."""
+        usage = SimpleNamespace(
+            prompt_tokens=500,
+            completion_tokens=10,
+            prompt_tokens_details={"cached_tokens": 400},
+        )
+        assert usage_to_dict(usage)["cache_read_input_tokens"] == 400
+
+    def test_inconsistent_cached_tokens_do_not_go_negative(self):
+        usage = SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=10,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=150),
+        )
+        result = usage_to_dict(usage)
+        assert result["input_tokens"] == 0
+        assert result["cache_read_input_tokens"] == 100
