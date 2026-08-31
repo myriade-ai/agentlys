@@ -80,6 +80,12 @@ def usage_to_dict(usage) -> typing.Optional[dict]:
     cache_read = _detail("cached_tokens")
     cache_creation = _detail("cache_write_tokens")
 
+    # DeepSeek does not use prompt_tokens_details: it reports the same split as
+    # top-level fields, with the same invariant
+    # (prompt_tokens == prompt_cache_hit_tokens + prompt_cache_miss_tokens).
+    if not cache_read:
+        cache_read = getattr(usage, "prompt_cache_hit_tokens", None) or 0
+
     # Guard against providers reporting subsets larger than the total.
     cache_read = min(cache_read, prompt_tokens)
     cache_creation = min(cache_creation, prompt_tokens - cache_read)

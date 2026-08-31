@@ -628,6 +628,21 @@ class TestUsageToDict:
         )
         assert usage_to_dict(usage)["cache_read_input_tokens"] == 400
 
+    def test_deepseek_style_top_level_fields(self):
+        """DeepSeek reports the split without prompt_tokens_details."""
+        usage = SimpleNamespace(
+            prompt_tokens=1000,
+            completion_tokens=20,
+            prompt_tokens_details=None,
+            prompt_cache_hit_tokens=768,
+            prompt_cache_miss_tokens=232,
+        )
+        assert usage_to_dict(usage) == {
+            "input_tokens": 232,
+            "output_tokens": 20,
+            "cache_read_input_tokens": 768,
+        }
+
     def test_inconsistent_cached_tokens_do_not_go_negative(self):
         usage = SimpleNamespace(
             prompt_tokens=100,
