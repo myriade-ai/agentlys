@@ -745,5 +745,90 @@ class TestThinkingOnlyAssistantMessage(unittest.TestCase):
         self.assertNotIn("assistant", [m["role"] for m in messages])
 
 
+
+class TestPinnedToolsStates(unittest.TestCase):
+    """pin_tools_states(): a caller-provided snapshot survives new turns.
+
+    Without a pin, every new user message recaptures the live __llm__()
+    values, so any drift (a documented table, a moved counter) rewrites the
+    system prompt and invalidates the whole cached prefix on the next turn.
+    A caller that persists the block across turns pins it back instead.
+    """
+
+    def _agent_with_live_tool(self):
+        agent = Agentlys(
+            instruction="You are a test agent.",
+            provider=APIProvider.ANTHROPIC,
+            model="claude-sonnet-4-5",
+            api_key="test",
+        )
+        tool = LiveTool()
+        agent.add_tool(tool)
+        return agent, tool
+
+    def _drive_turn(self, agent, question):
+        create = AsyncMock(return_value=FakeResponse([{"type": "text", "text": "ok"}]))
+
+        async def drive():
+            with patch.object(agent.provider.client.messages, "create", create):
+                async for _ in agent.run_conversation_async(question):
+                    pass
+
+        _run(drive())
+        return create.await_args_list[-1].kwargs
+
+    def test_a_new_turn_recaptures_by_default(self):
+        agent, tool = self._agent_with_live_tool()
+        first = self._drive_turn(agent, "q1")
+        self.assertIn("LiveTool(calls=0)", json.dumps(first["system"]))
+
+        tool.calls = 7  # state drifts between the turns
+        second = self._drive_turn(agent, "q2")
+        self.assertIn("LiveTool(calls=7)", json.dumps(second["system"]))
+
+    def test_pinned_snapshot_survives_new_turns(self):
+        agent, tool = self._agent_with_live_tool()
+        agent.pin_tools_states(agent.initial_tools_states)
+
+        self._drive_turn(agent, "q1")
+        tool.calls = 7
+        second = self._drive_turn(agent, "q2")
+
+        dumped = json.dumps(second["system"])
+        self.assertIn("LiveTool(calls=0)", dumped)
+        self.assertNotIn("LiveTool(calls=7)", dumped)
+
+    def test_pin_uses_the_exact_provided_string(self):
+        agent, _ = self._agent_with_live_tool()
+        stored = (
+            "## Initial Tools States\nLiveTool(calls=3, from storage)\n"
+            "--- End of Initial Tools States ---"
+        )
+        agent.pin_tools_states(stored)
+        request = self._drive_turn(agent, "q1")
+        self.assertIn("LiveTool(calls=3, from storage)", json.dumps(request["system"]))
+
+    def test_refresh_lifts_the_pin(self):
+        agent, tool = self._agent_with_live_tool()
+        agent.pin_tools_states(agent.initial_tools_states)
+
+        tool.calls = 7
+        agent.refresh_tools_states()
+        request = self._drive_turn(agent, "q1")
+        self.assertIn("LiveTool(calls=7)", json.dumps(request["system"]))
+
+        # The pin is gone for good: the next turn recaptures again.
+        tool.calls = 9
+        second = self._drive_turn(agent, "q2")
+        self.assertIn("LiveTool(calls=9)", json.dumps(second["system"]))
+
+    def test_reset_lifts_the_pin(self):
+        agent, _ = self._agent_with_live_tool()
+        agent.pin_tools_states("pinned text")
+        agent.reset()
+        self.assertFalse(agent._tools_states_pinned)
+        self.assertIsNone(agent._initial_tools_states)
+
+
 if __name__ == "__main__":
     unittest.main()
