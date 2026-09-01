@@ -508,7 +508,36 @@ class Agentlys(AgentlysBase):
         # (e.g. assistant messages that contained only thinking parts)
         messages = [m for m in messages if m.parts]
 
+        self._rehydrate_tool_references(messages)
+
         self.messages = messages
+
+    def _rehydrate_tool_references(self, messages: list[Message]) -> None:
+        """Rebuild ``tool_references`` on stored tool-search results.
+
+        A discovered tool stays loaded only through the ``tool_reference``
+        blocks the provider emits from ``MessagePart.tool_references``.
+        Callers usually persist the part's text (``"name_a, name_b"``), not
+        the list, so a reloaded history would silently drop every tool the
+        model had found and force a new search on the next turn.  Parse the
+        text back, keeping only tools that are still registered.
+        """
+        search_name = self._tool_search_function_name
+        if search_name is None:
+            return
+        for msg in messages:
+            if msg.role != "function" or msg.name != search_name:
+                continue
+            for part in msg.parts:
+                if part.type != "function_result" or part.tool_references is not None:
+                    continue
+                part.tool_references = self._parse_tool_references(part.content)
+
+    def _parse_tool_references(self, content: typing.Optional[str]) -> list[str]:
+        if not content or content.strip() == "[]":
+            return []
+        names = [name.strip() for name in content.split(",")]
+        return [name for name in names if name and name in self.functions]
 
     def add_function(
         self,

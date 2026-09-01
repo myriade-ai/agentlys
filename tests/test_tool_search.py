@@ -587,3 +587,128 @@ def test_anthropic_empty_tool_references():
         "tool_use_id": "call_empty",
         "content": [],
     }
+
+
+# ── load_messages rehydration tests ──────────────────────────────────────────
+
+
+def _stored_search_result(content: str) -> Message:
+    """A tool_search result rebuilt from storage: text only, no references."""
+    return Message(
+        role="function",
+        name="tool_search",
+        parts=[
+            MessagePart(
+                type="function_result",
+                content=content,
+                function_call_id="call_search",
+            )
+        ],
+    )
+
+
+def test_load_messages_rehydrates_tool_references():
+    """A stored tool_search result keeps its discovered tools loaded."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.add_function(_dummy_fn_b)
+    agent.enable_tool_search()
+
+    agent.load_messages(
+        [
+            Message(role="user", content="find tools"),
+            _stored_search_result("_dummy_fn_a, _dummy_fn_b"),
+        ]
+    )
+
+    part = agent.messages[1].parts[0]
+    assert part.tool_references == ["_dummy_fn_a", "_dummy_fn_b"]
+    assert part_to_anthropic_dict(part)["content"] == [
+        {"type": "tool_reference", "tool_name": "_dummy_fn_a"},
+        {"type": "tool_reference", "tool_name": "_dummy_fn_b"},
+    ]
+
+
+def test_load_messages_drops_unregistered_tool_references():
+    """Tools that are no longer registered must not be referenced."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.enable_tool_search()
+
+    agent.load_messages([_stored_search_result("_dummy_fn_a, _dummy_fn_c")])
+
+    assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_a"]
+
+
+def test_load_messages_rehydrates_empty_search_result():
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.enable_tool_search()
+
+    agent.load_messages([_stored_search_result("[]")])
+
+    assert agent.messages[0].parts[0].tool_references == []
+
+
+def test_load_messages_keeps_existing_tool_references():
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.add_function(_dummy_fn_b)
+    agent.enable_tool_search()
+    message = _stored_search_result("_dummy_fn_a, _dummy_fn_b")
+    message.parts[0].tool_references = ["_dummy_fn_b"]
+
+    agent.load_messages([message])
+
+    assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_b"]
+
+
+def test_load_messages_leaves_regular_results_alone():
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.enable_tool_search()
+    message = Message(
+        role="function",
+        name="_dummy_fn_a",
+        parts=[
+            MessagePart(
+                type="function_result",
+                content="_dummy_fn_a, _dummy_fn_b",
+                function_call_id="call_a",
+            )
+        ],
+    )
+
+    agent.load_messages([message])
+
+    assert agent.messages[0].parts[0].tool_references is None
+
+
+def test_load_messages_without_tool_search_is_untouched():
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    agent.load_messages([_stored_search_result("_dummy_fn_a")])
+
+    assert agent.messages[0].parts[0].tool_references is None
+
+
+def test_reloaded_search_result_serializes_like_the_live_one():
+    """The reloaded tool_result must match what was sent live, or the
+    Anthropic prefix cache is invalidated at the search result."""
+    from agentlys.providers.anthropic import message_to_anthropic_dict
+
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.add_function(_dummy_fn_b)
+    agent.enable_tool_search()
+    live = agent._format_callback_message(
+        function_name="tool_search",
+        function_call_id="call_search",
+        content=["_dummy_fn_a", "_dummy_fn_b"],
+        image=None,
+    )
+    live_dict = message_to_anthropic_dict(live)
+
+    agent.load_messages([_stored_search_result(live.parts[0].content)])
+
+    assert message_to_anthropic_dict(agent.messages[0]) == live_dict
