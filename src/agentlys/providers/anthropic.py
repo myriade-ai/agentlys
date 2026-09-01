@@ -214,6 +214,15 @@ def message_to_anthropic_dict(message: Message) -> dict:
             continue
         if part.type == "thinking" and not keep_thinking:
             continue
+        if part.type == "thinking" and not part.is_redacted and not part.thinking:
+            # The model does emit signed thinking blocks with empty content,
+            # but the API refuses them on replay ('each thinking block must
+            # contain thinking', 400) when one sits on the last assistant
+            # message — which a replayed empty turn does. Dropping the block
+            # at worst invalidates the cached prefix; replaying it kills the
+            # conversation. Redacted blocks carry their payload in the
+            # signature and stay.
+            continue
         res["content"].append(part_to_anthropic_dict(part))
 
     return res

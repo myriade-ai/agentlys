@@ -259,6 +259,36 @@ class TestThinkingReplay(unittest.TestCase):
             message_to_anthropic_dict(second)["content"][0]["type"], "thinking"
         )
 
+    def test_live_message_drops_empty_thinking(self):
+        """The model can emit a signed thinking block with empty content; the
+        API refuses to take it back ('each thinking block must contain
+        thinking', 400) once it sits on the last assistant message, killing
+        every later call of the conversation. Drop it at serialization."""
+        message = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "thinking", "thinking": "", "signature": "sig"},
+                {"type": "text", "text": "answer"},
+            ],
+        )
+
+        blocks = message_to_anthropic_dict(message)["content"]
+
+        self.assertEqual(blocks, [{"type": "text", "text": "answer"}])
+
+    def test_live_message_drops_thinking_without_content_field(self):
+        message = Message.from_anthropic_dict(
+            role="assistant",
+            content=[
+                {"type": "thinking", "signature": "sig"},
+                {"type": "text", "text": "answer"},
+            ],
+        )
+
+        blocks = message_to_anthropic_dict(message)["content"]
+
+        self.assertEqual(blocks, [{"type": "text", "text": "answer"}])
+
     def test_load_messages_marks_history_as_stored(self):
         agent = Agentlys(provider=APIProvider.ANTHROPIC, api_key="test")
         live = self._live_assistant()
