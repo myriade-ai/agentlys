@@ -662,6 +662,19 @@ def test_load_messages_keeps_existing_tool_references():
     assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_b"]
 
 
+def test_load_messages_drops_unregistered_existing_tool_references():
+    """Persisted references to removed tools must not make Anthropic reject."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.enable_tool_search()
+    message = _stored_search_result("_dummy_fn_a, _dummy_fn_b")
+    message.parts[0].tool_references = ["_dummy_fn_a", "_dummy_fn_b"]
+
+    agent.load_messages([message])
+
+    assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_a"]
+
+
 def test_load_messages_leaves_regular_results_alone():
     agent = Agentlys(provider=APIProvider.ANTHROPIC)
     agent.add_function(_dummy_fn_a)

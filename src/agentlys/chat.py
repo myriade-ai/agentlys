@@ -520,7 +520,8 @@ class Agentlys(AgentlysBase):
         Callers usually persist the part's text (``"name_a, name_b"``), not
         the list, so a reloaded history would silently drop every tool the
         model had found and force a new search on the next turn.  Parse the
-        text back, keeping only tools that are still registered.
+        text back and filter both restored and existing references so only
+        tools that are still registered are sent to the provider.
         """
         search_name = self._tool_search_function_name
         if search_name is None:
@@ -529,9 +530,14 @@ class Agentlys(AgentlysBase):
             if msg.role != "function" or msg.name != search_name:
                 continue
             for part in msg.parts:
-                if part.type != "function_result" or part.tool_references is not None:
+                if part.type != "function_result":
                     continue
-                part.tool_references = self._parse_tool_references(part.content)
+                if part.tool_references is None:
+                    part.tool_references = self._parse_tool_references(part.content)
+                else:
+                    part.tool_references = [
+                        name for name in part.tool_references if name in self.functions
+                    ]
 
     def _parse_tool_references(self, content: typing.Optional[str]) -> list[str]:
         if not content or content.strip() == "[]":
