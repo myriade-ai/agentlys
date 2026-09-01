@@ -24,6 +24,15 @@ _EXTENDED_TTL_BETA = "extended-cache-ttl-2025-04-11"
 # own default.
 _VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
+# Anthropic's server-side tool search (BM25 variant: natural-language
+# queries). Injected into `tools` when the chat enables server-side tool
+# search; deferred tools are then discovered and expanded by the API itself,
+# with no client round-trip. GA — no beta header required.
+SERVER_TOOL_SEARCH_DEF = {
+    "type": "tool_search_tool_bm25_20251119",
+    "name": "tool_search_tool_bm25",
+}
+
 
 def _resolve_cache_ttl(value: str | None, env_var: str, default: str) -> str:
     ttl = value or os.getenv(env_var) or default
@@ -173,6 +182,14 @@ def part_to_anthropic_dict(part: MessagePart) -> dict:
         else:
             result["content"] = part.content
         return result
+    elif part.type in ("server_tool_use", "server_tool_result"):
+        # Replay the raw API block verbatim — the API executed the tool, so
+        # the client must neither rewrite it nor answer it with a
+        # tool_result. Canonical key order rebuilds a fresh structure (no
+        # shared mutation when cache_control is stamped on it) and keeps the
+        # serialization byte-stable after a store that reorders object keys
+        # (Postgres jsonb), mirroring the tool_use "input" handling above.
+        return _canonical_key_order(part.function_call)
     elif part.type == "thinking":
         if part.is_redacted:
             return {
@@ -232,6 +249,8 @@ DEFAULT_MAX_TOKENS = int(os.getenv("ANTHROPIC_MAX_TOKENS", "10000"))
 
 
 class AnthropicProvider(BaseProvider):
+    supports_server_tool_search = True
+
     def __init__(
         self,
         chat: AgentlysBase,
@@ -344,6 +363,16 @@ class AnthropicProvider(BaseProvider):
             if s.get("defer_loading"):
                 tool_def["defer_loading"] = True
             tools.append(tool_def)
+
+        # Server-side tool search: the API runs the search itself, so no
+        # local tool_search function is registered (see enable_tool_search).
+        # The server tool leads the list and is never deferred — the API
+        # requires at least one non-deferred tool.
+        tool_search_config = getattr(self.chat, "_tool_search_config", None)
+        if tool_search_config is not None and getattr(
+            tool_search_config, "server_side", False
+        ):
+            tools.insert(0, dict(SERVER_TOOL_SEARCH_DEF))
         return tools
 
     def _build_system_blocks(self) -> list[dict]:
