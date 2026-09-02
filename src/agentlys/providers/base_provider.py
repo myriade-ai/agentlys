@@ -8,6 +8,7 @@ from agentlys.utils import get_event_loop_or_create
 
 class APIProvider(Enum):
     OPENAI = "openai"
+    OPENAI_RESPONSES = "openai_responses"
     OPENAI_FUNCTION_LEGACY = "openai_function_legacy"
     OPENAI_FUNCTION_SHIM = "openai_function_shim"
     ANTHROPIC = "anthropic"
