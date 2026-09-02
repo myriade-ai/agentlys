@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "agentlys"
-version = "1.18.2"
+version = "1.19.0"
 source = { editable = "." }
 dependencies = [
     { name = "pillow" },
