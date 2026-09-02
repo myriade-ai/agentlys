@@ -697,6 +697,41 @@ class TestReasoningModelCompat:
         assert calls[0]["reasoning_effort"] == "low"
 
     @pytest.mark.asyncio
+    async def test_disabled_thinking_sends_no_effort(self):
+        # gpt-4o and OpenAI-compatible models reject reasoning_effort.
+        agent, calls = self._agent(thinking={"type": "disabled"})
+        await agent.ask_async("hi")
+        assert "reasoning_effort" not in calls[0]
+
+    @pytest.mark.asyncio
+    async def test_thinking_only_assistant_turn_is_dropped(self):
+        agent, calls = self._agent()
+        agent.messages.append(Message(role="user", content="hi"))
+        agent.messages.append(
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(type="thinking", thinking="t", thinking_signature="s")
+                ],
+            )
+        )
+        await agent.ask_async("again")
+        assert all(
+            m.get("content") or m.get("tool_calls")
+            for m in calls[0]["messages"]
+            if m["role"] == "assistant"
+        )
+
+    @pytest.mark.asyncio
+    async def test_legacy_max_tokens_opt_out(self, monkeypatch):
+        monkeypatch.setenv("AGENTLYS_OPENAI_LEGACY_MAX_TOKENS", "1")
+        agent, calls = self._agent()
+        await agent.provider.complete([{"role": "user", "content": "x"}])
+        assert (
+            calls[0]["max_tokens"] == 4096 and "max_completion_tokens" not in calls[0]
+        )
+
+    @pytest.mark.asyncio
     async def test_no_effort_sends_nothing(self):
         agent, calls = self._agent()
         await agent.ask_async("hi")

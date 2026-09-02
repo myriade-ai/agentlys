@@ -187,7 +187,7 @@ class TestReasoningMapping:
         [
             (None, None),
             ({"type": "adaptive"}, None),
-            ({"type": "disabled"}, "low"),
+            ({"type": "disabled"}, None),
             ({"type": "enabled", "budget_tokens": 1024}, "low"),
             ({"type": "enabled", "budget_tokens": 5000}, "medium"),
             ({"type": "enabled", "budget_tokens": 16000}, "high"),
@@ -313,10 +313,7 @@ class TestSerialization:
             "summary": [{"type": "summary_text", "text": "plan"}],
             "encrypted_content": "ENC",
         }
-        assert items[1] == {
-            "role": "assistant",
-            "content": [{"type": "output_text", "text": "Let me check."}],
-        }
+        assert items[1] == {"role": "assistant", "content": "Let me check."}
         assert items[2] == {
             "type": "function_call",
             "call_id": "call_1",
@@ -502,6 +499,9 @@ class TestToolLoop:
         tool = second["tools"][0]
         assert tool["type"] == "function" and tool["name"] == "get_weather"
         assert "defer_loading" not in tool
+        # The Responses API defaults strict to true, which rejects schemas
+        # with optional arguments.
+        assert tool["strict"] is False
 
     @pytest.mark.asyncio
     async def test_use_tools_only(self):
@@ -729,3 +729,71 @@ class TestComplete:
         chunks = [c async for c in agent.ask_stream_async("two")]
         assert any(c["type"] == "compacting" for c in chunks)
         assert agent.messages[0].has_compaction
+
+
+class TestReplayEdgeCases:
+    def test_trailing_reasoning_is_not_replayed(self):
+        # A turn cut off by max_output_tokens holds reasoning and nothing
+        # else; the API rejects a reasoning item without its following item.
+        message = Message(
+            role="assistant",
+            parts=[
+                MessagePart(
+                    type="thinking", thinking="t", thinking_signature="rs_1|ENC"
+                ),
+                MessagePart(type="text", content=""),
+            ],
+        )
+        message.is_live = True
+        assert message_to_responses_items(message) == []
+
+    def test_reasoning_without_id_is_skipped(self):
+        message = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="thinking", thinking="t", thinking_signature="|ENC"),
+                MessagePart(type="text", content="ok"),
+            ],
+        )
+        message.is_live = True
+        assert message_to_responses_items(message) == [
+            {"role": "assistant", "content": "ok"}
+        ]
+
+    def test_refusal_becomes_text(self):
+        item = NS(
+            type="message",
+            content=[NS(type="refusal", refusal="I can't help with that.")],
+        )
+        message = output_to_message([item])
+        assert message.content == "I can't help with that."
+
+    @pytest.mark.asyncio
+    async def test_stream_joins_summary_parts_like_the_stored_message(self):
+        final = _response([_reasoning_item(text="a\n\nb"), _message_item("x")])
+        events = [
+            NS(
+                type="response.output_item.added",
+                output_index=0,
+                item=NS(type="reasoning"),
+            ),
+            NS(type="response.reasoning_summary_part.added", output_index=0),
+            NS(type="response.reasoning_summary_text.delta", delta="a", output_index=0),
+            NS(type="response.reasoning_summary_part.added", output_index=0),
+            NS(type="response.reasoning_summary_text.delta", delta="b", output_index=0),
+            NS(type="response.completed", response=final),
+        ]
+        agent, fake = _agent([events])
+        chunks = [c async for c in agent.ask_stream_async("hi")]
+        streamed = "".join(c["content"] for c in chunks if c["type"] == "thinking")
+        assert streamed == chunks[-1]["message"].parts[0].thinking == "a\n\nb"
+
+    @pytest.mark.asyncio
+    async def test_incomplete_response_is_logged(self, caplog):
+        final = _response([_reasoning_item()])
+        final.status = "incomplete"
+        final.incomplete_details = NS(reason="max_output_tokens")
+        agent, fake = _agent([final])
+        with caplog.at_level("WARNING"):
+            await agent.ask_async("hi")
+        assert "max_output_tokens" in caplog.text

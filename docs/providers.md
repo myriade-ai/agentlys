@@ -59,17 +59,21 @@ agent = Agentlys(provider="openai_responses", model="gpt-5.4", effort="high")
   `message`. Usage (including `cache_read_input_tokens` and
   `reasoning_tokens`) arrives with the completed response, so compaction
   works in streaming mode.
-- **Tool search** — the API has no deferred loading; deferred tools are
-  hidden until a `tool_search` result references them, the same economy as
-  Anthropic's `defer_loading`.
+- **Tool search** — agentlys keeps its own client-side search tool rather
+  than the API's native `tool_search`; deferred tools are hidden until a
+  search result references them, the same economy as Anthropic's
+  `defer_loading` (the tool list changes when a tool loads, which resets
+  OpenAI's automatic prefix cache for that request).
 - `base_url`, `api_key`, `AGENTLYS_HOST`, `AGENTLYS_API_KEY` and
   `default_headers` (constructor only) work as for the `openai` provider.
   `cache_ttl` / `cache_ttl_messages` are accepted and ignored — OpenAI
   caches prompt prefixes automatically.
 
 The `openai` provider also maps `effort` / `thinking` to `reasoning_effort`,
-hides deferred tools the same way, requests usage in streams and uses
-`max_completion_tokens`, so reasoning models work there too — without the
+hides deferred tools the same way, requests usage in streams
+(`AGENTLYS_OPENAI_STREAM_USAGE=0` opts out) and uses `max_completion_tokens`
+(`AGENTLYS_OPENAI_LEGACY_MAX_TOKENS=1` keeps `max_tokens` for gateways that
+reject the new field), so reasoning models work there too — without the
 cross-turn reasoning state.
 
 ### Anthropic

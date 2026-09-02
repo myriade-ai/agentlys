@@ -24,7 +24,11 @@ import typing
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
-from agentlys.providers.openai import OPENAI_DEFAULT_BASE_URL
+from agentlys.providers.openai import (
+    create_openai_client,
+    resolve_effort,
+    thinking_to_effort,
+)
 from agentlys.providers.utils import (
     FunctionCallParsingError,
     add_empty_function_result,
@@ -35,57 +39,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "16000"))
 
-# reasoning.effort values the API accepts. Availability varies per model
-# generation (``minimal`` is gpt-5 only, ``none`` needs gpt-5.1+, ``xhigh``
-# gpt-5.2+); the provider forwards whatever it is given and lets the API
-# reject a value the target model does not support.
-_VALID_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
-
-# Anthropic ``output_config.effort`` levels that have no OpenAI namesake.
-_EFFORT_ALIASES = {"max": "xhigh"}
-
 _SIGNATURE_SEPARATOR = "|"
-
-
-def resolve_effort(value: typing.Optional[str]) -> typing.Optional[str]:
-    """Normalize an effort level to what the Responses API accepts.
-
-    Accepts the OpenAI levels as-is and translates the Anthropic-only ones,
-    so a caller can keep one ``effort=`` setting across providers.
-    """
-    effort = value or os.getenv("AGENTLYS_EFFORT") or None
-    if effort is None:
-        return None
-    effort = _EFFORT_ALIASES.get(effort, effort)
-    if effort not in _VALID_EFFORTS:
-        raise ValueError(
-            f"Invalid effort {effort!r}: expected one of {_VALID_EFFORTS} "
-            f"or {tuple(_EFFORT_ALIASES)}"
-        )
-    return effort
-
-
-def thinking_to_effort(thinking: typing.Optional[dict]) -> typing.Optional[str]:
-    """Map an Anthropic ``thinking`` config onto a reasoning effort.
-
-    ``adaptive`` (let the model decide) maps to "no effort sent", which is the
-    API's own adaptive default. ``enabled`` scales with the budget the caller
-    had in mind. ``disabled`` becomes ``low`` rather than ``none``/``minimal``
-    because neither of those exists on every reasoning model generation.
-    """
-    if not thinking:
-        return None
-    thinking_type = thinking.get("type")
-    if thinking_type == "disabled":
-        return "low"
-    if thinking_type == "enabled":
-        budget = thinking.get("budget_tokens") or 0
-        if budget < 2048:
-            return "low"
-        if budget < 8192:
-            return "medium"
-        return "high"
-    return None
 
 
 def encode_thinking_signature(item_id: typing.Optional[str], encrypted: str) -> str:
@@ -107,6 +61,14 @@ def decode_thinking_signature(
     return (item_id or None), (encrypted or None)
 
 
+def _get(obj, name, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
 def usage_to_dict(usage) -> typing.Optional[dict]:
     """Normalize Responses usage to the naming used by Message.
 
@@ -119,18 +81,12 @@ def usage_to_dict(usage) -> typing.Optional[dict]:
     if usage is None:
         return None
 
-    def _get(obj, name, default=0):
-        if obj is None:
-            return default
-        value = obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
-        return default if value is None else value
-
     input_tokens = _get(usage, "input_tokens") or 0
     output_tokens = _get(usage, "output_tokens") or 0
     cached = min(
-        _get(_get(usage, "input_tokens_details", None), "cached_tokens"), input_tokens
+        _get(_get(usage, "input_tokens_details"), "cached_tokens") or 0, input_tokens
     )
-    reasoning = _get(_get(usage, "output_tokens_details", None), "reasoning_tokens")
+    reasoning = _get(_get(usage, "output_tokens_details"), "reasoning_tokens")
 
     result = {
         "input_tokens": input_tokens - cached,
@@ -230,11 +186,11 @@ def message_to_responses_items(message: Message) -> list[dict]:
     if message.role == "assistant":
         keep_thinking = getattr(message, "is_live", False)
         items: list[dict] = []
-        text_parts: list[dict] = []
+        text_parts: list[str] = []
 
         def _flush_text():
             if text_parts:
-                items.append({"role": "assistant", "content": list(text_parts)})
+                items.append({"role": "assistant", "content": "".join(text_parts)})
                 text_parts.clear()
 
         for part in message.parts:
@@ -242,20 +198,21 @@ def message_to_responses_items(message: Message) -> list[dict]:
                 if not keep_thinking:
                     continue
                 item_id, encrypted = decode_thinking_signature(part.thinking_signature)
-                if not encrypted:
+                if not item_id or not encrypted:
                     continue
                 _flush_text()
-                item = {
-                    "type": "reasoning",
-                    "id": item_id,
-                    "summary": (
-                        [{"type": "summary_text", "text": part.thinking}]
-                        if part.thinking
-                        else []
-                    ),
-                    "encrypted_content": encrypted,
-                }
-                items.append(item)
+                items.append(
+                    {
+                        "type": "reasoning",
+                        "id": item_id,
+                        "summary": (
+                            [{"type": "summary_text", "text": part.thinking}]
+                            if part.thinking
+                            else []
+                        ),
+                        "encrypted_content": encrypted,
+                    }
+                )
             elif part.type == "function_call":
                 _flush_text()
                 items.append(
@@ -268,19 +225,18 @@ def message_to_responses_items(message: Message) -> list[dict]:
                 )
             elif part.type == "text":
                 if part.content and part.content.strip():
-                    text_parts.append({"type": "output_text", "text": part.content})
+                    text_parts.append(part.content)
             elif part.type == "compaction":
-                text_parts.append(
-                    {
-                        "type": "output_text",
-                        "text": f"[Previous conversation summary]\n{part.content}",
-                    }
-                )
+                text_parts.append(f"[Previous conversation summary]\n{part.content}")
             else:
-                # Images/documents never appear on assistant turns; be strict
-                # so a mis-built history fails here rather than at the API.
                 raise ValueError(f"Unsupported assistant part type: {part.type}")
         _flush_text()
+        # The API rejects a replayed reasoning item that is not followed by
+        # the item it originally preceded (a turn cut off by
+        # max_output_tokens, say): a trailing one would 400 every request
+        # from here on.
+        while items and items[-1].get("type") == "reasoning":
+            items.pop()
         return items
 
     # user (and any other role) -> a single message item
@@ -314,12 +270,15 @@ def message_to_responses_items(message: Message) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def _get(obj, name, default=None):
-    if obj is None:
-        return default
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    return getattr(obj, name, default)
+def _warn_if_incomplete(response) -> None:
+    if _get(response, "status") != "incomplete":
+        return
+    reason = _get(_get(response, "incomplete_details"), "reason")
+    logger.warning(
+        "OpenAI response %s is incomplete (%s): the turn was cut off",
+        _get(response, "id"),
+        reason,
+    )
 
 
 def output_to_message(
@@ -349,9 +308,9 @@ def output_to_message(
             )
         elif item_type == "message":
             text = "".join(
-                _get(c, "text", "")
+                _get(c, "text", "") or _get(c, "refusal", "")
                 for c in (_get(item, "content") or [])
-                if _get(c, "type") == "output_text"
+                if _get(c, "type") in ("output_text", "refusal")
             )
             if text.strip():
                 parts.append(MessagePart(type="text", content=text))
@@ -401,8 +360,6 @@ class OpenAIResponsesProvider(BaseProvider):
         cache_ttl: typing.Optional[str] = None,
         cache_ttl_messages: typing.Optional[str] = None,
     ):
-        from openai import AsyncOpenAI
-
         self.chat = chat
         self.model = model
         self.max_tokens = (
@@ -410,18 +367,8 @@ class OpenAIResponsesProvider(BaseProvider):
         )
         self.effort = resolve_effort(effort)
         self.reasoning_summary = reasoning_summary
-        env_host = os.getenv("AGENTLYS_HOST")
-        resolved_api_key = api_key or os.getenv("AGENTLYS_API_KEY")
-        if (
-            resolved_api_key is None
-            and (base_url or env_host)
-            and not os.getenv("OPENAI_API_KEY")
-        ):
-            resolved_api_key = "not-needed"
-        self.client = AsyncOpenAI(
-            base_url=base_url or env_host or OPENAI_DEFAULT_BASE_URL,
-            api_key=resolved_api_key,
-            default_headers=default_headers,
+        self.client = create_openai_client(
+            base_url=base_url, api_key=api_key, default_headers=default_headers
         )
 
     # -- request assembly ---------------------------------------------------
@@ -442,9 +389,10 @@ class OpenAIResponsesProvider(BaseProvider):
     def _loaded_tool_names(self) -> set[str]:
         """Tools a tool_search result has loaded so far in this conversation.
 
-        The Responses API has no server-side deferred loading, so the search
-        tool's ``tool_references`` are honoured here: a deferred tool is sent
-        only once a search has surfaced it.
+        The API's own deferral (``defer_loading`` + its ``tool_search`` tool)
+        would replace agentlys' search function; keeping the client-side
+        search, the search tool's ``tool_references`` are honoured here: a
+        deferred tool is sent only once a search has surfaced it.
         """
         loaded: set[str] = set()
         for message in self.chat.messages:
@@ -459,15 +407,18 @@ class OpenAIResponsesProvider(BaseProvider):
         for s in self.chat.functions_schema:
             if s.get("defer_loading") and s["name"] not in loaded:
                 continue
-            tool_def = {
-                "type": "function",
-                "name": s["name"],
-                "description": s.get("description") or "No description provided",
-                "parameters": s["parameters"],
-            }
-            if s.get("strict") is True:
-                tool_def["strict"] = True
-            tools.append(tool_def)
+            tools.append(
+                {
+                    "type": "function",
+                    "name": s["name"],
+                    "description": s.get("description") or "No description provided",
+                    "parameters": s["parameters"],
+                    # Unlike Chat Completions, the Responses API defaults
+                    # strict to true, which rejects any schema with an
+                    # optional argument.
+                    "strict": s.get("strict") is True,
+                }
+            )
         return tools
 
     def _build_reasoning(self, kwargs: dict) -> typing.Optional[dict]:
@@ -530,6 +481,7 @@ class OpenAIResponsesProvider(BaseProvider):
         res = await self.client.responses.create(
             model=self.model, input=input_items, **kwargs
         )
+        _warn_if_incomplete(res)
         return output_to_message(res.output, response_id=res.id, usage=res.usage)
 
     async def complete(
@@ -578,12 +530,21 @@ class OpenAIResponsesProvider(BaseProvider):
 
         # output_index -> {"name", "id"} for function_call items in flight
         current_tools: dict[int, dict] = {}
+        summary_parts: dict[int, int] = {}
         final_response = None
 
         async for event in stream:
             event_type = _get(event, "type")
             if event_type == "response.output_text.delta":
                 yield {"type": "text", "content": _get(event, "delta", "")}
+            elif event_type == "response.refusal.delta":
+                yield {"type": "text", "content": _get(event, "delta", "")}
+            elif event_type == "response.reasoning_summary_part.added":
+                index = _get(event, "output_index", 0)
+                if summary_parts.get(index):
+                    # Parts are joined with a blank line in the stored message.
+                    yield {"type": "thinking", "content": "\n\n"}
+                summary_parts[index] = summary_parts.get(index, 0) + 1
             elif event_type == "response.reasoning_summary_text.delta":
                 yield {"type": "thinking", "content": _get(event, "delta", "")}
             elif event_type == "response.output_item.added":
@@ -622,6 +583,7 @@ class OpenAIResponsesProvider(BaseProvider):
             raise RuntimeError(
                 f"OpenAI response failed: {_get(error, 'message') or error}"
             )
+        _warn_if_incomplete(final_response)
 
         final_message = output_to_message(
             _get(final_response, "output"),
