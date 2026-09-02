@@ -30,6 +30,52 @@ agent = Agentlys(provider="openai")
 agent = Agentlys(provider="openai", model="gpt-5-mini")
 ```
 
+### OpenAI Responses API (GPT-5 / o-series reasoning)
+
+The `openai_responses` provider targets the Responses API, which is the only
+OpenAI API that carries a reasoning model's hidden state across the turns of
+a tool loop. Use it for GPT-5 / o-series models; the plain `openai`
+provider (Chat Completions) restarts the reasoning from scratch after every
+tool result.
+
+```python
+agent = Agentlys(provider="openai_responses", model="gpt-5.4", effort="high")
+```
+
+- **Reasoning** — `effort` accepts the OpenAI levels (`none`, `minimal`,
+  `low`, `medium`, `high`, `xhigh`) plus Anthropic's `max` (mapped to
+  `xhigh`), so one setting works across providers; an Anthropic-style
+  `thinking=` config is translated (`enabled` scales with `budget_tokens`,
+  `adaptive` leaves the model's default). A summary is requested
+  (`reasoning.summary="auto"`) and streamed as `{"type": "thinking"}` chunks.
+- **Round-trip** — each turn's reasoning is stored as a `thinking`
+  MessagePart whose `thinking_signature` is
+  `"<reasoning item id>|<encrypted_content>"`. Persist `thinking` and
+  `thinking_signature` byte-for-byte and reload with
+  `load_messages(keep_thinking=True)` exactly as for Anthropic; requests use
+  `store=false`, nothing is retained on OpenAI's side.
+- **Streaming** — yields `text`, `thinking`, `tool_started` (`name`, `id`,
+  `index`) and `tool_delta` (`partial_json`) chunks before the final
+  `message`. Usage (including `cache_read_input_tokens` and
+  `reasoning_tokens`) arrives with the completed response, so compaction
+  works in streaming mode.
+- **Tool search** — agentlys keeps its own client-side search tool rather
+  than the API's native `tool_search`; deferred tools are hidden until a
+  search result references them, the same economy as Anthropic's
+  `defer_loading` (the tool list changes when a tool loads, which resets
+  OpenAI's automatic prefix cache for that request).
+- `base_url`, `api_key`, `AGENTLYS_HOST`, `AGENTLYS_API_KEY` and
+  `default_headers` (constructor only) work as for the `openai` provider.
+  `cache_ttl` / `cache_ttl_messages` are accepted and ignored — OpenAI
+  caches prompt prefixes automatically.
+
+The `openai` provider also maps `effort` / `thinking` to `reasoning_effort`,
+hides deferred tools the same way, requests usage in streams
+(`AGENTLYS_OPENAI_STREAM_USAGE=0` opts out) and uses `max_completion_tokens`
+(`AGENTLYS_OPENAI_LEGACY_MAX_TOKENS=1` keeps `max_tokens` for gateways that
+reject the new field), so reasoning models work there too — without the
+cross-turn reasoning state.
+
 ### Anthropic
 
 Anthropic's Claude models, recommended for agentic behavior.

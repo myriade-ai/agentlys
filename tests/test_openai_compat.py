@@ -459,7 +459,7 @@ class TestCompleteAndCompaction:
         # The agent instruction rides along as the system message
         kwargs = mock_create.call_args.kwargs
         assert kwargs["messages"][0]["role"] == "system"
-        assert kwargs["max_tokens"] == 4096
+        assert kwargs["max_completion_tokens"] == 4096
 
     @pytest.mark.asyncio
     async def test_complete_not_implemented_on_bare_provider(self):
@@ -652,3 +652,224 @@ class TestUsageToDict:
         result = usage_to_dict(usage)
         assert result["input_tokens"] == 0
         assert result["cache_read_input_tokens"] == 100
+
+
+class TestReasoningModelCompat:
+    """GPT-5 / o-series specifics on the Chat Completions path."""
+
+    def _agent(self, **kwargs):
+        agent = Agentlys(provider="openai", model="gpt-5.4", **kwargs)
+        calls = []
+
+        async def create(**kw):
+            calls.append(kw)
+            return SimpleNamespace(
+                id="chatcmpl-1",
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            role="assistant", content="ok", tool_calls=None
+                        )
+                    )
+                ],
+                usage=None,
+            )
+
+        agent.provider.client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        return agent, calls
+
+    @pytest.mark.asyncio
+    async def test_effort_becomes_reasoning_effort(self):
+        agent, calls = self._agent(effort="max")
+        await agent.ask_async("hi")
+        assert calls[0]["reasoning_effort"] == "xhigh"
+        assert "effort" not in calls[0]
+
+    @pytest.mark.asyncio
+    async def test_thinking_is_translated_not_forwarded(self):
+        agent, calls = self._agent(
+            thinking={"type": "enabled", "budget_tokens": 1000}, cache_ttl="1h"
+        )
+        await agent.ask_async("hi")
+        assert "thinking" not in calls[0]
+        assert calls[0]["reasoning_effort"] == "low"
+
+    @pytest.mark.asyncio
+    async def test_disabled_thinking_sends_no_effort(self):
+        # gpt-4o and OpenAI-compatible models reject reasoning_effort.
+        agent, calls = self._agent(thinking={"type": "disabled"})
+        await agent.ask_async("hi")
+        assert "reasoning_effort" not in calls[0]
+
+    @pytest.mark.asyncio
+    async def test_thinking_only_assistant_turn_is_dropped(self):
+        agent, calls = self._agent()
+        agent.messages.append(Message(role="user", content="hi"))
+        agent.messages.append(
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(type="thinking", thinking="t", thinking_signature="s")
+                ],
+            )
+        )
+        await agent.ask_async("again")
+        assert all(
+            m.get("content") or m.get("tool_calls")
+            for m in calls[0]["messages"]
+            if m["role"] == "assistant"
+        )
+
+    @pytest.mark.asyncio
+    async def test_legacy_max_tokens_opt_out(self, monkeypatch):
+        monkeypatch.setenv("AGENTLYS_OPENAI_LEGACY_MAX_TOKENS", "1")
+        agent, calls = self._agent()
+        await agent.provider.complete([{"role": "user", "content": "x"}])
+        assert (
+            calls[0]["max_tokens"] == 4096 and "max_completion_tokens" not in calls[0]
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_effort_sends_nothing(self):
+        agent, calls = self._agent()
+        await agent.ask_async("hi")
+        assert "reasoning_effort" not in calls[0]
+
+    @pytest.mark.asyncio
+    async def test_deferred_tools_hidden_and_flag_stripped(self):
+        agent, calls = self._agent()
+
+        def get_weather(city: str) -> str:
+            """Weather forecast.
+
+            Args:
+                city: the city
+            """
+            return "sunny"
+
+        agent.add_function(get_weather)
+        agent.enable_tool_search()
+        await agent.ask_async("hi")
+        tools = calls[0]["tools"]
+        assert [t["function"]["name"] for t in tools] == ["tool_search"]
+        assert all(
+            "defer_loading" not in t and "defer_loading" not in t["function"]
+            for t in tools
+        )
+        system = [m for m in calls[0]["messages"] if m["role"] == "system"]
+        assert any("get_weather" in json.dumps(m["content"]) for m in system)
+
+        # A search result loads the tool for the next request.
+        agent.messages.append(
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={
+                            "name": "tool_search",
+                            "arguments": {"query": "weather"},
+                        },
+                        function_call_id="call_s",
+                    )
+                ],
+            )
+        )
+        agent.messages.append(
+            Message(
+                role="function",
+                parts=[
+                    MessagePart(
+                        type="function_result",
+                        content="get_weather",
+                        function_call_id="call_s",
+                        tool_references=["get_weather"],
+                    )
+                ],
+            )
+        )
+        await agent.ask_async(None)
+        assert {t["function"]["name"] for t in calls[1]["tools"]} == {
+            "tool_search",
+            "get_weather",
+        }
+
+    def test_thinking_part_is_skipped(self):
+        message = Message(
+            role="assistant",
+            parts=[
+                MessagePart(type="thinking", thinking="t", thinking_signature="sig"),
+                MessagePart(type="text", content="hello"),
+            ],
+        )
+        assert message_to_openai_dict(message)["content"] == [
+            {"type": "text", "text": "hello"}
+        ]
+
+    def test_pdf_document_part(self):
+        from agentlys.model import Document
+
+        message = Message(
+            role="user",
+            parts=[
+                MessagePart(type="document", document=Document(b"%PDF", name="a.pdf")),
+            ],
+        )
+        [part] = message_to_openai_dict(message)["content"]
+        assert part["type"] == "file"
+        assert part["file"]["filename"] == "a.pdf"
+
+    def test_usage_reasoning_tokens(self):
+        usage = SimpleNamespace(
+            prompt_tokens=100,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=40),
+            completion_tokens=30,
+            completion_tokens_details=SimpleNamespace(reasoning_tokens=12),
+        )
+        assert usage_to_dict(usage) == {
+            "input_tokens": 60,
+            "output_tokens": 30,
+            "cache_read_input_tokens": 40,
+            "reasoning_tokens": 12,
+        }
+
+    @pytest.mark.asyncio
+    async def test_stream_requests_usage(self):
+        agent = Agentlys(provider="openai", model="gpt-5.4")
+        calls = []
+
+        class _Iter:
+            def __init__(self):
+                self.items = [
+                    SimpleNamespace(
+                        id="c",
+                        choices=[],
+                        usage=SimpleNamespace(
+                            prompt_tokens=5,
+                            prompt_tokens_details=None,
+                            completion_tokens=1,
+                            completion_tokens_details=None,
+                        ),
+                    )
+                ]
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if not self.items:
+                    raise StopAsyncIteration
+                return self.items.pop(0)
+
+        async def create(**kw):
+            calls.append(kw)
+            return _Iter()
+
+        agent.provider.client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        chunks = [c async for c in agent.ask_stream_async("hi")]
+        assert calls[0]["stream_options"] == {"include_usage": True}
+        assert chunks[-1]["message"].usage == {"input_tokens": 5, "output_tokens": 1}

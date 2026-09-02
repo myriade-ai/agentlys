@@ -13,11 +13,57 @@ from agentlys.providers.utils import (
 
 OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
+# reasoning effort values the API accepts. Availability varies per model
+# generation (``minimal`` is gpt-5 only, ``none`` needs gpt-5.1+, ``xhigh``
+# gpt-5.2+); the provider forwards whatever it is given and lets the API
+# reject a value the target model does not support.
+_VALID_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
+
+# Anthropic ``output_config.effort`` levels that have no OpenAI namesake.
+_EFFORT_ALIASES = {"max": "xhigh"}
+
+
+def resolve_effort(value: typing.Optional[str]) -> typing.Optional[str]:
+    """Normalize an effort level to what OpenAI accepts.
+
+    Accepts the OpenAI levels as-is and translates the Anthropic-only ones,
+    so a caller can keep one ``effort=`` setting across providers.
+    """
+    effort = value or os.getenv("AGENTLYS_EFFORT") or None
+    if effort is None:
+        return None
+    effort = _EFFORT_ALIASES.get(effort, effort)
+    if effort not in _VALID_EFFORTS:
+        raise ValueError(
+            f"Invalid effort {effort!r}: expected one of {_VALID_EFFORTS} "
+            f"or {tuple(_EFFORT_ALIASES)}"
+        )
+    return effort
+
+
+def thinking_to_effort(thinking: typing.Optional[dict]) -> typing.Optional[str]:
+    """Map an Anthropic ``thinking`` config onto a reasoning effort.
+
+    ``enabled`` scales with the budget the caller had in mind. ``adaptive``
+    and ``disabled`` send nothing: the former is the API's own default, and
+    for the latter any explicit effort would be a 400 on a model without
+    reasoning (gpt-4o, an Ollama model, ...).
+    """
+    if not thinking or thinking.get("type") != "enabled":
+        return None
+    budget = thinking.get("budget_tokens") or 0
+    if budget < 2048:
+        return "low"
+    if budget < 8192:
+        return "medium"
+    return "high"
+
 
 def create_openai_client(
     base_url: typing.Optional[str] = None,
     api_key: typing.Optional[str] = None,
     host_suffix: str = "",
+    default_headers: typing.Optional[dict] = None,
 ):
     """Build an AsyncOpenAI client for OpenAI or any OpenAI-compatible API.
 
@@ -45,6 +91,7 @@ def create_openai_client(
     return AsyncOpenAI(
         base_url=resolved_base_url or OPENAI_DEFAULT_BASE_URL,
         api_key=resolved_api_key,
+        default_headers=default_headers,
     )
 
 
@@ -98,6 +145,18 @@ def usage_to_dict(usage) -> typing.Optional[dict]:
         result["cache_read_input_tokens"] = cache_read
     if cache_creation:
         result["cache_creation_input_tokens"] = cache_creation
+    # Reasoning models report their hidden thinking as a subset of
+    # completion_tokens; keep it visible for cost attribution.
+    completion_details = getattr(usage, "completion_tokens_details", None)
+    reasoning = None
+    if completion_details is not None:
+        reasoning = (
+            completion_details.get("reasoning_tokens")
+            if isinstance(completion_details, dict)
+            else getattr(completion_details, "reasoning_tokens", None)
+        )
+    if reasoning:
+        result["reasoning_tokens"] = reasoning
     return result
 
 
@@ -144,7 +203,12 @@ def build_system_messages(chat: AgentlysBase) -> list[Message]:
     """System prompt as role="system" Messages (instruction, context, tool states)."""
     return [
         Message(role="system", content=text)
-        for text in (chat.instruction, chat.context, chat.initial_tools_states)
+        for text in (
+            chat.instruction,
+            chat.context,
+            chat.initial_tools_states,
+            chat.tool_search_categories_hint,
+        )
         if text
     ]
 
@@ -179,6 +243,27 @@ def parts_to_openai_dict(part: MessagePart) -> dict:
                 "url": f"data:{part.image.format};base64,{part.image.to_base64()}"
             },
         }
+    elif part.type == "document":
+        if part.document is None:
+            raise ValueError("Document part must have a document")
+        doc = part.document
+        if doc.media_type == "text/plain":
+            name = doc.name or "document"
+            text = doc.data.decode("utf-8", errors="replace")
+            return {"type": "text", "text": f"[Document: {name}]\n{text}"}
+        if doc.media_type == "application/pdf":
+            return {
+                "type": "file",
+                "file": {
+                    "filename": doc.name or "document.pdf",
+                    "file_data": f"data:application/pdf;base64,{doc.to_base64()}",
+                },
+            }
+        raise ValueError(
+            f"Unsupported document media_type {doc.media_type!r}: the Chat "
+            "Completions API accepts PDF files and inline text. Convert other "
+            "formats first."
+        )
     elif part.type == "compaction":
         return {
             "type": "text",
@@ -200,6 +285,9 @@ def message_to_openai_dict(message: Message) -> dict:
     else:
         res = {"role": message.role, "content": []}
         for part in message.parts:
+            if part.type == "thinking":
+                # Chat Completions has no reasoning-state item.
+                continue
             if part.type == "function_call" and message.role == "assistant":
                 res.setdefault("tool_calls", []).append(
                     {
@@ -282,10 +370,46 @@ class OpenAIProvider(BaseProvider):
         model: str,
         base_url: str = None,
         api_key: str = None,
+        effort: typing.Optional[str] = None,
+        # Accepted for config parity with AnthropicProvider: OpenAI-compatible
+        # APIs cache prompt prefixes on their own, there is nothing to set.
+        cache_ttl: typing.Optional[str] = None,
+        cache_ttl_messages: typing.Optional[str] = None,
     ):
         self.chat = chat
         self.model = model
+        self.effort = resolve_effort(effort)
         self.client = create_openai_client(base_url=base_url, api_key=api_key)
+
+    def _loaded_tool_names(self) -> set[str]:
+        """Tools a tool_search result has loaded so far in this conversation.
+
+        OpenAI-compatible APIs have no server-side deferred loading, so the
+        search tool's ``tool_references`` are honoured here: a deferred tool
+        is sent only once a search has surfaced it.
+        """
+        loaded: set[str] = set()
+        for message in self.chat.messages:
+            for part in message.parts:
+                if part.tool_references:
+                    loaded.update(part.tool_references)
+        return loaded
+
+    def _apply_reasoning_effort(self, kwargs: dict) -> None:
+        """Translate the effort / thinking settings into ``reasoning_effort``.
+
+        Per-call ``effort`` beats the provider default, which beats a
+        translated Anthropic-style ``thinking`` config. ``thinking`` itself
+        is never forwarded: the API rejects unknown parameters.
+        """
+        thinking = kwargs.pop("thinking", None) or getattr(self.chat, "thinking", None)
+        effort = resolve_effort(kwargs.pop("effort", None)) or getattr(
+            self, "effort", None
+        )
+        if effort is None:
+            effort = thinking_to_effort(thinking)
+        if effort and "reasoning_effort" not in kwargs:
+            kwargs["reasoning_effort"] = effort
 
     def _prepare_request_params(self, **kwargs):
         """Prepare messages, tools, and kwargs for an OpenAI-compatible request."""
@@ -298,26 +422,39 @@ class OpenAIProvider(BaseProvider):
             ),
         )
 
+        # An assistant turn holding nothing but a thinking block serializes
+        # to content=None with no tool_calls, which the API rejects.
+        messages = [
+            m
+            for m in messages
+            if not (
+                m.get("role") == "assistant"
+                and not m.get("content")
+                and not m.get("tool_calls")
+            )
+        ]
         system_messages = build_system_messages(self.chat)
         messages = [self.message_transform(sm) for sm in system_messages] + messages
 
         if self.chat.use_tools_only and "tool_choice" not in kwargs:
             kwargs["tool_choice"] = "required"
 
+        self._apply_reasoning_effort(kwargs)
+
         tools = []
         if self.chat.functions_schema:
+            loaded = self._loaded_tool_names()
             for tool_schema in self.chat.functions_schema:
-                # Strip defer_loading from the function schema before sending
+                if (
+                    tool_schema.get("defer_loading")
+                    and tool_schema["name"] not in loaded
+                ):
+                    continue
+                # defer_loading is an agentlys-level flag, not an API field.
                 clean_schema = {
                     k: v for k, v in tool_schema.items() if k != "defer_loading"
                 }
-                tool_def = {
-                    "type": "function",
-                    "function": clean_schema,
-                }
-                if tool_schema.get("defer_loading"):
-                    tool_def["defer_loading"] = True
-                tools.append(tool_def)
+                tools.append({"type": "function", "function": clean_schema})
 
         return messages, tools, kwargs
 
@@ -359,10 +496,16 @@ class OpenAIProvider(BaseProvider):
         if hasattr(self, "_get_auth_headers"):
             kwargs["extra_headers"] = await self._get_auth_headers()
 
+        # max_tokens is rejected by reasoning models (o-series, gpt-5);
+        # max_completion_tokens by some OpenAI-compatible gateways.
+        # AGENTLYS_OPENAI_LEGACY_MAX_TOKENS=1 keeps the old field for those.
+        if os.getenv("AGENTLYS_OPENAI_LEGACY_MAX_TOKENS") == "1":
+            kwargs["max_tokens"] = max_tokens
+        else:
+            kwargs["max_completion_tokens"] = max_tokens
         res = await self.client.chat.completions.create(
             model=model or self.model,
             messages=messages,
-            max_tokens=max_tokens,
             **kwargs,
         )
         content = res.choices[0].message.content
@@ -379,6 +522,12 @@ class OpenAIProvider(BaseProvider):
         messages, tools, kwargs = self._prepare_request_params(**kwargs)
         if tools:
             kwargs["tools"] = tools
+        # Streamed responses omit usage unless asked; without it the final
+        # Message has no token counts and compaction never triggers.
+        # AGENTLYS_OPENAI_STREAM_USAGE=0 opts out for gateways that reject
+        # stream_options.
+        if os.getenv("AGENTLYS_OPENAI_STREAM_USAGE", "1") != "0":
+            kwargs.setdefault("stream_options", {"include_usage": True})
 
         stream = await self.client.chat.completions.create(
             model=self.model,

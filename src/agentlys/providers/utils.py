@@ -69,6 +69,12 @@ def get_provider_and_model(  # TODO: get_provider_and_model ?
         if not model:
             model = os.getenv("AGENTLYS_MODEL", "gpt-4o")
         return OpenAIProvider(chat, model=model, **client_kwargs), model
+    elif provider_key == APIProvider.OPENAI_RESPONSES:
+        from agentlys.providers.openai_responses import OpenAIResponsesProvider
+
+        if not model:
+            model = os.getenv("AGENTLYS_MODEL", "gpt-5.4")
+        return OpenAIResponsesProvider(chat, model=model, **client_kwargs), model
     elif provider_key == APIProvider.ANTHROPIC:
         from agentlys.providers.anthropic import AnthropicProvider
 
