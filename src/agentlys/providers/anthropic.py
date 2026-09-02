@@ -54,6 +54,16 @@ def _resolve_effort(value: str | None) -> str | None:
     return effort
 
 
+def is_anthropic_signature(signature: str | None) -> bool:
+    """Whether a thinking signature was issued by this API.
+
+    The OpenAI Responses provider stores its reasoning state in the same
+    field as ``"<item id>|<encrypted_content>"``; Anthropic signatures are
+    base64 and never contain the separator.
+    """
+    return bool(signature) and "|" not in signature
+
+
 def _sha(payload) -> str:
     dump = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(dump.encode("utf-8")).hexdigest()[:16]
@@ -222,6 +232,14 @@ def message_to_anthropic_dict(message: Message) -> dict:
             # at worst invalidates the cached prefix; replaying it kills the
             # conversation. Redacted blocks carry their payload in the
             # signature and stay.
+            continue
+        if (
+            part.type == "thinking"
+            and not part.is_redacted
+            and not is_anthropic_signature(part.thinking_signature)
+        ):
+            # A block produced by the OpenAI Responses provider (signature
+            # "<id>|<encrypted_content>"): replaying it here is a 400.
             continue
         res["content"].append(part_to_anthropic_dict(part))
 
