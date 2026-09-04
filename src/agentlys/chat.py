@@ -455,11 +455,12 @@ class Agentlys(AgentlysBase):
             methods_str = ", ".join(methods)
             lines.append(f"- {category}: {methods_str}")
 
-        return (
-            "## Searchable Tool Categories\n"
-            "Use the tool_search function to discover and load these tools:\n"
-            + "\n".join(lines)
+        intro = (
+            "Use the tool_search_tool_bm25 tool to discover and load these tools:"
+            if self._tool_search_config.server_side
+            else "Use the tool_search function to discover and load these tools:"
         )
+        return "## Searchable Tool Categories\n" + intro + "\n" + "\n".join(lines)
 
     def load_messages(self, messages: list[Message], keep_thinking: bool = False):
         """Restore a conversation from the caller's storage.
@@ -786,6 +787,7 @@ class Agentlys(AgentlysBase):
         always_loaded: typing.Optional[list[str]] = None,
         search_fn: typing.Optional[typing.Callable] = None,
         search_model: typing.Optional[str] = None,
+        server_side: typing.Optional[bool] = None,
     ):
         """Enable tool search to defer most tools and discover them on-demand.
 
@@ -805,15 +807,38 @@ class Agentlys(AgentlysBase):
                 ``async def search(query: str, catalog: list[dict]) -> list[str]``.
                 Each catalog entry has ``name`` and ``description`` keys.
                 If *None*, uses a default LLM-based search with a cheap model.
+                Providing one forces client-side search.
             search_model: Model to use for the default LLM-based search.
                 Ignored if *search_fn* is provided.  Defaults to
                 ``claude-haiku-4-5-20251001`` for Anthropic providers and
                 ``gpt-4o-mini`` for OpenAI providers.
+            server_side: Use Anthropic's server-side tool search tool
+                (``tool_search_tool_bm25``) instead of registering a local
+                search function — the API runs the search itself, saving one
+                LLM round-trip per discovery.  Defaults to the
+                ``AGENTLYS_SERVER_TOOL_SEARCH`` environment variable
+                ("1"/"true" to enable).  Silently falls back to client-side
+                search on providers that don't support it (e.g. OpenAI).
         """
-        from agentlys.tool_search import ToolSearchConfig, create_search_tool_fn
+        from agentlys.tool_search import (
+            ToolSearchConfig,
+            create_search_tool_fn,
+            server_tool_search_env_enabled,
+        )
 
         if always_loaded is None:
             always_loaded = []
+
+        # Server-side search needs an explicit opt-in (argument or env flag),
+        # a provider that supports it, and no custom search_fn — a custom
+        # search is by definition a client-side implementation.
+        if server_side is None:
+            server_side = server_tool_search_env_enabled()
+        server_side = (
+            bool(server_side)
+            and search_fn is None
+            and getattr(self.provider, "supports_server_tool_search", False)
+        )
 
         # Determine default search model based on provider
         if search_model is None:
@@ -831,11 +856,13 @@ class Agentlys(AgentlysBase):
                 for s in self.functions_schema
                 if s["name"] != self._tool_search_function_name
             ]
+            self._tool_search_function_name = None
 
         self._tool_search_config = ToolSearchConfig(
             always_loaded=always_loaded,
             search_fn=search_fn,
             search_model=search_model,
+            server_side=server_side,
         )
 
         # Mark all existing functions as deferred (except always_loaded).
@@ -846,6 +873,11 @@ class Agentlys(AgentlysBase):
                 schema.pop("defer_loading", None)
             else:
                 schema["defer_loading"] = True
+
+        if server_side:
+            # The provider injects the server tool definition at request time
+            # (see AnthropicProvider._build_tools); nothing to register here.
+            return
 
         # Register the search tool (never deferred)
         search_callable, search_schema = create_search_tool_fn(self)

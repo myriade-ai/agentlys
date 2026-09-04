@@ -107,6 +107,12 @@ class MessagePart:
             "function_result_image",
             "thinking",
             "compaction",
+            # Server-side tool blocks (e.g. Anthropic's tool search):
+            # executed by the API itself, replayed verbatim in the history and
+            # never dispatched by the tool loop. The raw provider block rides
+            # in ``function_call``.
+            "server_tool_use",
+            "server_tool_result",
         ],
         content: typing.Optional[str] = None,  # TODO: should be named "text" !
         image: typing.Optional[PILImage.Image] = None,
@@ -405,6 +411,27 @@ class Message:
                         MessagePart(
                             type="compaction",
                             content=item.get("content", ""),
+                        )
+                    )
+                elif item["type"] == "server_tool_use":
+                    # A server-side tool call (e.g. Anthropic's tool search):
+                    # executed by the API, so it must be replayed verbatim and
+                    # never receive a client tool_result. Keep the raw block.
+                    parts.append(
+                        MessagePart(
+                            type="server_tool_use",
+                            function_call=item,
+                            function_call_id=item.get("id"),
+                        )
+                    )
+                elif item["type"] == "tool_search_tool_result":
+                    # Result of a server-side tool call, emitted inside the
+                    # assistant message. Kept verbatim for history replay.
+                    parts.append(
+                        MessagePart(
+                            type="server_tool_result",
+                            function_call=item,
+                            function_call_id=item.get("tool_use_id"),
                         )
                     )
                 elif item["type"] == "tool_use":
