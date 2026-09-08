@@ -73,11 +73,13 @@ def test_convert_tool_result_error():
 
 
 def test_convert_tool_result_truncation():
+    """An MCP cut wears the same marker as every other cut in the library."""
     result = CallToolResult(content=[TextContent(type="text", text="x" * 500)])
     converted = convert_tool_result(result, max_result_chars=100)
     assert converted.startswith("x" * 100)
-    assert "truncated to 100 characters" in converted
-    assert len(converted) < 250
+    assert "[truncated: 100 of 500 characters shown, 80% dropped." in converted
+    assert "Narrow the call" in converted
+    assert len(converted) < 350
 
 
 @pytest.mark.asyncio
@@ -132,8 +134,8 @@ async def test_fetch_tools_result_cap():
     ) as session:
         functions, _ = await fetch_mcp_server_tools(session, max_result_chars=50)
         result = await functions["long_output"](n=5000)
-        assert "truncated to 50 characters" in result
-        assert len(result) < 200
+        assert "[truncated: 50 of 5000 characters shown, 99% dropped." in result
+        assert len(result) < 250
 
 
 @pytest.mark.asyncio

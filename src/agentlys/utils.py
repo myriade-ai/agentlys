@@ -2,6 +2,7 @@ import ast
 import asyncio
 import csv
 import inspect
+import logging
 import re
 import typing
 import warnings
@@ -14,6 +15,26 @@ from pydantic.json_schema import GenerateJsonSchema
 from pydantic_core import PydanticOmit
 
 from agentlys.model import Message
+
+
+def truncate_with_marker(text: str, limit: typing.Optional[int]) -> str:
+    """Cut ``text`` to ``limit`` and tell the model what it lost.
+
+    The marker is the model's only signal that a result is incomplete. It says
+    how much is missing and what to do about it, because retrying the same call
+    returns the same cut.
+    """
+    if limit is None or len(text) <= limit:
+        return text
+    total = len(text)
+    dropped_pct = round(100 * (total - limit) / total)
+    logging.warning("Tool output truncated from %d to %d characters", total, limit)
+    return (
+        text[:limit]
+        + f"\n[truncated: {limit} of {total} characters shown, {dropped_pct}% dropped."
+        " Narrow the call (filters, limit, pagination) — retrying it unchanged"
+        " returns the same cut.]"
+    )
 
 
 def limit_data_size(

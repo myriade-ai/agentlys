@@ -28,6 +28,7 @@ from agentlys.utils import (
     get_event_loop_or_create,
     inspect_schema,
     parse_chat_template,
+    truncate_with_marker,
 )
 
 if TYPE_CHECKING:
@@ -97,17 +98,6 @@ def _accepts_from_response(func) -> bool:
     except TypeError:
         pass
     return result
-
-
-def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
-    """Truncate text to limit and add warning if truncated."""
-    if len(text) > limit:
-        logging.warning(f"Output truncated from {len(text)} to {limit} characters")
-        return (
-            text[:limit]
-            + f"\n[Warning: Output truncated from {len(text)} to {limit} characters]"
-        )
-    return text
 
 
 class StopLoopException(Exception):
@@ -405,7 +395,7 @@ class Agentlys(AgentlysBase):
                 tool_output = tool.__llm__()
             else:
                 tool_output = (tool.__class__.__doc__ or "").strip()
-            tool_output = _truncate_with_warning(tool_output)
+            tool_output = truncate_with_marker(tool_output, OUTPUT_SIZE_LIMIT)
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
 
@@ -1006,29 +996,16 @@ class Agentlys(AgentlysBase):
                         formatted_content.append(f"Added tool: {tool_id}")
                 formatted_content = "\n".join(formatted_content)
                 # Limit the size of the content
-                if len(formatted_content) > OUTPUT_SIZE_LIMIT:
-                    formatted_content = (
-                        formatted_content[:OUTPUT_SIZE_LIMIT]
-                        + f"\n... ({len(formatted_content)} characters)"
-                    )
+                formatted_content = truncate_with_marker(
+                    formatted_content, OUTPUT_SIZE_LIMIT
+                )
         elif isinstance(content, dict):
             # default=str: tool results routinely carry values json doesn't
             # know (Decimal, datetime, UUID, ...); stringify instead of crashing
             content_dump = json.dumps(content, default=str)
-            if len(content_dump) > OUTPUT_SIZE_LIMIT:
-                formatted_content = (
-                    content_dump[:OUTPUT_SIZE_LIMIT]
-                    + f"\n... ({len(content_dump)} characters)"
-                )
-            else:
-                formatted_content = content_dump
+            formatted_content = truncate_with_marker(content_dump, OUTPUT_SIZE_LIMIT)
         elif isinstance(content, str):
-            if len(content) > OUTPUT_SIZE_LIMIT:
-                formatted_content = (
-                    content[:OUTPUT_SIZE_LIMIT] + f"\n... ({len(content)} characters)"
-                )
-            else:
-                formatted_content = content
+            formatted_content = truncate_with_marker(content, OUTPUT_SIZE_LIMIT)
         elif isinstance(content, bytes):
             # Detect if it's an image
             try:
