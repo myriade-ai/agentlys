@@ -6,7 +6,6 @@ from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
 from agentlys.providers.base_provider import BaseProvider
 from agentlys.providers.utils import (
-    FunctionCallParsingError,
     add_empty_function_result,
     drop_orphaned_function_results,
 )
@@ -160,6 +159,25 @@ def usage_to_dict(usage) -> typing.Optional[dict]:
     return result
 
 
+def function_call_part(name: str, raw_arguments: str, call_id: str) -> MessagePart:
+    """Preserve invalid arguments so the conversation can request a correction."""
+    error = None
+    try:
+        arguments = json.loads(raw_arguments or "{}")
+        if not isinstance(arguments, dict):
+            raise ValueError("Tool arguments must be a JSON object")
+    except ValueError as exc:
+        arguments = {}
+        error = str(exc)
+    return MessagePart(
+        type="function_call",
+        function_call={"name": name, "arguments": arguments},
+        function_call_id=call_id,
+        raw_arguments=raw_arguments if error else None,
+        arguments_parsing_error=error,
+    )
+
+
 def from_openai_object(
     role: str,
     content: str,
@@ -179,18 +197,9 @@ def from_openai_object(
                 "We don't support tool calls with type other than function"
             )
         function_call = tool_call.function
-        try:
-            arguments = json.loads(function_call.arguments or "{}")
-        except json.decoder.JSONDecodeError:
-            raise FunctionCallParsingError(id, function_call)
         parts.append(
-            MessagePart(
-                type="function_call",
-                function_call={
-                    "name": function_call.name,
-                    "arguments": arguments,
-                },
-                function_call_id=tool_call.id,
+            function_call_part(
+                function_call.name, function_call.arguments, tool_call.id
             )
         )
 
@@ -229,7 +238,11 @@ def parts_to_openai_dict(part: MessagePart) -> dict:
     elif part.type == "function_call":
         return {
             "name": part.function_call["name"],
-            "arguments": json.dumps(part.function_call["arguments"]),
+            "arguments": (
+                part.raw_arguments
+                if part.raw_arguments is not None
+                else json.dumps(part.function_call["arguments"])
+            ),
         }
     elif part.type == "function_result":
         return {
@@ -576,19 +589,8 @@ class OpenAIProvider(BaseProvider):
             parts.append(MessagePart(type="text", content=content))
         for index in sorted(tool_calls):
             entry = tool_calls[index]
-            try:
-                arguments = json.loads(entry["arguments"] or "{}")
-            except json.decoder.JSONDecodeError:
-                raise FunctionCallParsingError(response_id, entry)
             parts.append(
-                MessagePart(
-                    type="function_call",
-                    function_call={
-                        "name": entry["name"],
-                        "arguments": arguments,
-                    },
-                    function_call_id=entry["id"],
-                )
+                function_call_part(entry["name"], entry["arguments"], entry["id"])
             )
 
         final_message = Message(

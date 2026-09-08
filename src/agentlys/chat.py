@@ -22,7 +22,7 @@ from agentlys.providers.base_provider import (
     APIProvider,  # noqa: F401  (re-exported via agentlys.__init__)
     BaseProvider,
 )
-from agentlys.providers.utils import get_provider_and_model
+from agentlys.providers.utils import FunctionCallParsingError, get_provider_and_model
 from agentlys.utils import (
     csv_dumps,
     get_event_loop_or_create,
@@ -1232,6 +1232,17 @@ class Agentlys(AgentlysBase):
         args = part.function_call["arguments"]
         function_call_id = part.function_call_id
 
+        if part.arguments_parsing_error is not None:
+            raw = part.raw_arguments or ""
+            preview = raw[:500] + ("…" if len(raw) > 500 else "")
+            content = (
+                f"Invalid JSON arguments for {name}: {part.arguments_parsing_error}."
+                f"\nRaw arguments (first 500 characters): {preview}"
+                "\nThe tool was not executed. Re-emit the tool call with valid JSON "
+                "object arguments. Do not repeat other successful tool calls."
+            )
+            return (function_call_id, name, content, None)
+
         content = None
         image = None
 
@@ -1359,6 +1370,27 @@ class Agentlys(AgentlysBase):
                 )
                 yield (function_call_id, function_name, formatted_msg)
 
+    @staticmethod
+    def _check_parsing_retry_budget(response: Message, retries: int) -> int:
+        # Two re-asks per run; count failed turns, not parallel calls.
+        invalid = [
+            part
+            for part in response.function_call_parts
+            if part.arguments_parsing_error is not None
+        ]
+        if invalid:
+            if retries >= 2:
+                part = invalid[0]
+                raise FunctionCallParsingError(
+                    response.id,
+                    {
+                        "name": part.function_call["name"],
+                        "arguments": part.raw_arguments,
+                    },
+                )
+            return retries + 1
+        return retries
+
     async def run_conversation_async(
         self,
         question: typing.Union[str, Message, None] = None,
@@ -1374,6 +1406,7 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
+        parsing_retries = 0
         for _ in range(self.max_interactions):
             self._check_cancel()
             # Ask the LLM with the current message (if any)
@@ -1390,6 +1423,9 @@ class Agentlys(AgentlysBase):
                     return
             else:
                 yield response
+                parsing_retries = self._check_parsing_retry_budget(
+                    response, parsing_retries
+                )
 
                 try:
                     # Execute all tools in parallel
@@ -1466,6 +1502,7 @@ class Agentlys(AgentlysBase):
         else:
             message = question
 
+        parsing_retries = 0
         for _ in range(self.max_interactions):
             self._check_cancel()
             # Stream the LLM response
@@ -1493,6 +1530,10 @@ class Agentlys(AgentlysBase):
             else:
                 # Yield assistant message with all tool calls
                 yield {"type": "assistant", "message": response}
+
+                parsing_retries = self._check_parsing_retry_budget(
+                    response, parsing_retries
+                )
 
                 # Signal start of parallel execution
                 yield {
