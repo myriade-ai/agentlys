@@ -117,6 +117,8 @@ class MessagePart:
         thinking_signature: typing.Optional[str] = None,
         is_redacted: bool = False,
         tool_references: typing.Optional[list[str]] = None,
+        raw_arguments: typing.Optional[str] = None,
+        arguments_parsing_error: typing.Optional[str] = None,
     ) -> None:
         self.type = type
         self.content = content
@@ -128,6 +130,8 @@ class MessagePart:
         self.thinking_signature = thinking_signature
         self.is_redacted = is_redacted
         self.tool_references = tool_references
+        self.raw_arguments = raw_arguments
+        self.arguments_parsing_error = arguments_parsing_error
 
 
 class Message:
