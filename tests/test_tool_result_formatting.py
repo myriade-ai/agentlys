@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import pytest
 from agentlys import Agentlys
+from agentlys.chat import OUTPUT_SIZE_LIMIT
 from agentlys.model import Message, MessagePart
 
 
@@ -119,3 +120,64 @@ async def test_formatting_error_becomes_function_result_in_stream():
     assert message.parts[0].type == "function_result"
     assert message.parts[0].function_call_id == "call_bytes_stream"
     assert "ValueError" in message.parts[0].content
+
+
+# A cut the model cannot see is a cut it cannot work around: these pin the one
+# marker every truncating path now shares.
+
+OVERFLOW = OUTPUT_SIZE_LIMIT + 30_000
+
+
+def get_long_text() -> str:
+    """Return a string well past the output limit."""
+    return "x" * OVERFLOW
+
+
+def get_long_dict() -> dict:
+    """Return a dict whose serialization is well past the output limit."""
+    return {"rows": ["y" * 100 for _ in range(OVERFLOW // 100)]}
+
+
+def get_long_string_list() -> list:
+    """Return a list of strings well past the output limit."""
+    return ["z" * 1000 for _ in range(OVERFLOW // 1000)]
+
+
+@pytest.mark.parametrize(
+    "function", [get_long_text, get_long_dict, get_long_string_list]
+)
+@pytest.mark.asyncio
+async def test_an_oversized_result_says_how_much_it_lost(function):
+    result = await _run_single_tool(function, f"call_{function.__name__}")
+    content = result.parts[0].content
+
+    assert "[truncated: " in content
+    assert f"{OUTPUT_SIZE_LIMIT} of " in content
+    assert "% dropped" in content
+    # The advice matters more than the number: retrying returns the same cut.
+    assert "Narrow the call" in content
+    # The body itself is still bounded by the limit.
+    marker_start = content.index("\n[truncated: ")
+    assert marker_start == OUTPUT_SIZE_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_a_result_that_fits_carries_no_marker():
+    result = await _run_single_tool(get_price, "call_small")
+    assert "[truncated: " not in result.parts[0].content
+
+
+@pytest.mark.asyncio
+async def test_a_second_cut_still_names_the_size_the_tool_produced():
+    """An MCP result is capped by its server budget before the loop sees it.
+
+    Reporting the intermediate length would tell the model 80% was dropped
+    when 96% was — a confident lie about what it is missing.
+    """
+    from agentlys.utils import truncate_with_marker
+
+    once = truncate_with_marker("D" * 500_000, 100_000)
+    twice = truncate_with_marker(once, OUTPUT_SIZE_LIMIT)
+
+    assert f"[truncated: {OUTPUT_SIZE_LIMIT} of 500000 characters shown" in twice
+    assert "96% dropped" in twice

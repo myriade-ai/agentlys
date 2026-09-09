@@ -2,6 +2,7 @@ import ast
 import asyncio
 import csv
 import inspect
+import logging
 import re
 import typing
 import warnings
@@ -14,6 +15,57 @@ from pydantic.json_schema import GenerateJsonSchema
 from pydantic_core import PydanticOmit
 
 from agentlys.model import Message
+
+
+# Reads back the size a previous cut reported, so a second cut can still name
+# what the tool actually produced.
+_MARKER_ORIGINAL_RE = re.compile(r"\n\[truncated: \d+ of (\d+) characters shown,")
+_MARKER_TAIL_CHARS = 300
+
+NARROW_THE_CALL = (
+    " Narrow the call (filters, limit, pagination) — retrying it unchanged"
+    " returns the same cut."
+)
+
+
+def truncate_with_marker(
+    text: str,
+    limit: typing.Optional[int],
+    *,
+    label: str = "",
+    advice: str = NARROW_THE_CALL,
+) -> str:
+    """Cut ``text`` to ``limit`` and tell the model what it lost.
+
+    The marker is the model's only signal that a result is incomplete. It says
+    how much is missing and what to do about it, because retrying the same call
+    returns the same cut.
+
+    When ``text`` already carries a marker — an MCP result capped by its own
+    server budget before the chat loop sees it — the size reported is the one
+    that marker names, not the length of the intermediate string. Otherwise a
+    500 000-character result capped twice would be announced as 100 000, which
+    is a confident lie about how much the model is missing.
+    """
+    if limit is None or len(text) <= limit:
+        return text
+    total = len(text)
+    already_cut = _MARKER_ORIGINAL_RE.search(text[-_MARKER_TAIL_CHARS:])
+    if already_cut:
+        total = max(total, int(already_cut.group(1)))
+    dropped_pct = round(100 * (total - limit) / total)
+    logging.warning(
+        "Tool output truncated from %d to %d characters%s",
+        total,
+        limit,
+        f" ({label})" if label else "",
+    )
+    return (
+        text[:limit]
+        + f"\n[truncated: {limit} of {total} characters shown, {dropped_pct}% dropped."
+        + advice
+        + "]"
+    )
 
 
 def limit_data_size(
