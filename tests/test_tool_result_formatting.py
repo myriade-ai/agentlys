@@ -165,3 +165,19 @@ async def test_an_oversized_result_says_how_much_it_lost(function):
 async def test_a_result_that_fits_carries_no_marker():
     result = await _run_single_tool(get_price, "call_small")
     assert "[truncated: " not in result.parts[0].content
+
+
+@pytest.mark.asyncio
+async def test_a_second_cut_still_names_the_size_the_tool_produced():
+    """An MCP result is capped by its server budget before the loop sees it.
+
+    Reporting the intermediate length would tell the model 80% was dropped
+    when 96% was — a confident lie about what it is missing.
+    """
+    from agentlys.utils import truncate_with_marker
+
+    once = truncate_with_marker("D" * 500_000, 100_000)
+    twice = truncate_with_marker(once, OUTPUT_SIZE_LIMIT)
+
+    assert f"[truncated: {OUTPUT_SIZE_LIMIT} of 500000 characters shown" in twice
+    assert "96% dropped" in twice

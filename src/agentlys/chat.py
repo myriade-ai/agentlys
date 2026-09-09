@@ -395,7 +395,12 @@ class Agentlys(AgentlysBase):
                 tool_output = tool.__llm__()
             else:
                 tool_output = (tool.__class__.__doc__ or "").strip()
-            tool_output = truncate_with_marker(tool_output, OUTPUT_SIZE_LIMIT)
+            tool_output = truncate_with_marker(
+                tool_output,
+                OUTPUT_SIZE_LIMIT,
+                label=tool_name,
+                advice=" This tool's state is too large to show in full.",
+            )
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
 
@@ -997,15 +1002,19 @@ class Agentlys(AgentlysBase):
                 formatted_content = "\n".join(formatted_content)
                 # Limit the size of the content
                 formatted_content = truncate_with_marker(
-                    formatted_content, OUTPUT_SIZE_LIMIT
+                    formatted_content, OUTPUT_SIZE_LIMIT, label=function_name
                 )
         elif isinstance(content, dict):
             # default=str: tool results routinely carry values json doesn't
             # know (Decimal, datetime, UUID, ...); stringify instead of crashing
             content_dump = json.dumps(content, default=str)
-            formatted_content = truncate_with_marker(content_dump, OUTPUT_SIZE_LIMIT)
+            formatted_content = truncate_with_marker(
+                content_dump, OUTPUT_SIZE_LIMIT, label=function_name
+            )
         elif isinstance(content, str):
-            formatted_content = truncate_with_marker(content, OUTPUT_SIZE_LIMIT)
+            formatted_content = truncate_with_marker(
+                content, OUTPUT_SIZE_LIMIT, label=function_name
+            )
         elif isinstance(content, bytes):
             # Detect if it's an image
             try:
