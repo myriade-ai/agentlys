@@ -105,7 +105,7 @@ agent.add_tool(calc, "Calculator")
 
 ### Tool Search
 
-#### enable_tool_search(always_loaded=None, search_fn=None, search_model=None)
+#### enable_tool_search(always_loaded=None, search_fn=None, search_model=None, server_side=None)
 
 Enable tool search to defer most tools and discover them on-demand. Reduces context window usage and improves tool selection accuracy for agents with many tools.
 
@@ -126,8 +126,11 @@ agent.enable_tool_search(
 **Parameters:**
 
 - `always_loaded`: Tool names to keep always visible to the LLM. If `None`, only the search tool is visible.
-- `search_fn`: Custom async search function with signature `async def search(query: str, catalog: list[dict]) -> list[str]`. Each catalog entry has `name`, `description`, and `args` keys. If `None`, uses built-in keyword matching.
+- `search_fn`: Custom async search function with signature `async def search(query: str, catalog: list[dict]) -> list[str]`. Each catalog entry has `name`, `description`, and `args` keys. If `None`, uses built-in keyword matching. Providing one forces client-side search.
 - `search_model`: Model for LLM-based search (only used with custom `search_fn`). Defaults based on provider.
+- `server_side`: Use Anthropic's server-side tool search tool (`tool_search_tool_bm25`) instead of registering a local `tool_search` function. The API runs the search itself and expands the discovered tools inline, saving one LLM round-trip per discovery. Defaults to the `AGENTLYS_SERVER_TOOL_SEARCH` environment variable (`"1"`/`"true"` to enable). Silently falls back to client-side search on providers that don't support it (e.g. OpenAI).
+
+**Server-side mode (Anthropic only):** the provider injects `{"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"}` into `tools`; deferred tools keep `defer_loading: true`. The `server_tool_use` / `tool_search_tool_result` blocks the API emits are kept in the history as dedicated message parts (`server_tool_use` / `server_tool_result`) and replayed verbatim — no `tool_result` is ever sent for a `srvtoolu_…` id.
 
 **How it works:**
 
