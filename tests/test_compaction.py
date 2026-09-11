@@ -93,9 +93,16 @@ class TestCompactionRendering(unittest.TestCase):
                 MessagePart(type="image", image=png),
             ],
         )
-        self.assertIn("data:image/png;base64,", msg.to_markdown())
-        md = msg.to_markdown(inline_images=False)
-        self.assertNotIn("base64", md)
+        inline = msg.to_markdown()
+        self.assertIn("data:image/png;base64,", inline)
+        self.assertIn("> Result: ok\n", inline)
+
+        # Omitting must not even attempt the encoding: that is the cost
+        # being avoided, not just the bytes in the output.
+        with patch.object(
+            type(msg.parts[0].image), "to_base64", side_effect=AssertionError
+        ):
+            md = msg.to_markdown(inline_images=False)
         self.assertEqual(
             md,
             "## function\n> Result: ok\n> Result image: [image omitted]\n> Image: [image omitted]\n",
