@@ -76,6 +76,31 @@ class TestCompactionRendering(unittest.TestCase):
         self.assertIn("Earlier discussion summary", md)
         self.assertIn("New question here", md)
 
+    def test_to_markdown_can_omit_image_data(self):
+        from PIL import Image as PILImage
+
+        png = PILImage.new("RGB", (8, 8))
+        png.format = "PNG"
+        msg = Message(
+            role="function",
+            parts=[
+                MessagePart(
+                    type="function_result_image",
+                    content="ok",
+                    function_call_id="c1",
+                    image=png,
+                ),
+                MessagePart(type="image", image=png),
+            ],
+        )
+        self.assertIn("data:image/png;base64,", msg.to_markdown())
+        md = msg.to_markdown(inline_images=False)
+        self.assertNotIn("base64", md)
+        self.assertEqual(
+            md,
+            "## function\n> Result: ok\n> Result image: [image omitted]\n> Image: [image omitted]\n",
+        )
+
     def test_to_terminal_includes_compaction(self):
         msg = Message(
             role="user",
@@ -363,6 +388,68 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
         self.assertEqual(
             agent.messages[0].parts[0].content, "Conversation summary here"
         )
+
+    def test_compact_does_not_inline_images_in_summary_prompt(self):
+        """Images are described, never base64-inlined, in the summary request.
+
+        A chart-heavy conversation rendered with inline data URLs blew past
+        the summary model's context (2.1M tokens for a 130k-token history),
+        so compaction — the thing meant to free context — failed the turn.
+        """
+        from PIL import Image as PILImage
+
+        compaction = TokenThresholdCompaction()
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        png = PILImage.new("RGB", (64, 64), color="white")
+        png.format = "PNG"
+        agent.messages = [
+            Message(role="user", content="Plot it"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "plot", "arguments": {}},
+                        function_call_id="c1",
+                    )
+                ],
+            ),
+            Message(
+                role="function",
+                parts=[
+                    MessagePart(
+                        type="function_result_image",
+                        content='{"chart_id": "abc"}',
+                        function_call_id="c1",
+                        image=png,
+                    )
+                ],
+            ),
+            Message(role="user", parts=[MessagePart(type="image", image=png)]),
+        ]
+
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "summary"
+        mock_response = MagicMock()
+        mock_response.content = [mock_text_block]
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
+
+        prompt = agent.provider.client.messages.create.call_args.kwargs["messages"][0][
+            "content"
+        ]
+        self.assertNotIn("base64", prompt)
+        self.assertIn('{"chart_id": "abc"}', prompt)
+        self.assertIn("[image omitted]", prompt)
 
     def test_compact_preserves_document_attachments(self):
         """Documents survive compaction: the text history is summarized but

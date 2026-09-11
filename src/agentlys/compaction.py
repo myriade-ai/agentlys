@@ -122,7 +122,7 @@ class TokenThresholdCompaction:
         for msg in messages:
             if not msg.parts:
                 continue
-            conversation_text.append(msg.to_markdown())
+            conversation_text.append(msg.to_markdown(inline_images=False))
         conversation_str = "\n".join(conversation_text)
 
         prompt = self.instructions or DEFAULT_COMPACTION_PROMPT

@@ -457,7 +457,21 @@ class Message:
             text += f"{part.type}, "
         return text[:-2] + "])"
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, inline_images: bool = True) -> str:
+        """Render the message as markdown.
+
+        ``inline_images=False`` replaces image data with a placeholder: a
+        base64 PNG costs tens of thousands of tokens as text, so a consumer
+        that only needs the prose (the compaction summarizer) must not get
+        the bytes — a chart-heavy history rendered inline overflowed the
+        summary model's context and the compaction itself failed.
+        """
+
+        def image_md(image: Image) -> str:
+            if not inline_images:
+                return "[image omitted]"
+            return f"![Image](data:image/png;base64,{image.to_base64()})"
+
         text = f"## {self.role}\n"
         for part in self.parts:
             if part.type == "text":
@@ -467,11 +481,11 @@ class Message:
             elif part.type == "function_result":
                 text += f"> Result: {part.content}\n"
             elif part.type == "function_result_image":
-                image_data_url = f"data:image/png;base64,{part.image.to_base64()}"
-                text += f"> Result image: ![Image]({image_data_url})\n"
+                if part.content:
+                    text += f"> Result: {part.content}\n"
+                text += f"> Result image: {image_md(part.image)}\n"
             elif part.type == "image":
-                image_data_url = f"data:image/png;base64,{part.image.to_base64()}"
-                text += f"> Image: ![Image]({image_data_url})\n"
+                text += f"> Image: {image_md(part.image)}\n"
             elif part.type == "document":
                 doc_name = part.document.name if part.document else "document"
                 doc_type = part.document.media_type if part.document else "unknown"
