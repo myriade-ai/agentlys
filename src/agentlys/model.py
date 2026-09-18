@@ -10,12 +10,26 @@ import warnings
 from PIL import Image as PILImage
 
 
+# PIL only sets .format on images it decoded from a file or a byte stream.
+# Images built in memory (Image.new, resize, crop, ...) carry None, and
+# save(format=None) makes PIL guess the encoding from the target's filename —
+# a BytesIO has none, so it raises "unknown file extension: ". Callers should
+# not have to stamp a format on every image they compose, so fall back to PNG:
+# it is lossless and accepted by every provider we serialize for.
+DEFAULT_IMAGE_FORMAT = "PNG"
+
+
 class Image:
     def __init__(self, image: PILImage.Image):
         if not isinstance(image, PILImage.Image):
             raise TypeError("image must be an instance of PIL.Image.Image")
         self.image = image
         self._base64_cache: typing.Optional[str] = None
+
+    @property
+    def _save_format(self) -> str:
+        """The encoding to serialize with, defaulting to PNG when unknown."""
+        return self.image.format or DEFAULT_IMAGE_FORMAT
 
     def resize(self, size: tuple[int, int]):
         try:
@@ -35,7 +49,7 @@ class Image:
             return self._base64_cache
         try:
             buffered = BytesIO()
-            self.image.save(buffered, format=self.image.format)
+            self.image.save(buffered, format=self._save_format)
             img_str = base64.b64encode(buffered.getvalue()).decode()
         except Exception as e:
             raise ValueError(f"Failed to convert image to base64: {e}")
@@ -49,14 +63,14 @@ class Image:
     def to_bytes(self):
         try:
             buffered = BytesIO()
-            self.image.save(buffered, format=self.image.format)
+            self.image.save(buffered, format=self._save_format)
             return buffered.getvalue()
         except Exception as e:
             raise ValueError(f"Failed to convert image to bytes: {e}")
 
     @property
     def format(self):
-        return "image/" + self.image.format.lower()
+        return "image/" + self._save_format.lower()
 
 
 class Document:
