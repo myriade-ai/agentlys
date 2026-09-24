@@ -16,6 +16,11 @@ class APIProvider(Enum):
 
 
 class BaseProvider(ABC):
+    # Whether the provider can run Anthropic's server-side tool search tool
+    # (see AnthropicProvider). enable_tool_search() checks this before
+    # switching to server-side mode.
+    supports_server_tool_search = False
+
     def prepare_messages(
         self,
         transform_function: typing.Callable,

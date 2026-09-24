@@ -3,7 +3,11 @@
 import pytest
 from agentlys import Agentlys, APIProvider, ToolSearchConfig
 from agentlys.model import Message, MessagePart
-from agentlys.providers.anthropic import part_to_anthropic_dict
+from agentlys.providers.anthropic import (
+    SERVER_TOOL_SEARCH_DEF,
+    message_to_anthropic_dict,
+    part_to_anthropic_dict,
+)
 from agentlys.tool_search import create_search_tool_fn, _default_search
 
 
@@ -566,6 +570,197 @@ def test_enable_tool_search_reconfigure_clears_defer_for_new_always_loaded():
         s for s in agent.functions_schema if s["name"] == "_dummy_fn_b"
     )
     assert "defer_loading" not in schema_b
+
+
+# ── Server-side tool search (Anthropic) ──────────────────────────────────────
+
+SERVER_TOOL_USE_BLOCK = {
+    "type": "server_tool_use",
+    "id": "srvtoolu_01ABC123",
+    "name": "tool_search_tool_bm25",
+    "input": {"query": "weather tools"},
+}
+
+TOOL_SEARCH_RESULT_BLOCK = {
+    "type": "tool_search_tool_result",
+    "tool_use_id": "srvtoolu_01ABC123",
+    "content": {
+        "type": "tool_search_tool_search_result",
+        "tool_references": [{"type": "tool_reference", "tool_name": "get_weather"}],
+    },
+}
+
+
+def test_server_side_skips_local_search_function():
+    """server_side=True must not register the local tool_search function."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    agent.enable_tool_search(server_side=True)
+
+    assert agent._tool_search_config.server_side is True
+    assert agent._tool_search_function_name is None
+    assert "tool_search" not in agent.functions
+    assert not any(s["name"] == "tool_search" for s in agent.functions_schema)
+    # Other tools are still deferred
+    schema = next(s for s in agent.functions_schema if s["name"] == "_dummy_fn_a")
+    assert schema.get("defer_loading") is True
+
+
+def test_server_side_env_flag(monkeypatch):
+    """AGENTLYS_SERVER_TOOL_SEARCH=1 enables server-side mode by default."""
+    monkeypatch.setenv("AGENTLYS_SERVER_TOOL_SEARCH", "1")
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    agent.enable_tool_search()
+
+    assert agent._tool_search_config.server_side is True
+    assert "tool_search" not in agent.functions
+
+
+def test_server_side_env_flag_off_keeps_client_side(monkeypatch):
+    """Without the flag, behavior is unchanged (local search function)."""
+    monkeypatch.delenv("AGENTLYS_SERVER_TOOL_SEARCH", raising=False)
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    agent.enable_tool_search()
+
+    assert agent._tool_search_config.server_side is False
+    assert "tool_search" in agent.functions
+
+
+def test_server_side_falls_back_on_openai(monkeypatch):
+    """Non-Anthropic providers fall back to the client-side search."""
+    monkeypatch.setenv("AGENTLYS_SERVER_TOOL_SEARCH", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    agent = Agentlys(provider=APIProvider.OPENAI, model="gpt-4o")
+    agent.add_function(_dummy_fn_a)
+
+    agent.enable_tool_search(server_side=True)
+
+    assert agent._tool_search_config.server_side is False
+    assert "tool_search" in agent.functions
+
+
+def test_server_side_custom_search_fn_forces_client_side():
+    """A custom search_fn is a client-side implementation by definition."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    async def my_search(query: str, catalog: list[dict]) -> list[str]:
+        return []
+
+    agent.enable_tool_search(search_fn=my_search, server_side=True)
+
+    assert agent._tool_search_config.server_side is False
+    assert "tool_search" in agent.functions
+
+
+def test_reenable_switches_between_modes():
+    """Re-enabling can move between client-side and server-side cleanly."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+
+    agent.enable_tool_search()
+    assert "tool_search" in agent.functions
+
+    agent.enable_tool_search(server_side=True)
+    assert "tool_search" not in agent.functions
+    assert not any(s["name"] == "tool_search" for s in agent.functions_schema)
+
+    agent.enable_tool_search(server_side=False)
+    assert "tool_search" in agent.functions
+    assert agent._tool_search_config.server_side is False
+
+
+def test_build_tools_injects_server_tool_def():
+    """The Anthropic provider injects the server tool, never deferred, first."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.add_function(_dummy_fn_b)
+    agent.enable_tool_search(always_loaded=["_dummy_fn_b"], server_side=True)
+
+    agent.messages = [Message(role="user", content="test")]
+    messages, tools, kwargs = agent.provider._prepare_request_params()
+
+    assert tools[0]["type"] == SERVER_TOOL_SEARCH_DEF["type"]
+    assert tools[0]["name"] == "tool_search_tool_bm25"
+    assert "defer_loading" not in tools[0]
+    tool_a = next(t for t in tools if t.get("name") == "_dummy_fn_a")
+    tool_b = next(t for t in tools if t.get("name") == "_dummy_fn_b")
+    assert tool_a.get("defer_loading") is True
+    assert not tool_b.get("defer_loading")
+    assert not any(t.get("name") == "tool_search" for t in tools)
+
+
+def test_build_tools_no_server_tool_in_client_mode():
+    """Client-side mode keeps the current tools payload (no server def)."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.enable_tool_search()
+
+    agent.messages = [Message(role="user", content="test")]
+    messages, tools, kwargs = agent.provider._prepare_request_params()
+
+    assert not any(t.get("type") == SERVER_TOOL_SEARCH_DEF["type"] for t in tools)
+    assert any(t.get("name") == "tool_search" for t in tools)
+
+
+def test_from_anthropic_dict_parses_server_tool_blocks():
+    """server_tool_use / tool_search_tool_result become dedicated parts."""
+    msg = Message.from_anthropic_dict(
+        role="assistant",
+        content=[
+            {"type": "text", "text": "Searching for tools."},
+            SERVER_TOOL_USE_BLOCK,
+            TOOL_SEARCH_RESULT_BLOCK,
+            {
+                "type": "tool_use",
+                "id": "toolu_01XYZ",
+                "name": "get_weather",
+                "input": {"location": "SF"},
+            },
+        ],
+    )
+
+    types = [p.type for p in msg.parts]
+    assert types == ["text", "server_tool_use", "server_tool_result", "function_call"]
+    # The tool loop must only execute the real tool_use — never respond to a
+    # srvtoolu_… id with a tool_result.
+    assert [p.function_call["name"] for p in msg.function_call_parts] == [
+        "get_weather"
+    ]
+
+
+def test_server_tool_blocks_replayed_verbatim():
+    """History replay sends the raw blocks back unchanged (no tool_result)."""
+    msg = Message.from_anthropic_dict(
+        role="assistant",
+        content=[SERVER_TOOL_USE_BLOCK, TOOL_SEARCH_RESULT_BLOCK],
+    )
+
+    replayed = message_to_anthropic_dict(msg)
+
+    assert replayed["role"] == "assistant"
+    assert replayed["content"][0] == SERVER_TOOL_USE_BLOCK
+    assert replayed["content"][1] == TOOL_SEARCH_RESULT_BLOCK
+    assert not any(b.get("type") == "tool_result" for b in replayed["content"])
+
+
+def test_server_tool_replay_not_polluted_by_cache_control():
+    """Mutating one serialization (cache_control) must not leak into the next."""
+    msg = Message.from_anthropic_dict(
+        role="assistant",
+        content=[SERVER_TOOL_USE_BLOCK, TOOL_SEARCH_RESULT_BLOCK],
+    )
+
+    first = message_to_anthropic_dict(msg)
+    first["content"][-1]["cache_control"] = {"type": "ephemeral"}
+
+    second = message_to_anthropic_dict(msg)
+    assert "cache_control" not in second["content"][-1]
 
 
 # ── Anthropic empty tool_references test ─────────────────────────────────────
