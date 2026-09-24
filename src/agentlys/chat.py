@@ -515,24 +515,27 @@ class Agentlys(AgentlysBase):
         Callers usually persist the part's text (``"name_a, name_b"``), not
         the list, so a reloaded history would silently drop every tool the
         model had found and force a new search on the next turn.  Parse the
-        text back and filter both restored and existing references so only
-        tools that are still registered are sent to the provider.
+        text back when this agent has tool search.
+
+        Existing references are filtered on every agent, tool search or not:
+        a history replayed under another tool set (a narrower agent, a tool
+        renamed or removed since) would otherwise name tools missing from the
+        request, and Anthropic rejects it with 400 "Tool reference '…' not
+        found in available tools".  Register tools before loading messages.
         """
         search_name = self._tool_search_function_name
-        if search_name is None:
-            return
         for msg in messages:
-            if msg.role != "function" or msg.name != search_name:
+            if msg.role != "function":
                 continue
             for part in msg.parts:
                 if part.type != "function_result":
                     continue
-                if part.tool_references is None:
-                    part.tool_references = self._parse_tool_references(part.content)
-                else:
+                if part.tool_references is not None:
                     part.tool_references = [
                         name for name in part.tool_references if name in self.functions
                     ]
+                elif search_name is not None and msg.name == search_name:
+                    part.tool_references = self._parse_tool_references(part.content)
 
     def _parse_tool_references(self, content: typing.Optional[str]) -> list[str]:
         if not content or content.strip() == "[]":

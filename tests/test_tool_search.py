@@ -705,6 +705,32 @@ def test_load_messages_without_tool_search_is_untouched():
     assert agent.messages[0].parts[0].tool_references is None
 
 
+def test_load_messages_without_tool_search_drops_unregistered_references():
+    """A history from a wider agent replayed into one without tool search."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    message = _stored_search_result("_dummy_fn_a, _dummy_fn_b")
+    message.parts[0].tool_references = ["_dummy_fn_a", "_dummy_fn_b"]
+
+    agent.load_messages([message])
+
+    assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_a"]
+
+
+def test_load_messages_filters_references_under_another_search_name():
+    """References left by a search tool registered under another name."""
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(_dummy_fn_a)
+    agent.enable_tool_search()
+    message = _stored_search_result("_dummy_fn_a, _dummy_fn_b")
+    message.name = "legacy_tool_search"
+    message.parts[0].tool_references = ["_dummy_fn_a", "_dummy_fn_b"]
+
+    agent.load_messages([message])
+
+    assert agent.messages[0].parts[0].tool_references == ["_dummy_fn_a"]
+
+
 def test_reloaded_search_result_serializes_like_the_live_one():
     """The reloaded tool_result must match what was sent live, or the
     Anthropic prefix cache is invalidated at the search result."""
