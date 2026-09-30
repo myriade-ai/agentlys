@@ -15,6 +15,24 @@ class APIProvider(Enum):
     DEFAULT = "default"
 
 
+class EmptyCompletionError(RuntimeError):
+    """A one-shot ``complete()`` call returned no text to use.
+
+    Typically the model spent all of ``max_tokens`` thinking
+    (``stop_reason="max_tokens"`` with only a thinking block), or declined
+    (``stop_reason="refusal"``). ``stop_reason`` and ``block_types`` describe
+    what came back instead, for logging.
+    """
+
+    def __init__(self, stop_reason: typing.Optional[str], block_types: list[str]):
+        self.stop_reason = stop_reason
+        self.block_types = block_types
+        super().__init__(
+            f"Completion response contained no text "
+            f"(stop_reason={stop_reason}, blocks={block_types})"
+        )
+
+
 class BaseProvider(ABC):
     def prepare_messages(
         self,
@@ -105,7 +123,7 @@ class BaseProvider(ABC):
         Used for auxiliary LLM calls such as compaction summaries.
         ``messages`` are simple ``{"role", "content"}`` dicts; ``model``
         defaults to the provider's configured model.  Returns the response
-        text.
+        text; raises ``EmptyCompletionError`` when the response has none.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support one-shot completions. "

@@ -64,11 +64,15 @@ class TokenThresholdCompaction:
             recommended). Defaults to the provider's current model — pass a
             cheap model explicitly to reduce summarization cost.
         instructions: Custom summarization prompt. Replaces the default if provided.
+        max_tokens: Output budget of the summary call. Thinking models spend it
+            on thinking before writing the summary, so it needs headroom well
+            beyond the summary itself.
     """
 
     token_threshold: int = 100_000
     summary_model: Optional[str] = None
     instructions: Optional[str] = None
+    max_tokens: int = 16_000
 
     @staticmethod
     def _total_input_tokens(usage: dict) -> int:
@@ -111,6 +115,7 @@ class TokenThresholdCompaction:
     async def compact(self, chat: AgentlysBase) -> None:
         """Summarize older messages and replace them with a compaction message."""
         from agentlys.model import Message, MessagePart
+        from agentlys.providers.base_provider import EmptyCompletionError
 
         messages = chat.messages
         if not messages:
@@ -137,13 +142,25 @@ class TokenThresholdCompaction:
         ]
 
         # The provider handles client shape, proxy auth and custom base_url
-        summary_text = await chat.provider.complete(
-            messages=summary_messages,
-            # Include the original system instruction for context
-            system=chat.instruction,
-            model=self.summary_model,
-            max_tokens=4096,
-        )
+        try:
+            summary_text = await chat.provider.complete(
+                messages=summary_messages,
+                # Include the original system instruction for context
+                system=chat.instruction,
+                model=self.summary_model,
+                max_tokens=self.max_tokens,
+            )
+        except EmptyCompletionError as e:
+            # Keep the conversation as is rather than failing the turn; the
+            # next threshold check tries again.
+            logger.warning(
+                "Compaction skipped: summary response had no text "
+                "(stop_reason=%s, blocks=%s, max_tokens=%d)",
+                e.stop_reason,
+                e.block_types,
+                self.max_tokens,
+            )
+            return
 
         # Try to extract from <summary> tags if present
         match = re.search(r"<summary>(.*?)</summary>", summary_text, re.DOTALL)

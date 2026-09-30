@@ -6,7 +6,7 @@ import os
 import anthropic
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.base_provider import BaseProvider, EmptyCompletionError
 from agentlys.providers.utils import (
     add_empty_function_result,
     drop_orphaned_function_results,
@@ -573,7 +573,9 @@ class AnthropicProvider(BaseProvider):
             (block for block in response.content if block.type == "text"), None
         )
         if text_block is None:
-            raise RuntimeError("Completion response contained no text block")
+            raise EmptyCompletionError(
+                response.stop_reason, [block.type for block in response.content]
+            )
         return text_block.text
 
     async def fetch_stream_async(self, **kwargs):

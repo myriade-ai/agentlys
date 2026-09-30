@@ -4,7 +4,7 @@ import typing
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.base_provider import BaseProvider, EmptyCompletionError
 from agentlys.providers.utils import (
     add_empty_function_result,
     drop_orphaned_function_results,
@@ -523,7 +523,7 @@ class OpenAIProvider(BaseProvider):
         )
         content = res.choices[0].message.content
         if not content:
-            raise RuntimeError("Completion response contained no text")
+            raise EmptyCompletionError(res.choices[0].finish_reason, [])
         return content
 
     async def fetch_stream_async(self, **kwargs):

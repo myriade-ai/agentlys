@@ -459,7 +459,7 @@ class TestCompleteAndCompaction:
         # The agent instruction rides along as the system message
         kwargs = mock_create.call_args.kwargs
         assert kwargs["messages"][0]["role"] == "system"
-        assert kwargs["max_completion_tokens"] == 4096
+        assert kwargs["max_completion_tokens"] == compaction.max_tokens
 
     @pytest.mark.asyncio
     async def test_complete_not_implemented_on_bare_provider(self):
