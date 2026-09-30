@@ -23,7 +23,11 @@ import typing
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider, EmptyCompletionError
+from agentlys.providers.base_provider import (
+    BaseProvider,
+    EmptyCompletionError,
+    completion_text,
+)
 from agentlys.providers.openai import (
     create_openai_client,
     resolve_effort,
@@ -448,6 +452,7 @@ class OpenAIResponsesProvider(BaseProvider):
             transform_list_function=lambda x: add_empty_function_result(
                 drop_orphaned_function_results(x)
             ),
+            extra_messages=kwargs.pop("extra_messages", ()),
         ):
             input_items.extend(items)
 
@@ -483,6 +488,15 @@ class OpenAIResponsesProvider(BaseProvider):
         )
         _warn_if_incomplete(res)
         return output_to_message(res.output, response_id=res.id, usage=res.usage)
+
+    async def complete_conversation(self, prompt: str, max_tokens: int = 4096) -> str:
+        # Same request as the conversation's next call plus one message: the
+        # API caches prompt prefixes on its own.
+        message = await self.fetch_async(
+            extra_messages=[Message(role="user", content=prompt)],
+            max_output_tokens=max_tokens,
+        )
+        return completion_text(message)
 
     async def complete(
         self,
