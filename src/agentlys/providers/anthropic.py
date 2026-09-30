@@ -6,7 +6,11 @@ import os
 import anthropic
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider, EmptyCompletionError
+from agentlys.providers.base_provider import (
+    BaseProvider,
+    EmptyCompletionError,
+    completion_text,
+)
 from agentlys.providers.utils import (
     add_empty_function_result,
     drop_orphaned_function_results,
@@ -499,6 +503,7 @@ class AnthropicProvider(BaseProvider):
             transform_list_function=lambda x: add_empty_function_result(
                 drop_orphaned_function_results(x)
             ),
+            extra_messages=kwargs.pop("extra_messages", ()),
         )
         # A message whose parts were all filtered out (an assistant turn
         # holding nothing but a non-replayable thinking block, say) would go
@@ -530,13 +535,16 @@ class AnthropicProvider(BaseProvider):
         return messages, tools, kwargs
 
     async def fetch_async(self, **kwargs):
+        # max_tokens is not part of the cache key: a per-call budget leaves
+        # the cached prefix untouched.
+        max_tokens = kwargs.pop("max_tokens", None) or self.max_tokens
         messages, tools, kwargs = self._prepare_request_params(**kwargs)
 
         res = await self.client.messages.create(
             model=self.model,
             messages=messages,
             tools=tools,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             **kwargs,
         )
         res_dict = res.to_dict()
@@ -547,6 +555,17 @@ class AnthropicProvider(BaseProvider):
         msg.usage = res_dict.get("usage")
         self._log_cache_usage(msg.usage)
         return msg
+
+    async def complete_conversation(self, prompt: str, max_tokens: int = 4096) -> str:
+        # Through fetch_async, so a subclass's request handling (auth headers,
+        # retries) applies as it does to the conversation's own calls.  The
+        # breakpoints go where the next conversation call would put them,
+        # within the lookback window of the prefix the previous call wrote.
+        message = await self.fetch_async(
+            extra_messages=[Message(role="user", content=prompt)],
+            max_tokens=max_tokens,
+        )
+        return completion_text(message)
 
     async def complete(
         self,

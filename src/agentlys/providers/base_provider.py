@@ -33,11 +33,29 @@ class EmptyCompletionError(RuntimeError):
         )
 
 
+def completion_text(message: Message) -> str:
+    """The text of a one-shot reply, or ``EmptyCompletionError``.
+
+    A reply that calls a tool is not an answer to the one-shot question —
+    the model went on with the task instead — so it counts as empty too.
+    """
+    block_types = [part.type for part in message.parts]
+    text = "".join(
+        part.content or "" for part in message.parts if part.type == "text"
+    ).strip()
+    if message.function_call_parts:
+        raise EmptyCompletionError("tool_use", block_types)
+    if not text:
+        raise EmptyCompletionError(None, block_types)
+    return text
+
+
 class BaseProvider(ABC):
     def prepare_messages(
         self,
         transform_function: typing.Callable,
         transform_list_function: typing.Callable = lambda x: x,
+        extra_messages: typing.Sequence[Message] = (),
     ) -> list[dict]:
         """Prepare messages for API requests using a transformation function.
 
@@ -57,6 +75,9 @@ class BaseProvider(ABC):
         cached prefix from the previous turn onward.  A system block would be
         equally stable but would give untrusted content system authority,
         which is exactly what this indirection avoids.
+
+        ``extra_messages`` are appended after the conversation for this
+        request only, without entering ``chat.messages``.
         """
         all_messages = self.chat.examples + self.chat.messages
 
@@ -91,7 +112,7 @@ class BaseProvider(ABC):
                     + all_messages[first_user_idx + 1 :]
                 )
 
-        messages = all_messages
+        messages = all_messages + list(extra_messages)
         messages = transform_list_function(messages)
         return [transform_function(m) for m in messages]
 
@@ -128,6 +149,23 @@ class BaseProvider(ABC):
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support one-shot completions. "
             "Please implement complete() to enable features like compaction."
+        )
+
+    async def complete_conversation(self, prompt: str, max_tokens: int = 4096) -> str:
+        """Ask one question about the conversation, from the prompt cache.
+
+        Sends the request the conversation loop would send next — same
+        model, tools, system, thinking/effort, tool_choice and cache
+        breakpoints — with one extra user message holding ``prompt``, so the
+        whole conversation is read from the provider's prefix cache instead
+        of being paid again. Neither the prompt nor the reply enters
+        ``chat.messages``.  Returns the reply text; raises
+        ``EmptyCompletionError`` when the reply has no text or calls a tool,
+        and ``NotImplementedError`` when the provider cannot replay its
+        request (callers then fall back to ``complete()``).
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} cannot replay the conversation request."
         )
 
     async def fetch_stream_async(self, **kwargs) -> typing.AsyncGenerator[dict, None]:

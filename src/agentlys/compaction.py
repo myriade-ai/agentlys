@@ -37,17 +37,26 @@ DEFAULT_COMPACTION_PROMPT = (
     "Be concise but thorough. Wrap your summary in <summary></summary> tags."
 )
 
+# Appended to the prompt when it is sent after the conversation itself: the
+# model is mid-task with its tools at hand, and a tool call here would be
+# taken for the next step instead of a summary.
+REPLAY_SUFFIX = (
+    "Reply with the summary only: do not call any tool and do not continue the task."
+)
+
 
 @dataclass
 class TokenThresholdCompaction:
-    """Client-side compaction using a cheap model for summarization.
+    """Client-side compaction: the conversation summarizes itself.
 
     Checks the most recent API response's ``usage.input_tokens`` against a
     configurable threshold. When exceeded, summarizes the entire conversation
     into a single compaction message.
 
     Works with any provider implementing ``BaseProvider.complete()``
-    (Anthropic, OpenAI, and any OpenAI-compatible API).
+    (Anthropic, OpenAI, and any OpenAI-compatible API). Providers that also
+    implement ``complete_conversation()`` (Anthropic, OpenAI Responses) read
+    the history from the prompt cache instead of paying it again.
 
     After a compaction, preserved attachments (e.g. PDF document parts) keep
     contributing a fixed token floor to every request that no amount of
@@ -60,9 +69,11 @@ class TokenThresholdCompaction:
         token_threshold: Trigger compaction when input tokens exceed this value
             (after a compaction: when input tokens grow this much beyond the
             post-compaction floor).
-        summary_model: Model to use for generating summaries (cheap/fast
-            recommended). Defaults to the provider's current model — pass a
-            cheap model explicitly to reduce summarization cost.
+        summary_model: Model to use for generating summaries. Leave it unset
+            (the conversation's own model) to send the summary request as the
+            conversation's next request plus the prompt, which reads the whole
+            history from the prompt cache; another model gets the history
+            flattened into one message, at full price.
         instructions: Custom summarization prompt. Replaces the default if provided.
         max_tokens: Output budget of the summary call. Thinking models spend it
             on thinking before writing the summary, so it needs headroom well
@@ -112,6 +123,44 @@ class TokenThresholdCompaction:
 
         return latest - baseline > self.token_threshold
 
+    async def _summarize(self, chat: AgentlysBase, prompt: str) -> str:
+        """Summary text of the conversation.
+
+        With the conversation's own model, the summary request is the
+        conversation's next request plus the prompt, so the whole history is
+        read from the prompt cache.  With another model (or a provider that
+        cannot replay its request), the history is flattened into a single
+        message and paid in full.
+        """
+        if self.summary_model in (None, chat.provider.model):
+            try:
+                return await chat.provider.complete_conversation(
+                    f"{prompt}\n\n{REPLAY_SUFFIX}", max_tokens=self.max_tokens
+                )
+            except NotImplementedError:
+                pass
+
+        # Skip messages with no parts (e.g. after thinking block removal).
+        conversation_str = "\n".join(
+            msg.to_markdown(inline_images=False) for msg in chat.messages if msg.parts
+        )
+        # The provider handles client shape, proxy auth and custom base_url
+        return await chat.provider.complete(
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"{prompt}\n\n--- Conversation to summarize ---\n"
+                        f"{conversation_str}"
+                    ),
+                }
+            ],
+            # Include the original system instruction for context
+            system=chat.instruction,
+            model=self.summary_model,
+            max_tokens=self.max_tokens,
+        )
+
     async def compact(self, chat: AgentlysBase) -> None:
         """Summarize older messages and replace them with a compaction message."""
         from agentlys.model import Message, MessagePart
@@ -121,40 +170,14 @@ class TokenThresholdCompaction:
         if not messages:
             return
 
-        # Summarize the entire conversation into a single compaction message.
-        # Skip messages with no parts (e.g. after thinking block removal).
-        conversation_text = []
-        for msg in messages:
-            if not msg.parts:
-                continue
-            conversation_text.append(msg.to_markdown(inline_images=False))
-        conversation_str = "\n".join(conversation_text)
-
         prompt = self.instructions or DEFAULT_COMPACTION_PROMPT
-
-        summary_messages = [
-            {
-                "role": "user",
-                "content": (
-                    f"{prompt}\n\n--- Conversation to summarize ---\n{conversation_str}"
-                ),
-            }
-        ]
-
-        # The provider handles client shape, proxy auth and custom base_url
         try:
-            summary_text = await chat.provider.complete(
-                messages=summary_messages,
-                # Include the original system instruction for context
-                system=chat.instruction,
-                model=self.summary_model,
-                max_tokens=self.max_tokens,
-            )
+            summary_text = await self._summarize(chat, prompt)
         except EmptyCompletionError as e:
             # Keep the conversation as is rather than failing the turn; the
             # next threshold check tries again.
             logger.warning(
-                "Compaction skipped: summary response had no text "
+                "Compaction skipped: summary response had no text or called a tool "
                 "(stop_reason=%s, blocks=%s, max_tokens=%d)",
                 e.stop_reason,
                 e.block_types,
