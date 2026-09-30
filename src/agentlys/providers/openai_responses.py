@@ -72,28 +72,31 @@ def _get(obj, name, default=None):
 def usage_to_dict(usage) -> typing.Optional[dict]:
     """Normalize Responses usage to the naming used by Message.
 
-    ``input_tokens`` is reported as the *total* prompt size with cached
-    tokens as a subset; Message uses Anthropic's split (``input_tokens`` =
-    uncached remainder) so ``compaction.should_compact`` sums one shape.
-    ``reasoning_tokens`` are a subset of ``output_tokens`` and are kept as an
-    extra field for cost attribution.
+    ``input_tokens`` is reported as the *total* prompt size with cached and
+    cache-written tokens as subsets; Message uses Anthropic's split
+    (``input_tokens`` = uncached remainder) so ``compaction.should_compact``
+    sums one shape. Cache writes are billed at a premium, so they are kept
+    apart from ordinary input. ``reasoning_tokens`` are a subset of
+    ``output_tokens`` and are kept as an extra field for cost attribution.
     """
     if usage is None:
         return None
 
     input_tokens = _get(usage, "input_tokens") or 0
     output_tokens = _get(usage, "output_tokens") or 0
-    cached = min(
-        _get(_get(usage, "input_tokens_details"), "cached_tokens") or 0, input_tokens
-    )
+    details = _get(usage, "input_tokens_details")
+    cached = min(_get(details, "cached_tokens") or 0, input_tokens)
+    cache_write = min(_get(details, "cache_write_tokens") or 0, input_tokens - cached)
     reasoning = _get(_get(usage, "output_tokens_details"), "reasoning_tokens")
 
     result = {
-        "input_tokens": input_tokens - cached,
+        "input_tokens": input_tokens - cached - cache_write,
         "output_tokens": output_tokens,
     }
     if cached:
         result["cache_read_input_tokens"] = cached
+    if cache_write:
+        result["cache_creation_input_tokens"] = cache_write
     if reasoning:
         result["reasoning_tokens"] = reasoning
     return result
