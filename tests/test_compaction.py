@@ -850,6 +850,89 @@ class TestCompactionMidToolExchange(unittest.TestCase):
         mock_compaction.compact.assert_called_once_with(agent)
 
 
+class TestSummaryWithoutText(unittest.TestCase):
+    """DEV-1304: the summarizer spent the whole ``max_tokens`` thinking.
+
+    With adaptive thinking on the summary call, a long conversation can make
+    the model think past ``max_tokens`` before writing any text. The API then
+    answers ``stop_reason="max_tokens"`` with a single thinking block — the
+    exact shape reproduced live on claude-opus-4-6 at ``max_tokens=4096``.
+    """
+
+    def _thinking_only_response(self):
+        from anthropic.types import Message as AnthropicMessage
+
+        return AnthropicMessage.model_validate(
+            {
+                "id": "msg_01",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-4-6",
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "Let me reconcile H0...",
+                        "signature": "EqQBCkgIBxABGAIiQ",
+                    }
+                ],
+                "stop_reason": "max_tokens",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 131_072, "output_tokens": 4096},
+            }
+        )
+
+    def test_turn_survives_summary_without_text(self):
+        agent = Agentlys(
+            instruction="Test",
+            provider=APIProvider.ANTHROPIC,
+            compaction=TokenThresholdCompaction(token_threshold=100),
+        )
+        earlier_summary = Message(
+            role="user", parts=[MessagePart(type="compaction", content="Earlier")]
+        )
+        history = [
+            earlier_summary,
+            Message(
+                role="assistant",
+                content="Resuming",
+                usage={"input_tokens": 1_000, "output_tokens": 10},
+            ),
+            Message(role="user", content="Question"),
+            Message(
+                role="assistant",
+                content="Answer",
+                usage={"input_tokens": 50_000, "output_tokens": 10},
+            ),
+        ]
+        agent.messages = list(history)
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(
+            return_value=self._thinking_only_response()
+        )
+        reply = Message(role="assistant", content="Next answer")
+
+        async def fake_stream(**kwargs):
+            yield {"type": "message", "message": reply}
+
+        async def run():
+            with patch.object(agent.provider, "fetch_stream_async", fake_stream):
+                return [e async for e in agent.ask_stream_async("Next question")]
+
+        loop = asyncio.new_event_loop()
+        try:
+            events = loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+        # The turn completes and the history is intact, with the new exchange.
+        self.assertEqual(agent.messages[: len(history)], history)
+        self.assertEqual(agent.messages[-1], reply)
+        # The earlier summary must not be re-emitted as a fresh compaction:
+        # callers persist it, and a copy at the end of the stored conversation
+        # would make the next load drop everything before it.
+        self.assertNotIn("compaction_message", [e["type"] for e in events])
+
+
 class TestCustomCompactionHandler(unittest.TestCase):
     """Tests for using a custom CompactionHandler."""
 

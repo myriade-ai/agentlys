@@ -1448,11 +1448,15 @@ class Agentlys(AgentlysBase):
             self
         ):
             yield {"type": "compacting"}
+            first_message = self.messages[0]
             await self.compaction.compact(self)
             # Yield the compaction summary message so callers can persist it.
-            # Only emit when compact() actually produced a summary (it can
-            # be a no-op when there are too few messages to compact).
-            if self.messages[0].has_compaction:
+            # Only emit when compact() actually produced a new summary: it can
+            # be a no-op, leaving an earlier summary in first position.
+            if (
+                self.messages[0] is not first_message
+                and self.messages[0].has_compaction
+            ):
                 yield {"type": "compaction_message", "message": self.messages[0]}
 
         if message:

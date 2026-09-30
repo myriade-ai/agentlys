@@ -23,7 +23,7 @@ import typing
 
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.base_provider import BaseProvider, EmptyCompletionError
 from agentlys.providers.openai import (
     create_openai_client,
     resolve_effort,
@@ -510,7 +510,10 @@ class OpenAIResponsesProvider(BaseProvider):
             if _get(c, "type") == "output_text"
         )
         if not text:
-            raise RuntimeError("Completion response contained no text")
+            raise EmptyCompletionError(
+                _get(_get(res, "incomplete_details"), "reason") or _get(res, "status"),
+                [_get(item, "type") for item in (res.output or [])],
+            )
         return text
 
     async def fetch_stream_async(self, **kwargs):
