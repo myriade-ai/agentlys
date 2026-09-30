@@ -445,6 +445,20 @@ class TestOutputParsing:
     def test_usage_none(self):
         assert usage_to_dict(None) is None
 
+    def test_usage_splits_cache_writes_from_input(self):
+        usage = NS(
+            input_tokens=1000,
+            input_tokens_details=NS(cached_tokens=600, cache_write_tokens=300),
+            output_tokens=50,
+            output_tokens_details=NS(reasoning_tokens=0),
+        )
+        assert usage_to_dict(usage) == {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 600,
+            "cache_creation_input_tokens": 300,
+        }
+
     def test_usage_dict_input(self):
         assert usage_to_dict({"input_tokens": 10, "output_tokens": 5}) == {
             "input_tokens": 10,
