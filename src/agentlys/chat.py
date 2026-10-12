@@ -167,6 +167,36 @@ async def _run_in_thread(func, *args):
 _image_encoding_lock = threading.Lock()
 
 
+class _SerializedDict(typing.NamedTuple):
+    """The JSON text of a dict tool result, as far as it was built."""
+
+    head: str  # its beginning: all of it, or just past the output limit
+    length: int  # the size of all of it
+
+
+async def _serialize_dict(content: dict) -> _SerializedDict:
+    """``json.dumps(content, default=str)``, built no further than is shown.
+
+    The model reads at most OUTPUT_SIZE_LIMIT characters of a result.  Dumping
+    a large one whole on the event loop freezes the loop to throw nearly all
+    of it away, and json holds the GIL, so a thread would not help.  The text
+    is produced piece by piece instead: the loop stops at the limit, and when
+    there is more, a worker thread goes through the rest only to measure it —
+    the truncation marker still says how much was dropped.
+    """
+    # default=str: tool results routinely carry values json doesn't
+    # know (Decimal, datetime, UUID, ...); stringify instead of crashing
+    pieces = json.JSONEncoder(default=str).iterencode(content)
+    head, length = [], 0
+    for piece in pieces:
+        head.append(piece)
+        length += len(piece)
+        if length > OUTPUT_SIZE_LIMIT:
+            length += await _run_in_thread(lambda: sum(map(len, pieces)))
+            break
+    return _SerializedDict("".join(head), length)
+
+
 class StopLoopException(Exception):
     pass
 
@@ -1192,6 +1222,13 @@ class Agentlys(AgentlysBase):
                 formatted_content = truncate_with_marker(
                     formatted_content, OUTPUT_SIZE_LIMIT, label=function_name
                 )
+        elif isinstance(content, _SerializedDict):
+            formatted_content = truncate_with_marker(
+                content.head,
+                OUTPUT_SIZE_LIMIT,
+                label=function_name,
+                full_length=content.length,
+            )
         elif isinstance(content, dict):
             # default=str: tool results routinely carry values json doesn't
             # know (Decimal, datetime, UUID, ...); stringify instead of crashing
@@ -1423,10 +1460,14 @@ class Agentlys(AgentlysBase):
         try:
             result = await self._resolve_and_call_function(name, args, response)
             content, image = self._process_tool_result(result)
+            if isinstance(content, dict):
+                content = await _serialize_dict(content)
         except StopLoopException:
             raise  # Propagate to stop the loop
         except Exception as e:
-            content = self._format_exception(e)
+            # Also a result that cannot be serialized: the error replaces it
+            # whole, its image included.
+            content, image = self._format_exception(e), None
 
         return (function_call_id, name, content, image)
 

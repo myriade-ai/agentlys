@@ -34,6 +34,7 @@ def truncate_with_marker(
     *,
     label: str = "",
     advice: str = NARROW_THE_CALL,
+    full_length: typing.Optional[int] = None,
 ) -> str:
     """Cut ``text`` to ``limit`` and tell the model what it lost.
 
@@ -46,6 +47,9 @@ def truncate_with_marker(
     that marker names, not the length of the intermediate string. Otherwise a
     500 000-character result capped twice would be announced as 100 000, which
     is a confident lie about how much the model is missing.
+
+    ``full_length`` is for a caller that only built the beginning of a longer
+    text: ``text`` is that beginning, ``full_length`` the size of all of it.
     """
     if limit is None or len(text) <= limit:
         return text
@@ -53,6 +57,8 @@ def truncate_with_marker(
     already_cut = _MARKER_ORIGINAL_RE.search(text[-_MARKER_TAIL_CHARS:])
     if already_cut:
         total = max(total, int(already_cut.group(1)))
+    if full_length is not None:
+        total = full_length
     dropped_pct = round(100 * (total - limit) / total)
     logging.warning(
         "Tool output truncated from %d to %d characters%s",

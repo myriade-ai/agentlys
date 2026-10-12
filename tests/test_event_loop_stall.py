@@ -16,6 +16,7 @@ stand-in blocked.  Nothing here depends on how fast the machine is.
 import asyncio
 import base64
 import io
+import json
 import threading
 import time
 from unittest.mock import patch
@@ -24,7 +25,9 @@ import pytest
 from PIL import Image as PILImage
 
 from agentlys import Agentlys, APIProvider, Message, MessagePart
+from agentlys.chat import OUTPUT_SIZE_LIMIT
 from agentlys.compaction import TokenThresholdCompaction
+from agentlys.utils import truncate_with_marker
 
 # How long the stand-ins block, and the longest the loop may go unanswered:
 # half of it.  On the loop, a stand-in stalls the heartbeat for all of it.
@@ -472,3 +475,57 @@ async def test_an_image_that_cannot_be_encoded_still_fails_in_the_request():
 
     assert fetch.await_count == 1, "the error did not come from the provider call"
     assert requests == []
+
+
+# ---------------------------------------------------------------------------
+# Dict results: the model reads at most OUTPUT_SIZE_LIMIT characters of one
+# ---------------------------------------------------------------------------
+
+
+class _SlowToSerialize:
+    """A value json does not know (a Decimal, a datetime, a model object): it
+    is stringified — here slowly, logging the thread that does it."""
+
+    def __init__(self, serialized_on):
+        self.serialized_on = serialized_on
+
+    def __str__(self):
+        self.serialized_on.append(threading.get_ident())
+        time.sleep(BLOCK_SECONDS)
+        return "a value"
+
+
+@pytest.mark.asyncio
+async def test_the_part_of_a_dict_result_past_the_limit_is_not_built_on_the_loop(
+    loop_probe,
+):
+    # What lies beyond the limit is never shown; it is only measured, for the
+    # truncation marker, and that is done on a worker thread.
+    serialized_on = []
+    result = {
+        "shown": "x" * OUTPUT_SIZE_LIMIT,
+        "dropped": _SlowToSerialize(serialized_on),
+    }
+
+    def export() -> dict:
+        """Export everything."""
+        return result
+
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(export)
+    requests = _serve(
+        agent, _anthropic_reply(_tool_use("export", "toolu_01")), _anthropic_reply("ok")
+    )
+
+    async with loop_probe as probe:
+        async for _ in agent.run_conversation_async("export it"):
+            pass
+
+    (tool_result,) = requests[1]["messages"][-1]["content"]
+    dumped_whole = json.dumps({"shown": "x" * OUTPUT_SIZE_LIMIT, "dropped": "a value"})
+    assert tool_result["content"] == truncate_with_marker(
+        dumped_whole, OUTPUT_SIZE_LIMIT
+    )
+    assert len(serialized_on) == 1
+    _assert_ran_off_the_loop(serialized_on, "the serialization past the limit")
+    probe.assert_responsive("a dict result larger than the limit", STALL_LIMIT_MS)
