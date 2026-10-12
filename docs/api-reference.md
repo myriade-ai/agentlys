@@ -166,7 +166,7 @@ parent.remove_sub_agent("researcher")
 
 #### on_sub_agent_event
 
-Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`.
+Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`. It runs on the event loop, once per event: it must not block.
 
 ```python
 parent.on_sub_agent_event = lambda name, id, event: print(f"[{name}] {event}")

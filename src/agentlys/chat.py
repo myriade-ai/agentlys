@@ -206,6 +206,7 @@ def simple_response_default_callback(response: Message) -> Message:
     This function is called when the response is a simple response (no function call).
     By default, the conversation will stop after a simple response.
     You can override this function to change this behavior.
+    It is called on the event loop: it must not block.
     """
     raise StopLoopException("Stopping the conversation after a simple response")
 
@@ -1084,7 +1085,8 @@ class Agentlys(AgentlysBase):
                 tools from different servers (or built-in tools) never
                 collide.
             tool_filter: Optional callable receiving the MCP ``Tool``
-                object; return False to skip the tool.
+                object; return False to skip the tool. Called on the event
+                loop for each tool: it must not block.
             max_result_chars: Optional cap on tool/resource result size.
             include_resources: Also expose the server's resources as
                 functions (default True, matching historical behavior).
@@ -1354,6 +1356,8 @@ class Agentlys(AgentlysBase):
 
         # Async tools run as tasks on the event loop, so opening the scope here
         # and awaiting the body share one thread/task — enter the scope inline.
+        # A scope that blocks therefore blocks the loop: a tool whose scope
+        # does I/O should be sync.
         if self._is_async_callable(func):
             with call_scope() as scoped_owner:
                 scoped_func = getattr(scoped_owner, func.__name__)

@@ -87,7 +87,7 @@ coordinator.remove_sub_agent("researcher")
 
 ### on_sub_agent_event
 
-Optional callback to observe sub-agent execution events (streaming text, tool calls, etc.). Called with `(sub_agent_name, invocation_id, event)` for each event during a sub-agent's conversation.
+Optional callback to observe sub-agent execution events (streaming text, tool calls, etc.). Called with `(sub_agent_name, invocation_id, event)` for each event during a sub-agent's conversation. It runs on the event loop, once per event: it must not block.
 
 ```python
 def on_event(name: str, invocation_id: str, event: dict):

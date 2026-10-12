@@ -88,6 +88,10 @@ agent.add_function(fetch_url)
 agent.add_function(process_data)
 ```
 
+An async tool is awaited on the event loop. Anything synchronous and slow inside it (a blocking driver, `time.sleep()`, a heavy computation) stops every other task of the process until it returns. Await real async I/O in it, or write the tool as a plain function: sync tools run on a worker thread.
+
+The callbacks you give an agent are called on the event loop too, and must not block: `simple_response_callback`, `on_sub_agent_event`, the `tool_filter` of `add_mcp_server()`.
+
 ## Class-Based Tools
 
 ### Basic Class Tools
