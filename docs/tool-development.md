@@ -177,6 +177,8 @@ agent = Agentlys()
 agent.add_tool(db, "Database")
 ```
 
+`__llm__()` is called on a worker thread, like sync tool methods, so a slow one (a query, a file read) does not freeze the event loop. Captures started from the same event loop take turns, as they did when they ran on that loop: a `__llm__()` never runs alongside another one from that loop. It does run while the event loop keeps going, so it must not count on being on the event-loop thread, and state it shares with code running on the loop needs its own protection. As before, it must not block until a turn scheduled on its own event loop has finished (`asyncio.run_coroutine_threadsafe(...).result()`): that turn's capture would wait for the one in progress.
+
 ## Tool Design Best Practices
 
 ### 1. Clear Documentation

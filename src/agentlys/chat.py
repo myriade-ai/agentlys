@@ -1,12 +1,14 @@
 """Agentlys chat loop: agent state, tool registration and conversation runs."""
 
 import asyncio
+import contextvars
 import copy
 import inspect
 import io
 import json
 import logging
 import os
+import threading
 import traceback
 import typing
 import uuid
@@ -98,6 +100,65 @@ def _accepts_from_response(func) -> bool:
     except TypeError:
         pass
     return result
+
+
+# One capture of tool states at a time per event loop.  Agents that know
+# nothing of each other are often built on the same host state (two sub-agents
+# on one database session), and the captures of one loop could not overlap
+# while they ran on it: hosts rely on that.  Per loop, not per process: a
+# __llm__() may wait for a turn that runs on another loop (an agent on a
+# helper thread), whose capture must not wait for it in return.  The lock is
+# taken on the worker thread, so a capture that waits never holds the loop.
+# Re-entrant, for the states computed inline on the loop thread (see
+# initial_tools_states): a __llm__() called there may read another agent's.
+_tools_states_locks = weakref.WeakKeyDictionary()
+
+
+def _tools_states_lock():
+    """The lock shared by the captures started from the running event loop."""
+    loop = asyncio.get_running_loop()
+    lock = _tools_states_locks.get(loop)
+    if lock is None:
+        lock = _tools_states_locks.setdefault(loop, threading.RLock())
+    return lock
+
+
+async def _run_in_thread(func, *args):
+    """Run blocking host code on a worker thread and wait for it to finish.
+
+    A thread cannot be interrupted.  If the task awaiting it were simply
+    cancelled, the code would keep running behind its back — still reading
+    state (a database session, say) that the host closes once it has seen the
+    cancellation.  So a cancellation that arrives while the code is running is
+    held back until it has finished, then raised; the event loop stays free
+    in the meantime.  Code still waiting for a thread is never started.
+    """
+    # Taken by whichever comes first: the thread starting, or the cancellation.
+    claim = threading.Lock()
+
+    def run():
+        if claim.acquire(blocking=False):
+            return func(*args)
+
+    # What asyncio.to_thread() does, without a task around it: a loop that
+    # closes cancels every task, and a cancelled task reads as done while its
+    # thread is still running.  Nothing cancels this future.
+    worker = asyncio.get_running_loop().run_in_executor(
+        None, contextvars.copy_context().run, run
+    )
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        if not claim.acquire(blocking=False):
+            while not worker.done():
+                try:
+                    await asyncio.wait([worker])
+                except asyncio.CancelledError:
+                    pass
+            if not worker.cancelled():
+                # Retrieved so it is not logged as lost: the cancellation wins.
+                worker.exception()
+        raise
 
 
 class StopLoopException(Exception):
@@ -211,6 +272,9 @@ class Agentlys(AgentlysBase):
         self.cancel_event = cancel_event
         self._initial_tools_states = None
         self._tools_states_pinned = False
+        # The message whose turn already has its snapshot (see
+        # _ensure_tools_states), so its capture does not take a second one.
+        self._tools_states_taken_for = None
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
@@ -278,6 +342,7 @@ class Agentlys(AgentlysBase):
             return False
         if not await self.compaction.should_compact(self):
             return False
+        await self._ensure_tools_states(next_message)
         await self.compaction.compact(self)
         return True
 
@@ -303,6 +368,7 @@ class Agentlys(AgentlysBase):
         self.on_sub_agent_event = None
         self._initial_tools_states = None
         self._tools_states_pinned = False
+        self._tools_states_taken_for = None
         self._tool_search_config = None
         self._tool_search_function_name = None
 
@@ -360,6 +426,64 @@ class Agentlys(AgentlysBase):
         if self._initial_tools_states is None:
             self._initial_tools_states = self.initial_tools_states
 
+    async def _capture_tools_states_async(
+        self, message: typing.Optional[Message] = None
+    ):
+        """_capture_tools_states() for the async loop: same rule, off the loop.
+
+        ``__llm__()`` is host code and routinely does I/O (a row count is a
+        database round trip).  Called inline it would freeze the event loop,
+        and every other request served by it, until the tools have answered.
+        """
+        taken_ahead = message is not None and message is self._tools_states_taken_for
+        self._tools_states_taken_for = None
+        if (
+            message is not None
+            and getattr(message, "role", None) == "user"
+            and not self._tools_states_pinned
+            and not taken_ahead
+        ):
+            self._initial_tools_states = None
+        if self._initial_tools_states is None:
+            self._initial_tools_states = await self._compute_tools_states_off_loop()
+
+    async def _ensure_tools_states(self, next_message: typing.Optional[Message]):
+        """Give a request sent ahead of the turn's capture a snapshot to read.
+
+        Compaction runs before the capture, and its summary request carries
+        the system prompt.  An agent with a snapshot keeps it for that request
+        (the previous turn's, which is what the prompt cache holds).  An agent
+        without one — history just loaded from storage — would have the
+        provider compute the states inline, on the event loop.  Take the turn's
+        snapshot now instead; the capture that follows keeps it rather than
+        calling every ``__llm__()`` a second time.
+        """
+        if self._initial_tools_states is None:
+            self._initial_tools_states = await self._compute_tools_states_off_loop()
+            self._tools_states_taken_for = next_message
+
+    async def _compute_tools_states_off_loop(self) -> typing.Optional[str]:
+        """The tool states, with every ``__llm__()`` called on a worker thread.
+
+        One thread for the whole capture, the tools one after the other: host
+        tools commonly share one database session, which must not be used by
+        two threads at once.  For the same reason captures started from the
+        same event loop take turns, waiting on the worker thread, never on
+        the loop.
+        """
+        if not self.tools:
+            return None
+        lock = _tools_states_lock()
+        # Read here, on the event loop: self.tools can change while the worker
+        # runs (an async tool registering another tool, for one).
+        tools = self._tools_with_states()
+
+        def render():
+            with lock:
+                return self._render_tools_states(tools)
+
+        return await _run_in_thread(render)
+
     @property
     def initial_tools_states(self) -> typing.Optional[str]:
         """Captured tool states included in the system prompt.
@@ -368,12 +492,28 @@ class Agentlys(AgentlysBase):
         otherwise computes from the current tools.  The snapshot is taken by
         _capture_tools_states() on each new user message and stays static for
         every iteration of that turn.
+
+        Computed on the calling thread.  On the thread of a running event
+        loop, it takes its turn among that loop's captures: one in progress on
+        a worker thread is waited for, since nothing else ran on that thread
+        during a capture when captures ran there.
         """
         if self._initial_tools_states is not None:
             return self._initial_tools_states
         # If there are no tools, return None
         if not self.tools:
             return None
+        tools = self._tools_with_states()
+        try:
+            lock = _tools_states_lock()
+        except RuntimeError:
+            # No event loop running on this thread: nothing to take turns with.
+            return self._render_tools_states(tools)
+        with lock:
+            return self._render_tools_states(tools)
+
+    def _tools_with_states(self) -> list:
+        """(name, tool) for each tool whose state goes in the system prompt."""
         # When tool search is enabled, skip __llm__ for tools whose
         # methods are ALL deferred — they haven't been discovered yet.
         loaded_tool_names = None
@@ -384,13 +524,20 @@ class Agentlys(AgentlysBase):
                 if not s.get("defer_loading")
             }
 
-        tool_reprs = []
+        tools = []
         for tool_id, tool in self.tools.items():
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
 
             if loaded_tool_names is not None and tool_name not in loaded_tool_names:
                 continue
+            tools.append((tool_name, tool))
+        return tools
 
+    @staticmethod
+    def _render_tools_states(tools: list) -> str:
+        """Call ``__llm__()`` on each tool and assemble the system-prompt block."""
+        tool_reprs = []
+        for tool_name, tool in tools:
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
             else:
@@ -937,7 +1084,7 @@ class Agentlys(AgentlysBase):
         if message:
             self.messages.append(message)
 
-        self._capture_tools_states(message)
+        await self._capture_tools_states_async(message)
 
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
@@ -1449,6 +1596,7 @@ class Agentlys(AgentlysBase):
         ):
             yield {"type": "compacting"}
             first_message = self.messages[0]
+            await self._ensure_tools_states(message)
             await self.compaction.compact(self)
             # Yield the compaction summary message so callers can persist it.
             # Only emit when compact() actually produced a new summary: it can
@@ -1462,7 +1610,7 @@ class Agentlys(AgentlysBase):
         if message:
             self.messages.append(message)
 
-        self._capture_tools_states(message)
+        await self._capture_tools_states_async(message)
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
