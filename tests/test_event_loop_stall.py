@@ -14,13 +14,16 @@ stand-in blocked.  Nothing here depends on how fast the machine is.
 """
 
 import asyncio
+import base64
+import io
 import threading
 import time
 from unittest.mock import patch
 
 import pytest
+from PIL import Image as PILImage
 
-from agentlys import Agentlys, APIProvider, Message
+from agentlys import Agentlys, APIProvider, Message, MessagePart
 from agentlys.compaction import TokenThresholdCompaction
 
 # How long the stand-ins block, and the longest the loop may go unanswered:
@@ -53,6 +56,10 @@ def _anthropic_reply(*content):
             "usage": {"input_tokens": 100, "output_tokens": 10},
         }
     )
+
+
+def _tool_use(name, call_id, **arguments):
+    return {"type": "tool_use", "id": call_id, "name": name, "input": arguments}
 
 
 def _assert_ran_off_the_loop(thread_ids, what):
@@ -272,3 +279,196 @@ async def test_compaction_keeps_the_previous_snapshot_then_the_turn_takes_its_ow
     assert "capture 1" in summary_request["system"][-1]["text"]
     assert "capture 2" in second_turn["system"][-1]["text"]
     assert tool.captures == 2
+
+
+# ---------------------------------------------------------------------------
+# Images: PIL encodes each one for the request that carries it
+# ---------------------------------------------------------------------------
+
+
+def _slow_to_encode(image, encoded_on):
+    """Make a PIL image whose encoding blocks, logging the thread that does it."""
+    encode = image.save
+
+    def save(fp, format=None, **params):
+        encoded_on.append(threading.get_ident())
+        time.sleep(BLOCK_SECONDS)
+        return encode(fp, format=format, **params)
+
+    image.save = save
+    return image
+
+
+def _stored_image(encoded_on):
+    """An image as a host restores it from storage: bytes, opened lazily."""
+    buffer = io.BytesIO()
+    PILImage.new("RGB", (32, 32), "red").save(buffer, format="PNG")
+    image = PILImage.open(io.BytesIO(buffer.getvalue()))
+    return MessagePart(type="image", image=_slow_to_encode(image, encoded_on))
+
+
+def _images_in(request_message):
+    return [block for block in request_message["content"] if block["type"] == "image"]
+
+
+@pytest.mark.asyncio
+async def test_an_image_returned_by_a_tool_is_encoded_off_the_loop(loop_probe):
+    # The tool itself is instant: the cost is encoding its image for the
+    # request that sends the result back to the model.
+    encoded_on = []
+    chart = _slow_to_encode(PILImage.new("RGB", (32, 32), "red"), encoded_on)
+
+    def render_chart():
+        """Render the chart."""
+        return chart
+
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.add_function(render_chart)
+    requests = _serve(
+        agent,
+        _anthropic_reply(_tool_use("render_chart", "toolu_01")),
+        _anthropic_reply("here is your chart"),
+    )
+
+    async with loop_probe as probe:
+        async for _ in agent.run_conversation_async("a chart please"):
+            pass
+
+    (tool_result,) = requests[1]["messages"][-1]["content"]
+    (sent,) = _images_in(tool_result)
+    decoded = PILImage.open(io.BytesIO(base64.b64decode(sent["source"]["data"])))
+    assert decoded.size == (32, 32)
+    assert len(encoded_on) == 1
+    _assert_ran_off_the_loop(encoded_on, "the encoding of the tool's image")
+    probe.assert_responsive("the request carrying a tool's image", STALL_LIMIT_MS)
+
+
+@pytest.mark.asyncio
+async def test_stored_images_are_encoded_off_the_loop_and_only_once(loop_probe):
+    # A host that keeps history in a database rebuilds its images on every
+    # run, so the first request of a turn finds none of them encoded.
+    encoded_on = []
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.load_messages(
+        [
+            Message(
+                role="user",
+                parts=[
+                    MessagePart(type="text", content="what do these show?"),
+                    _stored_image(encoded_on),
+                    _stored_image(encoded_on),
+                ],
+            ),
+            Message(role="assistant", content="two red squares"),
+        ]
+    )
+    requests = _serve(agent, _anthropic_reply("ok"), _anthropic_reply("you're welcome"))
+
+    async with loop_probe as probe:
+        await agent.ask_async("and the second one?")
+
+    assert len(_images_in(requests[0]["messages"][0])) == 2
+    assert len(encoded_on) == 2
+    _assert_ran_off_the_loop(encoded_on, "the encoding of the stored images")
+    probe.assert_responsive("the first request of a turn with images", STALL_LIMIT_MS)
+
+    await agent.ask_async("thanks")
+
+    assert len(_images_in(requests[1]["messages"][0])) == 2
+    assert len(encoded_on) == 2, "an image already encoded was encoded again"
+
+
+@pytest.mark.asyncio
+async def test_an_image_held_by_two_agents_is_not_encoded_by_both_at_once():
+    # One history handed to several agents: each encodes on its own worker
+    # thread, and PIL does not support two threads working on one image.
+    encoded_on = []
+    shared = Message(role="user", parts=[_stored_image(encoded_on)])
+    agents = []
+    for _ in range(2):
+        agent = Agentlys(provider=APIProvider.ANTHROPIC)
+        agent.load_messages([shared, Message(role="assistant", content="a square")])
+        _serve(agent, _anthropic_reply("ok"))
+        agents.append(agent)
+
+    await asyncio.gather(*(agent.ask_async("what colour?") for agent in agents))
+
+    assert len(encoded_on) == 1, "both agents encoded the image they share"
+
+
+@pytest.mark.asyncio
+async def test_images_are_encoded_off_the_loop_before_a_streamed_request():
+    encoded_on = []
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.load_messages(
+        [
+            Message(role="user", parts=[_stored_image(encoded_on)]),
+            Message(role="assistant", content="a red square"),
+        ]
+    )
+
+    async def stream(**kwargs):
+        agent.provider._prepare_request_params()  # what every provider starts with
+        yield {"type": "message", "message": Message(role="assistant", content="ok")}
+
+    with patch.object(agent.provider, "fetch_stream_async", side_effect=stream):
+        async for _ in agent.ask_stream_async("what colour?"):
+            pass
+
+    assert len(encoded_on) == 1
+    _assert_ran_off_the_loop(encoded_on, "the encoding of the stored image")
+
+
+@pytest.mark.asyncio
+async def test_images_are_encoded_off_the_loop_before_a_compaction():
+    # The summary request is the conversation's own request plus a prompt: it
+    # carries the images as well, and comes before the turn's request.
+    encoded_on = []
+    agent = Agentlys(
+        provider=APIProvider.ANTHROPIC,
+        compaction=TokenThresholdCompaction(token_threshold=10),
+    )
+    agent.load_messages(
+        [
+            Message(role="user", parts=[_stored_image(encoded_on)]),
+            Message(
+                role="assistant",
+                content="a red square",
+                usage={"input_tokens": 1000, "output_tokens": 10},
+            ),
+        ]
+    )
+    requests = _serve(
+        agent, _anthropic_reply("<summary>so far</summary>"), _anthropic_reply("ok")
+    )
+
+    await agent.ask_async("next question")
+
+    assert len(_images_in(requests[0]["messages"][0])) == 1
+    assert len(encoded_on) == 1
+    _assert_ran_off_the_loop(encoded_on, "the encoding of the stored image")
+
+
+@pytest.mark.asyncio
+async def test_an_image_that_cannot_be_encoded_still_fails_in_the_request():
+    # Encoding ahead of the request is an optimization: an image PIL cannot
+    # write surfaces where it always has, from the provider call.
+    def save(fp, format=None, **params):
+        raise OSError("cannot write this image")
+
+    broken = PILImage.new("RGB", (8, 8))
+    broken.save = save
+    agent = Agentlys(provider=APIProvider.ANTHROPIC)
+    agent.load_messages(
+        [Message(role="user", parts=[MessagePart(type="image", image=broken)])]
+    )
+    requests = _serve(agent, _anthropic_reply("unreachable"))
+
+    with patch.object(
+        agent.provider, "fetch_async", wraps=agent.provider.fetch_async
+    ) as fetch:
+        with pytest.raises(ValueError, match="Failed to convert image to base64"):
+            await agent.ask_async("what is this?")
+
+    assert fetch.await_count == 1, "the error did not come from the provider call"
+    assert requests == []

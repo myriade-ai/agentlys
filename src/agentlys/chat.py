@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Type
 from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
-from agentlys.model import Message, MessagePart
+from agentlys.model import Image, Message, MessagePart
 from agentlys.providers.base_provider import (
     APIProvider,  # noqa: F401  (re-exported via agentlys.__init__)
     BaseProvider,
@@ -159,6 +159,12 @@ async def _run_in_thread(func, *args):
                 # Retrieved so it is not logged as lost: the cancellation wins.
                 worker.exception()
         raise
+
+
+# One image is encoded at a time.  Two agents can hold the same image (one
+# history handed to several of them), each encodes it on its own worker
+# thread, and PIL does not support two threads working on one image.
+_image_encoding_lock = threading.Lock()
 
 
 class StopLoopException(Exception):
@@ -343,6 +349,7 @@ class Agentlys(AgentlysBase):
         if not await self.compaction.should_compact(self):
             return False
         await self._ensure_tools_states(next_message)
+        await self._encode_images_off_loop()
         await self.compaction.compact(self)
         return True
 
@@ -483,6 +490,36 @@ class Agentlys(AgentlysBase):
                 return self._render_tools_states(tools)
 
         return await _run_in_thread(render)
+
+    async def _encode_images_off_loop(self):
+        """Encode the conversation's images on a worker thread, ahead of a request.
+
+        The provider serializes every image part while it builds the request,
+        on the event loop.  With PIL that is a full decode and re-encode of
+        each image not serialized before, during which the loop serves nobody.
+        Encoded here first, the request builder only reads what
+        ``Image.to_base64()`` memoized.
+        """
+        pending = [
+            part.image
+            for message in self.messages
+            for part in message.parts
+            if isinstance(part.image, Image) and part.image._base64_cache is None
+        ]
+        if not pending:
+            return
+
+        def encode():
+            for image in pending:
+                with _image_encoding_lock:
+                    try:
+                        image.to_base64()
+                    except ValueError:
+                        # Left to the request builder, which raises it where
+                        # it always has: inside the provider call.
+                        pass
+
+        await _run_in_thread(encode)
 
     @property
     def initial_tools_states(self) -> typing.Optional[str]:
@@ -1085,6 +1122,7 @@ class Agentlys(AgentlysBase):
             self.messages.append(message)
 
         await self._capture_tools_states_async(message)
+        await self._encode_images_off_loop()
 
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
@@ -1597,6 +1635,7 @@ class Agentlys(AgentlysBase):
             yield {"type": "compacting"}
             first_message = self.messages[0]
             await self._ensure_tools_states(message)
+            await self._encode_images_off_loop()
             await self.compaction.compact(self)
             # Yield the compaction summary message so callers can persist it.
             # Only emit when compact() actually produced a new summary: it can
@@ -1611,6 +1650,7 @@ class Agentlys(AgentlysBase):
             self.messages.append(message)
 
         await self._capture_tools_states_async(message)
+        await self._encode_images_off_loop()
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
