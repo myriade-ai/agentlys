@@ -50,7 +50,7 @@ The coordinator's LLM sees `sub_agent__researcher` and `sub_agent__writer` as ca
 
 ## API
 
-### add_sub_agent(agent, name=None, description=None, compute_levels=None) -> str
+### add_sub_agent(agent, name=None, description=None, compute_levels=None, capture_states_at_turn_start=False) -> str
 
 Register a sub-agent.
 
@@ -60,6 +60,7 @@ Register a sub-agent.
 | `name`           | `str`                | `agent.name`        | Override the tool name                   |
 | `description`    | `str`                | `agent.instruction` | Description shown to the parent LLM      |
 | `compute_levels` | `bool` or `dict`     | `None`              | Enable dynamic compute levels (see below)|
+| `capture_states_at_turn_start` | `bool` | `False` | Capture the sub-agent's tool states when the parent's turn starts (see below) |
 
 Returns the registered function name (e.g. `"sub_agent__researcher"`).
 
@@ -84,6 +85,19 @@ Remove a sub-agent by name (without the `sub_agent__` prefix).
 ```python
 coordinator.remove_sub_agent("researcher")
 ```
+
+### sub_agents
+
+The registered sub-agents, by function name: `{"sub_agent__researcher": researcher}`. Each value is the template agent every invocation runs a copy of, so it is the one to call `pin_tools_states()` on. A new dict at each read.
+
+### Tool states at the parent's turn start
+
+By default a sub-agent captures its tools' states (`__llm__()`) at each invocation, in the middle of the parent's tool batch. When its tools share host state with the parent's (one database session, say), register it with `capture_states_at_turn_start=True`: the parent's async turn then captures them before its first request, on the same worker thread as every capture, and all its invocations of that turn send that block. They are captured at every turn, whether the sub-agent is invoked or not.
+
+- A sub-agent pinned with `pin_tools_states()` keeps its pin.
+- Its own sub-agents registered the same way are captured at the parent's turn start too.
+- If its states fail then, the failure is logged and its invocations capture them, as without the option.
+- What a turn captured belongs to that turn: a template registered on several parents, serving different users at once, never sends another turn's block.
 
 ### on_sub_agent_event
 

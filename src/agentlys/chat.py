@@ -113,6 +113,16 @@ def _accepts_from_response(func) -> bool:
 # initial_tools_states): a __llm__() called there may read another agent's.
 _tools_states_locks = weakref.WeakKeyDictionary()
 
+# The sub-agent states a turn captured at its start (capture_states_at_turn_start),
+# for the invocations of that turn: ``{id(template): states}``, None for a
+# template the turn visited without capturing it (pinned, no tools, failed).
+# A context variable, not an attribute of the template: a template can be
+# registered on several parents serving different users at once, and a turn
+# must neither read another turn's states nor leave its own behind.
+_turn_sub_agent_states: contextvars.ContextVar = contextvars.ContextVar(
+    "agentlys_turn_sub_agent_states", default=None
+)
+
 
 def _tools_states_lock():
     """The lock shared by the captures started from the running event loop."""
@@ -312,6 +322,13 @@ class Agentlys(AgentlysBase):
         # The message whose turn already has its snapshot (see
         # _ensure_tools_states), so its capture does not take a second one.
         self._tools_states_taken_for = None
+        # Set on the copy an invocation runs on, when the parent's turn
+        # captured at its start (capture_states_at_turn_start): its states,
+        # kept instead of captured again, and its own sub-agents' (the parent
+        # walked them), not captured again either.
+        self._states_from_parent_turn = False
+        self._sub_agents_captured_by_parent = False
+        self._invocation_copy = False
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
@@ -472,18 +489,113 @@ class Agentlys(AgentlysBase):
         ``__llm__()`` is host code and routinely does I/O (a row count is a
         database round trip).  Called inline it would freeze the event loop,
         and every other request served by it, until the tools have answered.
+        Two additions of the async loop: a new turn also captures the
+        sub-agents registered with capture_states_at_turn_start, and an
+        invocation keeps the states its parent's turn captured for it.
         """
         taken_ahead = message is not None and message is self._tools_states_taken_for
         self._tools_states_taken_for = None
+        new_turn = message is not None and getattr(message, "role", None) == "user"
         if (
-            message is not None
-            and getattr(message, "role", None) == "user"
+            new_turn
             and not self._tools_states_pinned
             and not taken_ahead
+            and not self._states_from_parent_turn
         ):
             self._initial_tools_states = None
         if self._initial_tools_states is None:
             self._initial_tools_states = await self._compute_tools_states_off_loop()
+        # An invocation starts a "turn" of the sub-agent: when its parent's
+        # turn walked it, its own sub-agents were captured then.
+        if new_turn and not self._sub_agents_captured_by_parent:
+            await self._capture_sub_agent_states_off_loop()
+
+    def _sub_agents_captured_at_turn_start(self, seen=None) -> list:
+        """The sub-agent templates this agent's turn captures at its start:
+        those registered with capture_states_at_turn_start, theirs in turn,
+        each once (an agent may delegate to itself, or two to each other)."""
+        seen = set() if seen is None else seen
+        templates = []
+        for entry in self._sub_agents.values():
+            agent = entry["agent"]
+            if not entry.get("capture_states_at_turn_start") or id(agent) in seen:
+                continue
+            seen.add(id(agent))
+            templates.append(agent)
+            templates.extend(agent._sub_agents_captured_at_turn_start(seen))
+        return templates
+
+    async def _capture_sub_agent_states_off_loop(self):
+        """Capture, at the start of this agent's turn, the states of the
+        sub-agents registered with capture_states_at_turn_start.
+
+        Left to their invocations, they would be captured in the middle of a
+        tool batch, while the batch's other tools run on host state the
+        sub-agent's tools often share (one database session).  Here nothing
+        else of the turn runs yet.  Same thread and lock as any capture, one
+        sub-agent after the other.  The states go to the turn's context
+        (``_turn_sub_agent_states``), where its invocations find them; the
+        templates are left untouched.  A pinned sub-agent keeps its pin.  One
+        whose states fail is left to the capture at its invocation, where the
+        failure surfaced before: it does not fail a turn that may never call
+        it.
+        """
+        templates = self._sub_agents_captured_at_turn_start()
+        # Read on the event loop, like _compute_tools_states_off_loop.
+        jobs = [
+            (
+                agent,
+                agent._tools_with_states()
+                if agent.tools and not agent._tools_states_pinned
+                else None,
+            )
+            for agent in templates
+        ]
+        captured = {}
+        if any(tools is not None for _, tools in jobs):
+            lock = _tools_states_lock()
+
+            def render():
+                results = []
+                with lock:
+                    for agent, tools in jobs:
+                        if tools is None:
+                            continue
+                        try:
+                            results.append(
+                                (agent, agent._render_tools_states(tools), None)
+                            )
+                        except Exception as exc:  # host code: anything can fail
+                            results.append((agent, None, exc))
+                return results
+
+            for agent, states, error in await _run_in_thread(render):
+                if error is not None:
+                    logging.warning(
+                        "Tool states of sub-agent %r failed at the start of the "
+                        "turn; they will be captured at its invocation",
+                        agent.name,
+                        exc_info=error,
+                    )
+                captured[id(agent)] = states
+        # Every template the walk reached, captured or not: none of their
+        # invocations walks again.  A turn replaces what the context held, so
+        # it never reads a previous turn's states; an invocation adds to its
+        # parent turn's, which the parent's next invocations still need.
+        walked = {id(agent): captured.get(id(agent)) for agent in templates}
+        if self._invocation_copy:
+            walked = {**(_turn_sub_agent_states.get() or {}), **walked}
+        _turn_sub_agent_states.set(walked)
+
+    async def _capture_sub_agent_states_for_resumed_run(
+        self, message: typing.Optional[Message]
+    ):
+        """A run started without a new message (the host loaded the history,
+        user message included, and resumes it) is a turn too: no user message
+        reaches _capture_tools_states_async, so capture the sub-agents here,
+        before its first request."""
+        if message is None and not self._sub_agents_captured_by_parent:
+            await self._capture_sub_agent_states_off_loop()
 
     async def _ensure_tools_states(self, next_message: typing.Optional[Message]):
         """Give a request sent ahead of the turn's capture a snapshot to read.
@@ -850,6 +962,7 @@ class Agentlys(AgentlysBase):
         name: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
         compute_levels: typing.Optional[typing.Union[bool, dict]] = None,
+        capture_states_at_turn_start: bool = False,
     ) -> str:
         """Add a sub-agent that can be triggered by this agent.
 
@@ -865,6 +978,17 @@ class Agentlys(AgentlysBase):
                 - None/False: disabled (default, backward compatible).
                 - True: enabled with default Anthropic mapping (opus/sonnet/haiku).
                 - dict: custom mapping with keys "high", "medium", "low" mapped to model names.
+            capture_states_at_turn_start: Capture the sub-agent's tool states
+                when this agent's async turn starts (a new user message to
+                run_conversation_stream_async / ask_async), not at each
+                invocation: its tools' ``__llm__()`` then run before the turn's
+                tool batches, where they could share host state (a database
+                session) with the batch's other tools, and every invocation of
+                the turn sends the same block.  They run at every turn, invoked
+                or not; its own sub-agents registered the same way are captured
+                then too.  A pin_tools_states() pin on the sub-agent still wins.
+                If its states fail then, its invocations capture them, as
+                without the option.
 
         Returns:
             The registered function name (e.g. "sub_agent__researcher").
@@ -909,6 +1033,16 @@ class Agentlys(AgentlysBase):
             ):  # Propagate cancellation, preserve child's own event
                 run_agent.cancel_event = self.cancel_event
             run_agent.messages = []
+            run_agent._invocation_copy = True
+            # States the parent's turn captured for it at its start; a pin
+            # set on the template since still wins (the copy carries it).
+            turn_states = _turn_sub_agent_states.get() or {}
+            if id(agent) in turn_states:
+                run_agent._sub_agents_captured_by_parent = True
+                states = turn_states[id(agent)]
+                if states is not None and not agent._tools_states_pinned:
+                    run_agent._initial_tools_states = states
+                    run_agent._states_from_parent_turn = True
 
             if compute_mapping:
                 if compute_level not in compute_mapping:
@@ -974,9 +1108,23 @@ class Agentlys(AgentlysBase):
         self._sub_agents[func_name] = {
             "agent": agent,
             "compute_levels": compute_mapping,
+            "capture_states_at_turn_start": capture_states_at_turn_start,
         }
 
         return func_name
+
+    @property
+    def sub_agents(self) -> dict:
+        """The registered sub-agents, by function name (``sub_agent__<name>``).
+
+        Each value is the template agent: every invocation runs on a copy of
+        it, which starts from its tool states, so a host can pin them here
+        (pin_tools_states) before a run.  A new dict at each read: register
+        and remove sub-agents with add_sub_agent / remove_sub_agent.
+        """
+        return {
+            func_name: entry["agent"] for func_name, entry in self._sub_agents.items()
+        }
 
     def remove_sub_agent(self, name: str):
         """Remove a sub-agent by name.
@@ -1624,6 +1772,7 @@ class Agentlys(AgentlysBase):
             yield message
         else:
             message = question
+        await self._capture_sub_agent_states_for_resumed_run(message)
 
         parsing_retries = 0
         for _ in range(self.max_interactions):
@@ -1727,6 +1876,7 @@ class Agentlys(AgentlysBase):
             yield {"type": "user", "message": message}
         else:
             message = question
+        await self._capture_sub_agent_states_for_resumed_run(message)
 
         parsing_retries = 0
         for _ in range(self.max_interactions):
