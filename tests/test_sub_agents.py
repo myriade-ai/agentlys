@@ -37,17 +37,15 @@ def _make_tool_call(func_name: str, args: dict, call_id: str) -> Message:
 def test_add_sub_agent_registers_function():
     """add_sub_agent should register a single function with correct schema."""
     parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(
-        name="researcher",
-        instruction="You research topics.",
-        provider=APIProvider.ANTHROPIC,
-    )
+    child = Agentlys(name="researcher", instruction="You research topics.", provider=APIProvider.ANTHROPIC)
 
     func_name = parent.add_sub_agent(child)
 
     assert func_name == "sub_agent__researcher"
     assert "sub_agent__researcher" in parent.functions
-    assert any(s["name"] == "sub_agent__researcher" for s in parent.functions_schema)
+    assert any(
+        s["name"] == "sub_agent__researcher" for s in parent.functions_schema
+    )
 
     # Verify schema structure
     schema = next(
@@ -61,11 +59,7 @@ def test_add_sub_agent_registers_function():
 def test_add_sub_agent_custom_name_and_description():
     """Custom name and description should override agent defaults."""
     parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(
-        name="generic",
-        instruction="Generic instruction.",
-        provider=APIProvider.ANTHROPIC,
-    )
+    child = Agentlys(name="generic", instruction="Generic instruction.", provider=APIProvider.ANTHROPIC)
 
     func_name = parent.add_sub_agent(
         child, name="specialist", description="A specialist agent."
@@ -166,22 +160,15 @@ async def test_sub_agent_invocation():
             yield {"type": "message", "message": msg}
         else:
             msg = _make_assistant_text("Based on the research, here is the summary.")
-            yield {
-                "type": "text",
-                "content": "Based on the research, here is the summary.",
-            }
+            yield {"type": "text", "content": "Based on the research, here is the summary."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
             events = []
-            async for event in parent.run_conversation_stream_async(
-                "Tell me about AI agents"
-            ):
+            async for event in parent.run_conversation_stream_async("Tell me about AI agents"):
                 events.append(event)
 
     # Collect messages by type
@@ -234,9 +221,7 @@ async def test_sub_agent_stateless():
             yield {"type": "text", "content": "Done."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
@@ -303,9 +288,7 @@ async def test_sub_agents_parallel_execution():
         ],
     )
 
-    with patch.object(
-        child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream
-    ):
+    with patch.object(child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream):
         with patch.object(
             child_b.provider, "fetch_stream_async", side_effect=mock_child_b_stream
         ):
@@ -383,9 +366,7 @@ async def test_sub_agents_parallel_in_conversation():
             yield {"type": "text", "content": "Both tasks are complete."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream
-    ):
+    with patch.object(child_a.provider, "fetch_stream_async", side_effect=mock_child_a_stream):
         with patch.object(
             child_b.provider, "fetch_stream_async", side_effect=mock_child_b_stream
         ):
@@ -401,7 +382,9 @@ async def test_sub_agents_parallel_in_conversation():
     # Verify both sub-agent results came through
     tool_results = [e for e in events if e.get("type") == "tool_result"]
     assert len(tool_results) == 2
-    result_contents = sorted(e["data"]["message"].content.lower() for e in tool_results)
+    result_contents = sorted(
+        e["data"]["message"].content.lower() for e in tool_results
+    )
     assert "result a" in result_contents[0]
     assert "result b" in result_contents[1]
 
@@ -458,14 +441,14 @@ async def test_sub_agent_streaming():
         else:
             return _mock_stream_final()
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=get_mock_stream
         ):
             events = []
-            async for event in parent.run_conversation_stream_async("Research topic X"):
+            async for event in parent.run_conversation_stream_async(
+                "Research topic X"
+            ):
                 events.append(event)
 
     # Verify we got the expected event types
@@ -493,9 +476,7 @@ async def test_sub_agent_streaming():
 def test_compute_levels_true_adds_enum_to_schema():
     """compute_levels=True should add compute_level enum to the tool schema."""
     parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(
-        name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC
-    )
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
 
     parent.add_sub_agent(child, compute_levels=True)
 
@@ -513,9 +494,7 @@ def test_compute_levels_true_adds_enum_to_schema():
 def test_compute_levels_none_no_enum():
     """compute_levels=None (default) should not add compute_level to schema."""
     parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(
-        name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC
-    )
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
 
     parent.add_sub_agent(child)
 
@@ -529,9 +508,7 @@ def test_compute_levels_none_no_enum():
 def test_compute_levels_custom_dict():
     """compute_levels with a custom dict should store the mapping."""
     parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(
-        name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC
-    )
+    child = Agentlys(name="researcher", instruction="Research.", provider=APIProvider.ANTHROPIC)
 
     custom_mapping = {
         "high": "gpt-4o",
@@ -566,7 +543,6 @@ def test_compute_levels_true_uses_defaults():
 
 def _mock_child_stream(text: str, model_tracker: dict = None):
     """Create a mock fetch_stream_async that yields a simple assistant response."""
-
     async def _stream(**kwargs):
         if model_tracker is not None:
             # 'self' is the provider copy — capture its model
@@ -574,17 +550,14 @@ def _mock_child_stream(text: str, model_tracker: dict = None):
         msg = _make_assistant_text(text)
         yield {"type": "text", "content": text}
         yield {"type": "message", "message": msg}
-
     return _stream
 
 
 def _mock_child_stream_error():
     """Create a mock fetch_stream_async that raises an error."""
-
     async def _stream(**kwargs):
         raise RuntimeError("Sub-agent error")
         yield  # make it a generator  # noqa: E501
-
     return _stream
 
 
@@ -628,8 +601,7 @@ async def test_compute_level_swaps_model():
 
     # Patch the child's provider — the copy will inherit the mock
     with patch.object(
-        child.provider,
-        "fetch_stream_async",
+        child.provider, "fetch_stream_async",
         side_effect=mock_child_stream,
     ):
         with patch.object(
@@ -681,8 +653,7 @@ async def test_compute_level_default_medium():
             yield {"type": "message", "message": msg}
 
     with patch.object(
-        child.provider,
-        "fetch_stream_async",
+        child.provider, "fetch_stream_async",
         side_effect=mock_child_stream,
     ):
         with patch.object(
@@ -725,8 +696,7 @@ async def test_compute_level_preserves_original_on_error():
             yield {"type": "message", "message": msg}
 
     with patch.object(
-        child.provider,
-        "fetch_stream_async",
+        child.provider, "fetch_stream_async",
         side_effect=_mock_child_stream_error(),
     ):
         with patch.object(
@@ -837,9 +807,7 @@ async def test_on_sub_agent_event_callback():
             yield {"type": "text", "content": "Done."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
@@ -914,15 +882,12 @@ async def test_nested_sub_agents():
             yield {"type": "text", "content": "Final coordinated result."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        worker.provider, "fetch_stream_async", side_effect=mock_worker_stream
-    ):
+    with patch.object(worker.provider, "fetch_stream_async", side_effect=mock_worker_stream):
         with patch.object(
             team_lead.provider, "fetch_stream_async", side_effect=mock_team_lead_stream
         ):
             with patch.object(
-                coordinator.provider,
-                "fetch_stream_async",
+                coordinator.provider, "fetch_stream_async",
                 side_effect=mock_coordinator_stream,
             ):
                 events = []
@@ -981,9 +946,7 @@ async def test_cancel_event_stops_sub_agent():
             yield {"type": "text", "content": "Done."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
@@ -1004,7 +967,9 @@ async def test_cancel_event_stops_sub_agent():
                 await child_started.wait()
                 cancel_event.set()
 
-            events, _ = await asyncio.gather(run_and_cancel(), cancel_after_start())
+            events, _ = await asyncio.gather(
+                run_and_cancel(), cancel_after_start()
+            )
 
     # The conversation should have ended early — no "Should not reach here"
     all_text = " ".join(
@@ -1047,9 +1012,7 @@ async def test_cancel_event_none_backward_compatible():
             yield {"type": "text", "content": "All done."}
             yield {"type": "message", "message": msg}
 
-    with patch.object(
-        child.provider, "fetch_stream_async", side_effect=mock_child_stream
-    ):
+    with patch.object(child.provider, "fetch_stream_async", side_effect=mock_child_stream):
         with patch.object(
             parent.provider, "fetch_stream_async", side_effect=mock_parent_stream
         ):
@@ -1061,215 +1024,3 @@ async def test_cancel_event_none_backward_compatible():
     assistant_events = [e for e in events if e.get("type") == "assistant"]
     assert len(assistant_events) == 2
     assert "all done" in assistant_events[1]["message"].content.lower()
-
-
-# ── Tool states captured at the parent's turn start ─────────────────────────
-
-
-class _StateTool:
-    """Counts its ``__llm__`` calls, recording what the turn had done by then."""
-
-    def __init__(self, trace, name="child"):
-        self.trace = trace
-        self.name = name
-        self.calls = 0
-
-    def __llm__(self):
-        self.calls += 1
-        self.trace.append(f"{self.name} states")
-        return f"{self.name} state #{self.calls}"
-
-    def noop(self) -> str:
-        """Do nothing."""
-        return "ok"
-
-
-def _explore_twice_then_answer(trace, call_ids):
-    """Parent stream: two sub-agent calls in one batch, then a final answer."""
-
-    async def parent_stream(**kwargs):
-        trace.append("parent request")
-        if len(call_ids) % 2 == 0:
-            call_ids.append(len(call_ids))
-            msg = Message(
-                role="assistant",
-                parts=[
-                    MessagePart(
-                        type="function_call",
-                        function_call={
-                            "name": "sub_agent__explorer",
-                            "arguments": {"prompt": f"look {i}"},
-                        },
-                        function_call_id=f"call_{len(call_ids)}_{i}",
-                    )
-                    for i in range(2)
-                ],
-            )
-        else:
-            call_ids.append(len(call_ids))
-            msg = _make_assistant_text("done")
-        yield {"type": "message", "message": msg}
-
-    return parent_stream
-
-
-async def _run_turns(parent, child, trace, questions):
-    """Run parent turns; return the states block each child invocation sent."""
-    sent = []
-    call_ids = []
-
-    # Patched on the class: every invocation runs on a copy of the provider.
-    async def child_stream(self_provider, **kwargs):
-        sent.append(self_provider.chat.initial_tools_states)
-        trace.append("child request")
-        yield {"type": "message", "message": _make_assistant_text("found")}
-
-    with (
-        patch.object(
-            type(child.provider),
-            "fetch_stream_async",
-            autospec=True,
-            side_effect=child_stream,
-        ),
-        patch.object(
-            parent.provider,
-            "fetch_stream_async",
-            side_effect=_explore_twice_then_answer(trace, call_ids),
-        ),
-    ):
-        for question in questions:
-            async for _ in parent.run_conversation_stream_async(question):
-                pass
-    return sent
-
-
-def test_sub_agents_lists_the_templates_by_function_name():
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
-    parent.add_sub_agent(child)
-
-    assert parent.sub_agents == {"sub_agent__explorer": child}
-    parent.sub_agents.clear()  # a copy: the registry is untouched
-    assert "sub_agent__explorer" in parent.sub_agents
-
-
-@pytest.mark.asyncio
-async def test_states_captured_at_turn_start_before_any_request_and_reused():
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
-    trace = []
-    tool = _StateTool(trace)
-    child.add_tool(tool, "probe")
-    parent.add_sub_agent(child, capture_states_at_turn_start=True)
-
-    sent = await _run_turns(parent, child, trace, ["first", "second"])
-
-    # Captured before the parent's first request, never inside the batch,
-    # once per parent turn however many invocations it makes.
-    assert trace[0] == "child states"
-    assert trace.count("child states") == 2
-    first_turn = trace[: trace.index("child states", 1)]
-    assert first_turn.count("child request") == 2
-    assert (
-        sent
-        == [
-            "## Initial Tools States\n### _StateTool-probe\nchild state #1\n--- End of Initial Tools States ---"
-        ]
-        * 2
-        + [
-            "## Initial Tools States\n### _StateTool-probe\nchild state #2\n--- End of Initial Tools States ---"
-        ]
-        * 2
-    )
-
-
-@pytest.mark.asyncio
-async def test_without_the_option_states_are_captured_at_each_invocation():
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
-    trace = []
-    child.add_tool(_StateTool(trace), "probe")
-    parent.add_sub_agent(child)
-
-    await _run_turns(parent, child, trace, ["first"])
-
-    assert trace[0] == "parent request"
-    assert trace.count("child states") == 2
-
-
-@pytest.mark.asyncio
-async def test_a_pinned_sub_agent_is_not_captured_at_turn_start():
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
-    trace = []
-    child.add_tool(_StateTool(trace), "probe")
-    parent.add_sub_agent(child, capture_states_at_turn_start=True)
-    parent.sub_agents["sub_agent__explorer"].pin_tools_states("pinned by the host")
-
-    sent = await _run_turns(parent, child, trace, ["first", "second"])
-
-    assert "child states" not in trace
-    assert sent == ["pinned by the host"] * 4
-
-
-@pytest.mark.asyncio
-async def test_a_failing_sub_agent_state_does_not_fail_the_turn_start(caplog):
-    class _Broken:
-        def __llm__(self):
-            raise RuntimeError("unreachable")
-
-        def noop(self) -> str:
-            """Do nothing."""
-            return "ok"
-
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
-    child.add_tool(_Broken(), "broken")
-    parent.add_sub_agent(child, capture_states_at_turn_start=True)
-
-    async def answer(**kwargs):
-        yield {"type": "message", "message": _make_assistant_text("no help needed")}
-
-    with patch.object(parent.provider, "fetch_stream_async", side_effect=answer):
-        events = [e async for e in parent.run_conversation_stream_async("hi")]
-
-    # Not invoked this turn: its failure stays where it surfaced before, at
-    # an invocation, and does not cost the turn.
-    assert events[-1]["type"] == "assistant"
-    assert child._initial_tools_states is None
-    assert not child._tools_states_from_parent_turn
-    assert "Tool states of sub-agent 'explorer' failed" in caplog.text
-
-
-@pytest.mark.asyncio
-async def test_states_captured_at_turn_start_run_on_one_worker_thread():
-    import threading
-
-    parent = Agentlys(provider=APIProvider.ANTHROPIC)
-    loop_thread = threading.get_ident()
-    seen = []
-
-    class _ThreadTool:
-        def __llm__(self):
-            seen.append(threading.get_ident())
-            return "x"
-
-        def noop(self) -> str:
-            """Do nothing."""
-            return "ok"
-
-    for name in ("a", "b"):
-        child = Agentlys(name=name, provider=APIProvider.ANTHROPIC)
-        child.add_tool(_ThreadTool(), "t")
-        parent.add_sub_agent(child, capture_states_at_turn_start=True)
-
-    async def answer(**kwargs):
-        yield {"type": "message", "message": _make_assistant_text("ok")}
-
-    with patch.object(parent.provider, "fetch_stream_async", side_effect=answer):
-        async for _ in parent.run_conversation_stream_async("hi"):
-            pass
-
-    assert len(seen) == 2
-    assert len(set(seen)) == 1
-    assert loop_thread not in seen

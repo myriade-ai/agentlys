@@ -176,6 +176,33 @@ async def test_tool_states_are_captured_off_the_loop_in_a_sub_agent(loop_probe):
     )
 
 
+
+@pytest.mark.asyncio
+async def test_sub_agent_states_captured_at_turn_start_are_captured_off_the_loop(
+    loop_probe,
+):
+    # capture_states_at_turn_start: the parent's turn captures the sub-agent's
+    # states before its first request, on the same kind of worker thread.
+    parent = Agentlys(provider=APIProvider.ANTHROPIC)
+    child = Agentlys(name="explorer", provider=APIProvider.ANTHROPIC)
+    tool = _SlowStateTool()
+    child.add_tool(tool, "orders")
+    parent.add_sub_agent(child, capture_states_at_turn_start=True)
+
+    async def parent_stream(**kwargs):
+        yield {"type": "message", "message": Message(role="assistant", content="ok")}
+
+    with patch.object(parent.provider, "fetch_stream_async", side_effect=parent_stream):
+        async with loop_probe as probe:
+            async for _ in parent.run_conversation_stream_async("hi"):
+                pass
+
+    assert len(tool.captured_on) == 1, "the states were not computed exactly once"
+    _assert_ran_off_the_loop(tool.captured_on, "__llm__()")
+    probe.assert_responsive(
+        "the turn-start capture of a sub-agent's tool states", STALL_LIMIT_MS
+    )
+
 @pytest.mark.asyncio
 async def test_a_capture_waiting_for_another_does_not_wait_on_the_loop(loop_probe):
     # Captures take turns — here, two invocations of one sub-agent, which
