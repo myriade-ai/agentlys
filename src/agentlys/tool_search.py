@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -12,6 +13,16 @@ if TYPE_CHECKING:
     from agentlys.base import AgentlysBase
 
 logger = logging.getLogger(__name__)
+
+# Feature flag for Anthropic's server-side tool search. When enabled (and the
+# provider supports it), enable_tool_search() skips registering the local
+# tool_search function and the Anthropic provider injects the server tool
+# instead — saving the extra LLM round-trip our client-side search costs.
+SERVER_TOOL_SEARCH_ENV = "AGENTLYS_SERVER_TOOL_SEARCH"
+
+
+def server_tool_search_env_enabled() -> bool:
+    return os.getenv(SERVER_TOOL_SEARCH_ENV, "").lower() in ("1", "true", "yes")
 
 
 @dataclass
@@ -24,11 +35,15 @@ class ToolSearchConfig:
             ``async def search(query: str, catalog: list[dict]) -> list[str]``.
             If *None*, uses a default LLM-based search with a cheap model.
         search_model: Model to use for the default LLM-based search.
+        server_side: Use Anthropic's server-side tool search tool instead of a
+            locally registered search function. Set by ``enable_tool_search``
+            only when the provider supports it.
     """
 
     always_loaded: list[str] = field(default_factory=list)
     search_fn: Optional[Callable] = None
     search_model: str = "claude-haiku-4-5-20251001"
+    server_side: bool = False
 
 
 _STOP_WORDS = frozenset({
