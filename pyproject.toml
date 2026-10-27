@@ -48,6 +48,11 @@ changelog_file = "CHANGELOG.md"
 dist_path = "dist/"
 commit_message = "chore(release): bump version to {version}"
 
+# Push through the checkout's deploy key (allowed past the master ruleset);
+# GH_TOKEN still creates the GitHub release.
+[tool.semantic_release.remote]
+ignore_token_for_push = true
+
 
 [tool.uv.sources]
 agentlys = { workspace = true }
