@@ -12,6 +12,8 @@ jobs:
 
     runs-on: ubuntu-latest
     concurrency: release
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     permissions:
       id-token: write
       contents: write
@@ -31,7 +33,23 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "./uv.lock"
       - name: Run Python Semantic Release
+        id: release
         working-directory: .
         env:
-          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
-        run: uvx --from python-semantic-release semantic-release version
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          before=$(git rev-parse HEAD)
+          uvx --from python-semantic-release semantic-release version
+          if [ "$(git rev-parse HEAD)" != "$before" ]; then
+            echo "tag=$(git tag --points-at HEAD | head -n 1)" >> "$GITHUB_OUTPUT"
+          fi
+
+  # A release made with GITHUB_TOKEN does not fire publish.yml's `release`
+  # trigger, so the new tag is published from here.
+  publish:
+    needs: release
+    if: ${{ needs.release.outputs.tag != '' }}
+    uses: ./.github/workflows/publish.yml
+    with:
+      ref: ${{ needs.release.outputs.tag }}
+    secrets: inherit
