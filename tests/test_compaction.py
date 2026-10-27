@@ -5,9 +5,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from agentlys import Agentlys, APIProvider, Message, MessagePart
 from agentlys.compaction import (
     DEFAULT_COMPACTION_PROMPT,
+    REPLAY_SUFFIX,
     CompactionHandler,
     TokenThresholdCompaction,
 )
+
+
+def _anthropic_reply(*content):
+    """An Anthropic API response; str items become text blocks."""
+    from anthropic.types import Message as AnthropicMessage
+
+    blocks = [{"type": "text", "text": c} if isinstance(c, str) else c for c in content]
+    return AnthropicMessage.model_validate(
+        {
+            "id": "msg_01",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-opus-4-6",
+            "content": blocks,
+            "stop_reason": "end_turn",
+            "stop_sequence": None,
+            "usage": {"input_tokens": 100, "output_tokens": 10},
+        }
+    )
 
 
 class TestCompactionMessagePart(unittest.TestCase):
@@ -75,6 +95,38 @@ class TestCompactionRendering(unittest.TestCase):
         md = msg.to_markdown()
         self.assertIn("Earlier discussion summary", md)
         self.assertIn("New question here", md)
+
+    def test_to_markdown_can_omit_image_data(self):
+        from PIL import Image as PILImage
+
+        png = PILImage.new("RGB", (8, 8))
+        png.format = "PNG"
+        msg = Message(
+            role="function",
+            parts=[
+                MessagePart(
+                    type="function_result_image",
+                    content="ok",
+                    function_call_id="c1",
+                    image=png,
+                ),
+                MessagePart(type="image", image=png),
+            ],
+        )
+        inline = msg.to_markdown()
+        self.assertIn("data:image/png;base64,", inline)
+        self.assertIn("> Result: ok\n", inline)
+
+        # Omitting must not even attempt the encoding: that is the cost
+        # being avoided, not just the bytes in the output.
+        with patch.object(
+            type(msg.parts[0].image), "to_base64", side_effect=AssertionError
+        ):
+            md = msg.to_markdown(inline_images=False)
+        self.assertEqual(
+            md,
+            "## function\n> Result: ok\n> Result image: [image omitted]\n> Image: [image omitted]\n",
+        )
 
     def test_to_terminal_includes_compaction(self):
         msg = Message(
@@ -341,11 +393,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Second response"),
         ]
 
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "<summary>Conversation summary here</summary>"
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block]
+        mock_response = _anthropic_reply("<summary>Conversation summary here</summary>")
 
         # compact() reuses provider.client, so mock that instead of AsyncAnthropic
         agent.provider.client = MagicMock()
@@ -363,6 +411,66 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
         self.assertEqual(
             agent.messages[0].parts[0].content, "Conversation summary here"
         )
+
+    def test_compact_does_not_inline_images_in_summary_prompt(self):
+        """Images are described, never base64-inlined, in the summary request.
+
+        A chart-heavy conversation rendered with inline data URLs blew past
+        the summary model's context (2.1M tokens for a 130k-token history),
+        so compaction — the thing meant to free context — failed the turn.
+        (Summary with another model: the conversation's own model replays
+        the request, images included, from the prompt cache.)
+        """
+        from PIL import Image as PILImage
+
+        compaction = TokenThresholdCompaction(summary_model="claude-haiku-4-5")
+        agent = Agentlys(
+            instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
+        )
+        png = PILImage.new("RGB", (64, 64), color="white")
+        png.format = "PNG"
+        agent.messages = [
+            Message(role="user", content="Plot it"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "plot", "arguments": {}},
+                        function_call_id="c1",
+                    )
+                ],
+            ),
+            Message(
+                role="function",
+                parts=[
+                    MessagePart(
+                        type="function_result_image",
+                        content='{"chart_id": "abc"}',
+                        function_call_id="c1",
+                        image=png,
+                    )
+                ],
+            ),
+            Message(role="user", parts=[MessagePart(type="image", image=png)]),
+        ]
+
+        mock_response = _anthropic_reply("summary")
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(compaction.compact(agent))
+        finally:
+            loop.close()
+
+        prompt = agent.provider.client.messages.create.call_args.kwargs["messages"][0][
+            "content"
+        ]
+        self.assertNotIn("base64", prompt)
+        self.assertIn('{"chart_id": "abc"}', prompt)
+        self.assertIn("[image omitted]", prompt)
 
     def test_compact_preserves_document_attachments(self):
         """Documents survive compaction: the text history is summarized but
@@ -390,11 +498,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             ),
         ]
 
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "<summary>Discussed report.pdf</summary>"
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block]
+        mock_response = _anthropic_reply("<summary>Discussed report.pdf</summary>")
 
         agent.provider.client = MagicMock()
         agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
@@ -443,11 +547,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Response"),
         ]
 
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "<summary>Summary</summary>"
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block]
+        mock_response = _anthropic_reply("<summary>Summary</summary>")
 
         agent.provider.client = MagicMock()
         agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
@@ -474,11 +574,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Response 2"),
         ]
 
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "Plain summary without tags"
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block]
+        mock_response = _anthropic_reply("Plain summary without tags")
 
         agent.provider.client = MagicMock()
         agent.provider.client.messages.create = AsyncMock(return_value=mock_response)
@@ -495,7 +591,9 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
 
     def test_compact_uses_custom_instructions(self):
         custom_prompt = "Preserve all code snippets verbatim."
-        compaction = TokenThresholdCompaction(instructions=custom_prompt)
+        compaction = TokenThresholdCompaction(
+            instructions=custom_prompt, summary_model="claude-haiku-4-5"
+        )
         agent = Agentlys(
             instruction="Test", provider=APIProvider.ANTHROPIC, compaction=compaction
         )
@@ -506,11 +604,7 @@ class TestTokenThresholdCompactionCompact(unittest.TestCase):
             Message(role="assistant", content="Response 2"),
         ]
 
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "<summary>Code preserved</summary>"
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block]
+        mock_response = _anthropic_reply("<summary>Code preserved</summary>")
 
         mock_create = AsyncMock(return_value=mock_response)
         agent.provider.client = MagicMock()
@@ -754,6 +848,174 @@ class TestCompactionMidToolExchange(unittest.TestCase):
                 loop.close()
 
         mock_compaction.compact.assert_called_once_with(agent)
+
+
+class TestSummaryWithoutText(unittest.TestCase):
+    """DEV-1304: the summarizer spent the whole ``max_tokens`` thinking.
+
+    With adaptive thinking on the summary call, a long conversation can make
+    the model think past ``max_tokens`` before writing any text. The API then
+    answers ``stop_reason="max_tokens"`` with a single thinking block — the
+    exact shape reproduced live on claude-opus-4-6 at ``max_tokens=4096``.
+    """
+
+    def _thinking_only_response(self):
+        from anthropic.types import Message as AnthropicMessage
+
+        return AnthropicMessage.model_validate(
+            {
+                "id": "msg_01",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-4-6",
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "Let me reconcile H0...",
+                        "signature": "EqQBCkgIBxABGAIiQ",
+                    }
+                ],
+                "stop_reason": "max_tokens",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 131_072, "output_tokens": 4096},
+            }
+        )
+
+    def test_turn_survives_summary_without_text(self):
+        agent = Agentlys(
+            instruction="Test",
+            provider=APIProvider.ANTHROPIC,
+            compaction=TokenThresholdCompaction(token_threshold=100),
+        )
+        earlier_summary = Message(
+            role="user", parts=[MessagePart(type="compaction", content="Earlier")]
+        )
+        history = [
+            earlier_summary,
+            Message(
+                role="assistant",
+                content="Resuming",
+                usage={"input_tokens": 1_000, "output_tokens": 10},
+            ),
+            Message(role="user", content="Question"),
+            Message(
+                role="assistant",
+                content="Answer",
+                usage={"input_tokens": 50_000, "output_tokens": 10},
+            ),
+        ]
+        agent.messages = list(history)
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = AsyncMock(
+            return_value=self._thinking_only_response()
+        )
+        reply = Message(role="assistant", content="Next answer")
+
+        async def fake_stream(**kwargs):
+            yield {"type": "message", "message": reply}
+
+        async def run():
+            with patch.object(agent.provider, "fetch_stream_async", fake_stream):
+                return [e async for e in agent.ask_stream_async("Next question")]
+
+        loop = asyncio.new_event_loop()
+        try:
+            events = loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+        # The turn completes and the history is intact, with the new exchange.
+        self.assertEqual(agent.messages[: len(history)], history)
+        self.assertEqual(agent.messages[-1], reply)
+        # The earlier summary must not be re-emitted as a fresh compaction:
+        # callers persist it, and a copy at the end of the stored conversation
+        # would make the next load drop everything before it.
+        self.assertNotIn("compaction_message", [e["type"] for e in events])
+
+
+class TestCompactionFromPromptCache(unittest.TestCase):
+    """With the conversation's own model, the summary request is the
+    conversation's next request plus the prompt, so it reads the cache."""
+
+    PROMPT = "Summarize."
+
+    def _agent(self):
+        agent = Agentlys(
+            instruction="Test",
+            provider=APIProvider.ANTHROPIC,
+            thinking={"type": "adaptive"},
+            effort="high",
+            compaction=TokenThresholdCompaction(instructions=self.PROMPT),
+        )
+
+        def lookup(key: str) -> str:
+            """Look a key up.
+
+            Args:
+                key: the key
+            """
+            return key
+
+        agent.add_function(lookup)
+        agent.messages = [
+            Message(role="user", content="Find a"),
+            Message(
+                role="assistant",
+                parts=[
+                    MessagePart(
+                        type="function_call",
+                        function_call={"name": "lookup", "arguments": {"key": "a"}},
+                        function_call_id="t1",
+                    )
+                ],
+            ),
+            Message(role="function", content="a", function_call_id="t1", name="lookup"),
+            Message(role="assistant", content="Found a"),
+        ]
+        return agent
+
+    def _create(self, agent, reply):
+        calls = []
+
+        async def create(**kwargs):
+            calls.append((kwargs, list(agent.messages)))
+            return reply
+
+        agent.provider.client = MagicMock()
+        agent.provider.client.messages.create = create
+        return calls
+
+    def test_summary_request_is_the_next_request_plus_the_prompt(self):
+        agent = self._agent()
+        history = list(agent.messages)
+        calls = self._create(agent, _anthropic_reply("<summary>S</summary>"))
+
+        asyncio.run(agent.compaction.compact(agent))
+        summary_request, messages_during_call = calls[0]
+        # The prompt never enters the history, and the summary replaces it.
+        self.assertEqual(messages_during_call, history)
+        self.assertEqual(len(agent.messages), 1)
+        self.assertEqual(agent.messages[0].parts[0].content, "S")
+
+        agent.messages = list(history)
+        agent.compaction = None
+        asyncio.run(agent.ask_async(f"{self.PROMPT}\n\n{REPLAY_SUFFIX}"))
+        next_request, _ = calls[1]
+
+        # Only the output budget differs; it is not part of the cache key.
+        self.assertEqual(summary_request.pop("max_tokens"), 16_000)
+        next_request.pop("max_tokens")
+        self.assertEqual(summary_request, next_request)
+
+    def test_tool_call_instead_of_summary_keeps_the_conversation(self):
+        agent = self._agent()
+        history = list(agent.messages)
+        tool_use = {"type": "tool_use", "id": "t2", "name": "lookup", "input": {}}
+        self._create(agent, _anthropic_reply("Let me check.", tool_use))
+
+        asyncio.run(agent.compaction.compact(agent))
+
+        self.assertEqual(agent.messages, history)
 
 
 class TestCustomCompactionHandler(unittest.TestCase):

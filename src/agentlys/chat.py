@@ -1,12 +1,14 @@
 """Agentlys chat loop: agent state, tool registration and conversation runs."""
 
 import asyncio
+import contextvars
 import copy
 import inspect
 import io
 import json
 import logging
 import os
+import threading
 import traceback
 import typing
 import uuid
@@ -17,17 +19,18 @@ from typing import TYPE_CHECKING, Type
 from PIL import Image as PILImage
 
 from agentlys.base import AgentlysBase
-from agentlys.model import Message, MessagePart
+from agentlys.model import Image, Message, MessagePart
 from agentlys.providers.base_provider import (
     APIProvider,  # noqa: F401  (re-exported via agentlys.__init__)
     BaseProvider,
 )
-from agentlys.providers.utils import get_provider_and_model
+from agentlys.providers.utils import FunctionCallParsingError, get_provider_and_model
 from agentlys.utils import (
     csv_dumps,
     get_event_loop_or_create,
     inspect_schema,
     parse_chat_template,
+    truncate_with_marker,
 )
 
 if TYPE_CHECKING:
@@ -99,15 +102,109 @@ def _accepts_from_response(func) -> bool:
     return result
 
 
-def _truncate_with_warning(text: str, limit: int = OUTPUT_SIZE_LIMIT) -> str:
-    """Truncate text to limit and add warning if truncated."""
-    if len(text) > limit:
-        logging.warning(f"Output truncated from {len(text)} to {limit} characters")
-        return (
-            text[:limit]
-            + f"\n[Warning: Output truncated from {len(text)} to {limit} characters]"
-        )
-    return text
+# One capture of tool states at a time per event loop.  Agents that know
+# nothing of each other are often built on the same host state (two sub-agents
+# on one database session), and the captures of one loop could not overlap
+# while they ran on it: hosts rely on that.  Per loop, not per process: a
+# __llm__() may wait for a turn that runs on another loop (an agent on a
+# helper thread), whose capture must not wait for it in return.  The lock is
+# taken on the worker thread, so a capture that waits never holds the loop.
+# Re-entrant, for the states computed inline on the loop thread (see
+# initial_tools_states): a __llm__() called there may read another agent's.
+_tools_states_locks = weakref.WeakKeyDictionary()
+
+# The sub-agent states a turn captured at its start (capture_states_at_turn_start),
+# for the invocations of that turn: ``{id(template): states}``, None for a
+# template the turn visited without capturing it (pinned, no tools, failed).
+# A context variable, not an attribute of the template: a template can be
+# registered on several parents serving different users at once, and a turn
+# must neither read another turn's states nor leave its own behind.
+_turn_sub_agent_states: contextvars.ContextVar = contextvars.ContextVar(
+    "agentlys_turn_sub_agent_states", default=None
+)
+
+
+def _tools_states_lock():
+    """The lock shared by the captures started from the running event loop."""
+    loop = asyncio.get_running_loop()
+    lock = _tools_states_locks.get(loop)
+    if lock is None:
+        lock = _tools_states_locks.setdefault(loop, threading.RLock())
+    return lock
+
+
+async def _run_in_thread(func, *args):
+    """Run blocking host code on a worker thread and wait for it to finish.
+
+    A thread cannot be interrupted.  If the task awaiting it were simply
+    cancelled, the code would keep running behind its back — still reading
+    state (a database session, say) that the host closes once it has seen the
+    cancellation.  So a cancellation that arrives while the code is running is
+    held back until it has finished, then raised; the event loop stays free
+    in the meantime.  Code still waiting for a thread is never started.
+    """
+    # Taken by whichever comes first: the thread starting, or the cancellation.
+    claim = threading.Lock()
+
+    def run():
+        if claim.acquire(blocking=False):
+            return func(*args)
+
+    # What asyncio.to_thread() does, without a task around it: a loop that
+    # closes cancels every task, and a cancelled task reads as done while its
+    # thread is still running.  Nothing cancels this future.
+    worker = asyncio.get_running_loop().run_in_executor(
+        None, contextvars.copy_context().run, run
+    )
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        if not claim.acquire(blocking=False):
+            while not worker.done():
+                try:
+                    await asyncio.wait([worker])
+                except asyncio.CancelledError:
+                    pass
+            if not worker.cancelled():
+                # Retrieved so it is not logged as lost: the cancellation wins.
+                worker.exception()
+        raise
+
+
+# One image is encoded at a time.  Two agents can hold the same image (one
+# history handed to several of them), each encodes it on its own worker
+# thread, and PIL does not support two threads working on one image.
+_image_encoding_lock = threading.Lock()
+
+
+class _SerializedDict(typing.NamedTuple):
+    """The JSON text of a dict tool result, as far as it was built."""
+
+    head: str  # its beginning: all of it, or just past the output limit
+    length: int  # the size of all of it
+
+
+async def _serialize_dict(content: dict) -> _SerializedDict:
+    """``json.dumps(content, default=str)``, built no further than is shown.
+
+    The model reads at most OUTPUT_SIZE_LIMIT characters of a result.  Dumping
+    a large one whole on the event loop freezes the loop to throw nearly all
+    of it away, and json holds the GIL, so a thread would not help.  The text
+    is produced piece by piece instead: the loop stops at the limit, and when
+    there is more, a worker thread goes through the rest only to measure it —
+    the truncation marker still says how much was dropped.
+    """
+    # default=str: tool results routinely carry values json doesn't
+    # know (Decimal, datetime, UUID, ...); stringify instead of crashing
+    pieces = json.JSONEncoder(default=str).iterencode(content)
+    head, length = [], 0
+    for piece in pieces:
+        head.append(piece)
+        length += len(piece)
+        if length > OUTPUT_SIZE_LIMIT:
+            length += await _run_in_thread(lambda: sum(map(len, pieces)))
+            break
+    return _SerializedDict("".join(head), length)
 
 
 class StopLoopException(Exception):
@@ -119,6 +216,7 @@ def simple_response_default_callback(response: Message) -> Message:
     This function is called when the response is a simple response (no function call).
     By default, the conversation will stop after a simple response.
     You can override this function to change this behavior.
+    It is called on the event loop: it must not block.
     """
     raise StopLoopException("Stopping the conversation after a simple response")
 
@@ -221,6 +319,16 @@ class Agentlys(AgentlysBase):
         self.cancel_event = cancel_event
         self._initial_tools_states = None
         self._tools_states_pinned = False
+        # The message whose turn already has its snapshot (see
+        # _ensure_tools_states), so its capture does not take a second one.
+        self._tools_states_taken_for = None
+        # Set on the copy an invocation runs on, when the parent's turn
+        # captured at its start (capture_states_at_turn_start): its states,
+        # kept instead of captured again, and its own sub-agents' (the parent
+        # walked them), not captured again either.
+        self._states_from_parent_turn = False
+        self._sub_agents_captured_by_parent = False
+        self._invocation_copy = False
         self.functions_schema = []
         self.functions = {}
         self.tools = {}
@@ -288,6 +396,8 @@ class Agentlys(AgentlysBase):
             return False
         if not await self.compaction.should_compact(self):
             return False
+        await self._ensure_tools_states(next_message)
+        await self._encode_images_off_loop()
         await self.compaction.compact(self)
         return True
 
@@ -313,6 +423,7 @@ class Agentlys(AgentlysBase):
         self.on_sub_agent_event = None
         self._initial_tools_states = None
         self._tools_states_pinned = False
+        self._tools_states_taken_for = None
         self._tool_search_config = None
         self._tool_search_function_name = None
 
@@ -370,6 +481,189 @@ class Agentlys(AgentlysBase):
         if self._initial_tools_states is None:
             self._initial_tools_states = self.initial_tools_states
 
+    async def _capture_tools_states_async(
+        self, message: typing.Optional[Message] = None
+    ):
+        """_capture_tools_states() for the async loop: same rule, off the loop.
+
+        ``__llm__()`` is host code and routinely does I/O (a row count is a
+        database round trip).  Called inline it would freeze the event loop,
+        and every other request served by it, until the tools have answered.
+        Two additions of the async loop: a new turn also captures the
+        sub-agents registered with capture_states_at_turn_start, and an
+        invocation keeps the states its parent's turn captured for it.
+        """
+        taken_ahead = message is not None and message is self._tools_states_taken_for
+        self._tools_states_taken_for = None
+        new_turn = message is not None and getattr(message, "role", None) == "user"
+        if (
+            new_turn
+            and not self._tools_states_pinned
+            and not taken_ahead
+            and not self._states_from_parent_turn
+        ):
+            self._initial_tools_states = None
+        if self._initial_tools_states is None:
+            self._initial_tools_states = await self._compute_tools_states_off_loop()
+        # An invocation starts a "turn" of the sub-agent: when its parent's
+        # turn walked it, its own sub-agents were captured then.
+        if new_turn and not self._sub_agents_captured_by_parent:
+            await self._capture_sub_agent_states_off_loop()
+
+    def _sub_agents_captured_at_turn_start(self, seen=None) -> list:
+        """The sub-agent templates this agent's turn captures at its start:
+        those registered with capture_states_at_turn_start, theirs in turn,
+        each once (an agent may delegate to itself, or two to each other)."""
+        seen = set() if seen is None else seen
+        templates = []
+        for entry in self._sub_agents.values():
+            agent = entry["agent"]
+            if not entry.get("capture_states_at_turn_start") or id(agent) in seen:
+                continue
+            seen.add(id(agent))
+            templates.append(agent)
+            templates.extend(agent._sub_agents_captured_at_turn_start(seen))
+        return templates
+
+    async def _capture_sub_agent_states_off_loop(self):
+        """Capture, at the start of this agent's turn, the states of the
+        sub-agents registered with capture_states_at_turn_start.
+
+        Left to their invocations, they would be captured in the middle of a
+        tool batch, while the batch's other tools run on host state the
+        sub-agent's tools often share (one database session).  Here nothing
+        else of the turn runs yet.  Same thread and lock as any capture, one
+        sub-agent after the other.  The states go to the turn's context
+        (``_turn_sub_agent_states``), where its invocations find them; the
+        templates are left untouched.  A pinned sub-agent keeps its pin.  One
+        whose states fail is left to the capture at its invocation, where the
+        failure surfaced before: it does not fail a turn that may never call
+        it.
+        """
+        templates = self._sub_agents_captured_at_turn_start()
+        # Read on the event loop, like _compute_tools_states_off_loop.
+        jobs = [
+            (
+                agent,
+                agent._tools_with_states()
+                if agent.tools and not agent._tools_states_pinned
+                else None,
+            )
+            for agent in templates
+        ]
+        captured = {}
+        if any(tools is not None for _, tools in jobs):
+            lock = _tools_states_lock()
+
+            def render():
+                results = []
+                with lock:
+                    for agent, tools in jobs:
+                        if tools is None:
+                            continue
+                        try:
+                            results.append(
+                                (agent, agent._render_tools_states(tools), None)
+                            )
+                        except Exception as exc:  # host code: anything can fail
+                            results.append((agent, None, exc))
+                return results
+
+            for agent, states, error in await _run_in_thread(render):
+                if error is not None:
+                    logging.warning(
+                        "Tool states of sub-agent %r failed at the start of the "
+                        "turn; they will be captured at its invocation",
+                        agent.name,
+                        exc_info=error,
+                    )
+                captured[id(agent)] = states
+        # Every template the walk reached, captured or not: none of their
+        # invocations walks again.  A turn replaces what the context held, so
+        # it never reads a previous turn's states; an invocation adds to its
+        # parent turn's, which the parent's next invocations still need.
+        walked = {id(agent): captured.get(id(agent)) for agent in templates}
+        if self._invocation_copy:
+            walked = {**(_turn_sub_agent_states.get() or {}), **walked}
+        _turn_sub_agent_states.set(walked)
+
+    async def _capture_sub_agent_states_for_resumed_run(
+        self, message: typing.Optional[Message]
+    ):
+        """A run started without a new message (the host loaded the history,
+        user message included, and resumes it) is a turn too: no user message
+        reaches _capture_tools_states_async, so capture the sub-agents here,
+        before its first request."""
+        if message is None and not self._sub_agents_captured_by_parent:
+            await self._capture_sub_agent_states_off_loop()
+
+    async def _ensure_tools_states(self, next_message: typing.Optional[Message]):
+        """Give a request sent ahead of the turn's capture a snapshot to read.
+
+        Compaction runs before the capture, and its summary request carries
+        the system prompt.  An agent with a snapshot keeps it for that request
+        (the previous turn's, which is what the prompt cache holds).  An agent
+        without one — history just loaded from storage — would have the
+        provider compute the states inline, on the event loop.  Take the turn's
+        snapshot now instead; the capture that follows keeps it rather than
+        calling every ``__llm__()`` a second time.
+        """
+        if self._initial_tools_states is None:
+            self._initial_tools_states = await self._compute_tools_states_off_loop()
+            self._tools_states_taken_for = next_message
+
+    async def _compute_tools_states_off_loop(self) -> typing.Optional[str]:
+        """The tool states, with every ``__llm__()`` called on a worker thread.
+
+        One thread for the whole capture, the tools one after the other: host
+        tools commonly share one database session, which must not be used by
+        two threads at once.  For the same reason captures started from the
+        same event loop take turns, waiting on the worker thread, never on
+        the loop.
+        """
+        if not self.tools:
+            return None
+        lock = _tools_states_lock()
+        # Read here, on the event loop: self.tools can change while the worker
+        # runs (an async tool registering another tool, for one).
+        tools = self._tools_with_states()
+
+        def render():
+            with lock:
+                return self._render_tools_states(tools)
+
+        return await _run_in_thread(render)
+
+    async def _encode_images_off_loop(self):
+        """Encode the conversation's images on a worker thread, ahead of a request.
+
+        The provider serializes every image part while it builds the request,
+        on the event loop.  With PIL that is a full decode and re-encode of
+        each image not serialized before, during which the loop serves nobody.
+        Encoded here first, the request builder only reads what
+        ``Image.to_base64()`` memoized.
+        """
+        pending = [
+            part.image
+            for message in self.messages
+            for part in message.parts
+            if isinstance(part.image, Image) and part.image._base64_cache is None
+        ]
+        if not pending:
+            return
+
+        def encode():
+            for image in pending:
+                with _image_encoding_lock:
+                    try:
+                        image.to_base64()
+                    except ValueError:
+                        # Left to the request builder, which raises it where
+                        # it always has: inside the provider call.
+                        pass
+
+        await _run_in_thread(encode)
+
     @property
     def initial_tools_states(self) -> typing.Optional[str]:
         """Captured tool states included in the system prompt.
@@ -378,12 +672,28 @@ class Agentlys(AgentlysBase):
         otherwise computes from the current tools.  The snapshot is taken by
         _capture_tools_states() on each new user message and stays static for
         every iteration of that turn.
+
+        Computed on the calling thread.  On the thread of a running event
+        loop, it takes its turn among that loop's captures: one in progress on
+        a worker thread is waited for, since nothing else ran on that thread
+        during a capture when captures ran there.
         """
         if self._initial_tools_states is not None:
             return self._initial_tools_states
         # If there are no tools, return None
         if not self.tools:
             return None
+        tools = self._tools_with_states()
+        try:
+            lock = _tools_states_lock()
+        except RuntimeError:
+            # No event loop running on this thread: nothing to take turns with.
+            return self._render_tools_states(tools)
+        with lock:
+            return self._render_tools_states(tools)
+
+    def _tools_with_states(self) -> list:
+        """(name, tool) for each tool whose state goes in the system prompt."""
         # When tool search is enabled, skip __llm__ for tools whose
         # methods are ALL deferred — they haven't been discovered yet.
         loaded_tool_names = None
@@ -394,18 +704,30 @@ class Agentlys(AgentlysBase):
                 if not s.get("defer_loading")
             }
 
-        tool_reprs = []
+        tools = []
         for tool_id, tool in self.tools.items():
             tool_name = f"{tool.__class__.__name__}-{tool_id}"
 
             if loaded_tool_names is not None and tool_name not in loaded_tool_names:
                 continue
+            tools.append((tool_name, tool))
+        return tools
 
+    @staticmethod
+    def _render_tools_states(tools: list) -> str:
+        """Call ``__llm__()`` on each tool and assemble the system-prompt block."""
+        tool_reprs = []
+        for tool_name, tool in tools:
             if hasattr(tool, "__llm__"):
                 tool_output = tool.__llm__()
             else:
                 tool_output = (tool.__class__.__doc__ or "").strip()
-            tool_output = _truncate_with_warning(tool_output)
+            tool_output = truncate_with_marker(
+                tool_output,
+                OUTPUT_SIZE_LIMIT,
+                label=tool_name,
+                advice=" This tool's state is too large to show in full.",
+            )
             tool_reprs.append(f"### {tool_name}\n{tool_output}")
         tool_context = "\n".join(tool_reprs)
 
@@ -520,24 +842,27 @@ class Agentlys(AgentlysBase):
         Callers usually persist the part's text (``"name_a, name_b"``), not
         the list, so a reloaded history would silently drop every tool the
         model had found and force a new search on the next turn.  Parse the
-        text back and filter both restored and existing references so only
-        tools that are still registered are sent to the provider.
+        text back when this agent has tool search.
+
+        Existing references are filtered on every agent, tool search or not:
+        a history replayed under another tool set (a narrower agent, a tool
+        renamed or removed since) would otherwise name tools missing from the
+        request, and Anthropic rejects it with 400 "Tool reference '…' not
+        found in available tools".  Register tools before loading messages.
         """
         search_name = self._tool_search_function_name
-        if search_name is None:
-            return
         for msg in messages:
-            if msg.role != "function" or msg.name != search_name:
+            if msg.role != "function":
                 continue
             for part in msg.parts:
                 if part.type != "function_result":
                     continue
-                if part.tool_references is None:
-                    part.tool_references = self._parse_tool_references(part.content)
-                else:
+                if part.tool_references is not None:
                     part.tool_references = [
                         name for name in part.tool_references if name in self.functions
                     ]
+                elif search_name is not None and msg.name == search_name:
+                    part.tool_references = self._parse_tool_references(part.content)
 
     def _parse_tool_references(self, content: typing.Optional[str]) -> list[str]:
         if not content or content.strip() == "[]":
@@ -637,6 +962,7 @@ class Agentlys(AgentlysBase):
         name: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
         compute_levels: typing.Optional[typing.Union[bool, dict]] = None,
+        capture_states_at_turn_start: bool = False,
     ) -> str:
         """Add a sub-agent that can be triggered by this agent.
 
@@ -652,6 +978,17 @@ class Agentlys(AgentlysBase):
                 - None/False: disabled (default, backward compatible).
                 - True: enabled with default Anthropic mapping (opus/sonnet/haiku).
                 - dict: custom mapping with keys "high", "medium", "low" mapped to model names.
+            capture_states_at_turn_start: Capture the sub-agent's tool states
+                when this agent's async turn starts (a new user message to
+                run_conversation_stream_async / ask_async), not at each
+                invocation: its tools' ``__llm__()`` then run before the turn's
+                tool batches, where they could share host state (a database
+                session) with the batch's other tools, and every invocation of
+                the turn sends the same block.  They run at every turn, invoked
+                or not; its own sub-agents registered the same way are captured
+                then too.  A pin_tools_states() pin on the sub-agent still wins.
+                If its states fail then, its invocations capture them, as
+                without the option.
 
         Returns:
             The registered function name (e.g. "sub_agent__researcher").
@@ -696,6 +1033,16 @@ class Agentlys(AgentlysBase):
             ):  # Propagate cancellation, preserve child's own event
                 run_agent.cancel_event = self.cancel_event
             run_agent.messages = []
+            run_agent._invocation_copy = True
+            # States the parent's turn captured for it at its start; a pin
+            # set on the template since still wins (the copy carries it).
+            turn_states = _turn_sub_agent_states.get() or {}
+            if id(agent) in turn_states:
+                run_agent._sub_agents_captured_by_parent = True
+                states = turn_states[id(agent)]
+                if states is not None and not agent._tools_states_pinned:
+                    run_agent._initial_tools_states = states
+                    run_agent._states_from_parent_turn = True
 
             if compute_mapping:
                 if compute_level not in compute_mapping:
@@ -761,9 +1108,23 @@ class Agentlys(AgentlysBase):
         self._sub_agents[func_name] = {
             "agent": agent,
             "compute_levels": compute_mapping,
+            "capture_states_at_turn_start": capture_states_at_turn_start,
         }
 
         return func_name
+
+    @property
+    def sub_agents(self) -> dict:
+        """The registered sub-agents, by function name (``sub_agent__<name>``).
+
+        Each value is the template agent: every invocation runs on a copy of
+        it, which starts from its tool states, so a host can pin them here
+        (pin_tools_states) before a run.  A new dict at each read: register
+        and remove sub-agents with add_sub_agent / remove_sub_agent.
+        """
+        return {
+            func_name: entry["agent"] for func_name, entry in self._sub_agents.items()
+        }
 
     def remove_sub_agent(self, name: str):
         """Remove a sub-agent by name.
@@ -872,7 +1233,8 @@ class Agentlys(AgentlysBase):
                 tools from different servers (or built-in tools) never
                 collide.
             tool_filter: Optional callable receiving the MCP ``Tool``
-                object; return False to skip the tool.
+                object; return False to skip the tool. Called on the event
+                loop for each tool: it must not block.
             max_result_chars: Optional cap on tool/resource result size.
             include_resources: Also expose the server's resources as
                 functions (default True, matching historical behavior).
@@ -939,7 +1301,8 @@ class Agentlys(AgentlysBase):
         if message:
             self.messages.append(message)
 
-        self._capture_tools_states(message)
+        await self._capture_tools_states_async(message)
+        await self._encode_images_off_loop()
 
         # Merge class-level thinking with any kwargs override
         if self.thinking and "thinking" not in kwargs:
@@ -1006,29 +1369,27 @@ class Agentlys(AgentlysBase):
                         formatted_content.append(f"Added tool: {tool_id}")
                 formatted_content = "\n".join(formatted_content)
                 # Limit the size of the content
-                if len(formatted_content) > OUTPUT_SIZE_LIMIT:
-                    formatted_content = (
-                        formatted_content[:OUTPUT_SIZE_LIMIT]
-                        + f"\n... ({len(formatted_content)} characters)"
-                    )
+                formatted_content = truncate_with_marker(
+                    formatted_content, OUTPUT_SIZE_LIMIT, label=function_name
+                )
+        elif isinstance(content, _SerializedDict):
+            formatted_content = truncate_with_marker(
+                content.head,
+                OUTPUT_SIZE_LIMIT,
+                label=function_name,
+                full_length=content.length,
+            )
         elif isinstance(content, dict):
             # default=str: tool results routinely carry values json doesn't
             # know (Decimal, datetime, UUID, ...); stringify instead of crashing
             content_dump = json.dumps(content, default=str)
-            if len(content_dump) > OUTPUT_SIZE_LIMIT:
-                formatted_content = (
-                    content_dump[:OUTPUT_SIZE_LIMIT]
-                    + f"\n... ({len(content_dump)} characters)"
-                )
-            else:
-                formatted_content = content_dump
+            formatted_content = truncate_with_marker(
+                content_dump, OUTPUT_SIZE_LIMIT, label=function_name
+            )
         elif isinstance(content, str):
-            if len(content) > OUTPUT_SIZE_LIMIT:
-                formatted_content = (
-                    content[:OUTPUT_SIZE_LIMIT] + f"\n... ({len(content)} characters)"
-                )
-            else:
-                formatted_content = content
+            formatted_content = truncate_with_marker(
+                content, OUTPUT_SIZE_LIMIT, label=function_name
+            )
         elif isinstance(content, bytes):
             # Detect if it's an image
             try:
@@ -1143,6 +1504,8 @@ class Agentlys(AgentlysBase):
 
         # Async tools run as tasks on the event loop, so opening the scope here
         # and awaiting the body share one thread/task — enter the scope inline.
+        # A scope that blocks therefore blocks the loop: a tool whose scope
+        # does I/O should be sync.
         if self._is_async_callable(func):
             with call_scope() as scoped_owner:
                 scoped_func = getattr(scoped_owner, func.__name__)
@@ -1232,16 +1595,31 @@ class Agentlys(AgentlysBase):
         args = part.function_call["arguments"]
         function_call_id = part.function_call_id
 
+        if part.arguments_parsing_error is not None:
+            raw = part.raw_arguments or ""
+            preview = raw[:500] + ("…" if len(raw) > 500 else "")
+            content = (
+                f"Invalid JSON arguments for {name}: {part.arguments_parsing_error}."
+                f"\nRaw arguments (first 500 characters): {preview}"
+                "\nThe tool was not executed. Re-emit the tool call with valid JSON "
+                "object arguments. Do not repeat other successful tool calls."
+            )
+            return (function_call_id, name, content, None)
+
         content = None
         image = None
 
         try:
             result = await self._resolve_and_call_function(name, args, response)
             content, image = self._process_tool_result(result)
+            if isinstance(content, dict):
+                content = await _serialize_dict(content)
         except StopLoopException:
             raise  # Propagate to stop the loop
         except Exception as e:
-            content = self._format_exception(e)
+            # Also a result that cannot be serialized: the error replaces it
+            # whole, its image included.
+            content, image = self._format_exception(e), None
 
         return (function_call_id, name, content, image)
 
@@ -1359,6 +1737,27 @@ class Agentlys(AgentlysBase):
                 )
                 yield (function_call_id, function_name, formatted_msg)
 
+    @staticmethod
+    def _check_parsing_retry_budget(response: Message, retries: int) -> int:
+        # Two re-asks per run; count failed turns, not parallel calls.
+        invalid = [
+            part
+            for part in response.function_call_parts
+            if part.arguments_parsing_error is not None
+        ]
+        if invalid:
+            if retries >= 2:
+                part = invalid[0]
+                raise FunctionCallParsingError(
+                    response.id,
+                    {
+                        "name": part.function_call["name"],
+                        "arguments": part.raw_arguments,
+                    },
+                )
+            return retries + 1
+        return retries
+
     async def run_conversation_async(
         self,
         question: typing.Union[str, Message, None] = None,
@@ -1373,7 +1772,9 @@ class Agentlys(AgentlysBase):
             yield message
         else:
             message = question
+        await self._capture_sub_agent_states_for_resumed_run(message)
 
+        parsing_retries = 0
         for _ in range(self.max_interactions):
             self._check_cancel()
             # Ask the LLM with the current message (if any)
@@ -1390,6 +1791,9 @@ class Agentlys(AgentlysBase):
                     return
             else:
                 yield response
+                parsing_retries = self._check_parsing_retry_budget(
+                    response, parsing_retries
+                )
 
                 try:
                     # Execute all tools in parallel
@@ -1423,17 +1827,24 @@ class Agentlys(AgentlysBase):
             self
         ):
             yield {"type": "compacting"}
+            first_message = self.messages[0]
+            await self._ensure_tools_states(message)
+            await self._encode_images_off_loop()
             await self.compaction.compact(self)
             # Yield the compaction summary message so callers can persist it.
-            # Only emit when compact() actually produced a summary (it can
-            # be a no-op when there are too few messages to compact).
-            if self.messages[0].has_compaction:
+            # Only emit when compact() actually produced a new summary: it can
+            # be a no-op, leaving an earlier summary in first position.
+            if (
+                self.messages[0] is not first_message
+                and self.messages[0].has_compaction
+            ):
                 yield {"type": "compaction_message", "message": self.messages[0]}
 
         if message:
             self.messages.append(message)
 
-        self._capture_tools_states(message)
+        await self._capture_tools_states_async(message)
+        await self._encode_images_off_loop()
 
         final_message = None
         async for chunk in self.provider.fetch_stream_async(**kwargs):
@@ -1465,7 +1876,9 @@ class Agentlys(AgentlysBase):
             yield {"type": "user", "message": message}
         else:
             message = question
+        await self._capture_sub_agent_states_for_resumed_run(message)
 
+        parsing_retries = 0
         for _ in range(self.max_interactions):
             self._check_cancel()
             # Stream the LLM response
@@ -1493,6 +1906,10 @@ class Agentlys(AgentlysBase):
             else:
                 # Yield assistant message with all tool calls
                 yield {"type": "assistant", "message": response}
+
+                parsing_retries = self._check_parsing_retry_budget(
+                    response, parsing_retries
+                )
 
                 # Signal start of parallel execution
                 yield {

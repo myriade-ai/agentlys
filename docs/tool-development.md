@@ -88,6 +88,10 @@ agent.add_function(fetch_url)
 agent.add_function(process_data)
 ```
 
+An async tool is awaited on the event loop. Anything synchronous and slow inside it (a blocking driver, `time.sleep()`, a heavy computation) stops every other task of the process until it returns. Await real async I/O in it, or write the tool as a plain function: sync tools run on a worker thread.
+
+The callbacks you give an agent are called on the event loop too, and must not block: `simple_response_callback`, `on_sub_agent_event`, the `tool_filter` of `add_mcp_server()`.
+
 ## Class-Based Tools
 
 ### Basic Class Tools
@@ -176,6 +180,8 @@ db = DatabaseConnection("data.db")
 agent = Agentlys()
 agent.add_tool(db, "Database")
 ```
+
+`__llm__()` is called on a worker thread, like sync tool methods, so a slow one (a query, a file read) does not freeze the event loop. Captures started from the same event loop take turns, as they did when they ran on that loop: a `__llm__()` never runs alongside another one from that loop. It does run while the event loop keeps going, so it must not count on being on the event-loop thread, and state it shares with code running on the loop needs its own protection. As before, it must not block until a turn scheduled on its own event loop has finished (`asyncio.run_coroutine_threadsafe(...).result()`): that turn's capture would wait for the one in progress.
 
 ## Tool Design Best Practices
 

@@ -1,15 +1,15 @@
 [project]
 name = "agentlys"
-version = "1.19.0"
+version = "1.21.0"
 description = "Lightweight AI agent library. Turn Python functions/classes into AI tools instantly."
 authors = [
     {name = "Benjamin Derville", email = "benderville@gmail.com"}
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "pillow==11.3.0",
+    "pillow==12.1.1",
     "pydantic==2.13.5",
 ]
 
@@ -21,15 +21,15 @@ Changelog = "https://github.com/myriade-ai/agentlys/blob/master/CHANGELOG.md"
 anthropic = ["anthropic>=0.46.0"]
 openai = ["openai>=1.63.2"]
 mcp = [
-    "mcp>=1.6.0; python_version >= '3.10'",
+    "mcp>=1.10.0",
 ]
 all = [
     "anthropic>=0.46.0",
     "openai>=1.63.2",
-    "mcp>=1.6.0; python_version >= '3.10'",
+    "mcp>=1.10.0",
 ]
 build = [
-    "uv>=0.9.5,<0.13.0",
+    "uv>=0.9.5,<0.14.0",
 ]
 
 [tool.semantic_release]
@@ -51,7 +51,6 @@ commit_message = "chore(release): bump version to {version}"
 
 [tool.uv.sources]
 agentlys = { workspace = true }
-vcrpy = { git = "https://github.com/tysonholub/vcrpy.git", rev = "fix.httpx-async" }
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -62,14 +61,14 @@ dev = [
     "anthropic>=0.46.0",
     "openai>=1.63.2",
     "pytest-asyncio>=0.26.0",
-    "vcrpy",
+    "vcrpy>=8.2.1",
     "pytest-recording>=0.13.2",
-    "pytest>=8.3.4",
+    "pytest>=9.0.3",
     # Pinned: a ruff minor release changes the default rule set, so a floating
     # spec silently turns `uv run ruff check` red on every open branch.  Keep in
     # sync with the version the ruff job installs in .github/workflows/test.yml.
     "ruff==0.15.17",
-    "mcp>=1.6.0; python_version >= '3.10'",
+    "mcp>=1.10.0",
     "pre-commit>=4.2.0",
     "build>=1.2.2.post1",
     "twine>=6.1.0",

@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from PIL import Image as PILImage
 
 from agentlys.model import Image, Message, MessagePart
@@ -47,3 +49,30 @@ def test_image_resize_invalidates_base64_cache():
     img.resize((2, 2))
     after = img.to_base64()
     assert before != after
+
+
+def test_formatless_image_serializes_as_png():
+    """An image composed in memory has no .format and must still serialize.
+
+    PIL leaves .format unset on Image.new()/resize()/crop() results, and
+    save(format=None) falls back to guessing from the filename — a BytesIO
+    has none, so it raised ValueError("unknown file extension: ") and a tool
+    returning a drawn image crashed the run instead of sending the picture.
+    """
+    pil = PILImage.new("RGB", (4, 4), color="red")
+    assert pil.format is None
+
+    img = Image(pil)
+    assert img.to_bytes().startswith(b"\x89PNG\r\n")
+    assert PILImage.open(BytesIO(img.to_bytes())).format == "PNG"
+    assert img.format == "image/png"
+
+
+def test_declared_image_format_is_preserved():
+    """The PNG fallback must not override an encoding PIL already knows."""
+    pil = PILImage.new("RGB", (4, 4), color="red")
+    pil.format = "JPEG"
+    img = Image(pil)
+
+    assert PILImage.open(BytesIO(img.to_bytes())).format == "JPEG"
+    assert img.format == "image/jpeg"

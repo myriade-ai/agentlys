@@ -143,7 +143,7 @@ agent.enable_tool_search(
 
 ### Sub-Agent Management
 
-#### add_sub_agent(agent, name=None, description=None, compute_levels=None) -> str
+#### add_sub_agent(agent, name=None, description=None, compute_levels=None, capture_states_at_turn_start=False) -> str
 
 Register a sub-agent that can be triggered by this agent. The sub-agent runs its own conversation loop and returns only its final response.
 
@@ -154,7 +154,14 @@ parent.add_sub_agent(researcher)
 
 # With dynamic compute levels (parent LLM picks high/medium/low per call)
 parent.add_sub_agent(researcher, compute_levels=True)
+
+# Tool states captured when the parent's turn starts, not at each invocation
+parent.add_sub_agent(researcher, capture_states_at_turn_start=True)
 ```
+
+#### sub_agents
+
+The registered sub-agents' template agents, by function name (`{"sub_agent__researcher": researcher}`). See [Sub-Agents](sub-agents.md).
 
 #### remove_sub_agent(name)
 
@@ -166,7 +173,7 @@ parent.remove_sub_agent("researcher")
 
 #### on_sub_agent_event
 
-Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`.
+Optional callback for observing sub-agent events. Signature: `(name: str, invocation_id: str, event: dict) -> None`. It runs on the event loop, once per event: it must not block.
 
 ```python
 parent.on_sub_agent_event = lambda name, id, event: print(f"[{name}] {event}")

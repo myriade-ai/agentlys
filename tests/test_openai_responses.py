@@ -797,3 +797,33 @@ class TestReplayEdgeCases:
         with caplog.at_level("WARNING"):
             await agent.ask_async("hi")
         assert "max_output_tokens" in caplog.text
+
+
+class TestCompaction:
+    @pytest.mark.asyncio
+    async def test_summary_request_is_the_next_request_plus_the_prompt(self):
+        from agentlys.compaction import REPLAY_SUFFIX, TokenThresholdCompaction
+
+        agent, fake = _agent(
+            [
+                _response([_reasoning_item(), _message_item("<summary>S</summary>")]),
+                _response([_message_item("next")]),
+            ]
+        )
+        history = [
+            Message(role="user", content="Hi"),
+            Message(role="assistant", content="Hello"),
+        ]
+        agent.messages = list(history)
+
+        await TokenThresholdCompaction(instructions="Summarize.").compact(agent)
+        assert agent.messages[0].parts[0].content == "S"
+
+        agent.messages = list(history)
+        await agent.ask_async(f"Summarize.\n\n{REPLAY_SUFFIX}")
+
+        summary_request, next_request = fake.calls
+        # Only the output budget differs; it is not part of the prefix.
+        assert summary_request.pop("max_output_tokens") == 16_000
+        next_request.pop("max_output_tokens")
+        assert summary_request == next_request
