@@ -60,7 +60,7 @@ requires-dist = [
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.10.0" },
     { name = "openai", marker = "extra == 'all'", specifier = ">=1.63.2" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.63.2" },
-    { name = "pillow", specifier = "==12.3.0" },
+    { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic", specifier = "==2.13.5" },
     { name = "uv", marker = "extra == 'build'", specifier = ">=0.9.5,<0.14.0" },
 ]
