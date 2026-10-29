@@ -5,6 +5,8 @@ import typing
 
 from mcp import ClientSession
 
+from agentlys.utils import truncate_with_marker
+
 logger = logging.getLogger(__name__)
 
 # Anthropic and OpenAI both constrain tool names to this charset and length.
@@ -13,18 +15,6 @@ _TOOL_NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z0-9_-]")
 
 # Filter signature: receives the MCP Tool object, returns True to expose it.
 ToolFilter = typing.Callable[[typing.Any], bool]
-
-
-def _truncate_result(
-    text: str, max_result_chars: typing.Optional[int], hint: str = ""
-) -> str:
-    """Truncate an MCP result to max_result_chars with an explicit marker."""
-    if max_result_chars is None or len(text) <= max_result_chars:
-        return text
-    return (
-        text[:max_result_chars]
-        + f"\n[... truncated to {max_result_chars} characters.{hint}]"
-    )
 
 
 def sanitize_tool_name(name: str, prefix: str = "") -> str:
@@ -68,11 +58,7 @@ def convert_tool_result(result, max_result_chars: typing.Optional[int] = None) -
     if not text:
         text = "(empty result)"
 
-    return _truncate_result(
-        text,
-        max_result_chars,
-        hint=" Refine the call (filters, pagination) to get less data.",
-    )
+    return truncate_with_marker(text, max_result_chars)
 
 
 async def fetch_mcp_server_tools(
@@ -202,7 +188,7 @@ async def fetch_mcp_server_resources(
                     else:
                         parts.append("[binary content omitted]")
                 text = "\n".join(parts) or "(empty result)"
-                return _truncate_result(text, max_result_chars)
+                return truncate_with_marker(text, max_result_chars)
 
             return read_resource
 

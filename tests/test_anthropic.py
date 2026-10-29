@@ -1042,3 +1042,28 @@ class TestDocumentParts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_openai_reasoning_signature_is_not_replayed_to_anthropic():
+    """A conversation that ran on the OpenAI Responses provider carries
+    reasoning in thinking parts signed "<id>|<encrypted>"; switching the
+    provider back to Anthropic must drop them instead of sending an invalid
+    signature (400)."""
+    from agentlys.providers.anthropic import message_to_anthropic_dict
+
+    message = Message(
+        role="assistant",
+        parts=[
+            MessagePart(
+                type="thinking", thinking="plan", thinking_signature="rs_1|ENC"
+            ),
+            MessagePart(
+                type="thinking", thinking="plan", thinking_signature="ErUBCkYIBRgC"
+            ),
+            MessagePart(type="text", content="ok"),
+        ],
+    )
+    message.is_live = True
+    content = message_to_anthropic_dict(message)["content"]
+    assert [block["type"] for block in content] == ["thinking", "text"]
+    assert content[0]["signature"] == "ErUBCkYIBRgC"

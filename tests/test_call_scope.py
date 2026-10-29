@@ -93,6 +93,27 @@ class _ThreadRecordingTool:
         self.threads["body"] = threading.get_ident()
         return self.session
 
+    async def awork(self, **kwargs):
+        self.threads["body"] = threading.get_ident()
+        return self.session
+
+
+@pytest.mark.asyncio
+async def test_async_scope_lifecycle_and_body_share_the_event_loop_thread():
+    # The other half of the contract.  An async tool is awaited on the event
+    # loop, and its scope is entered and exited there too: scope and body
+    # share one thread and one task.  So a scope that blocks (a commit, a lock
+    # held by a sync call of the same tool) blocks the loop — a tool whose
+    # scope does I/O belongs in a sync method, which runs it on a worker.
+    chat = Agentlys()
+    tool = _ThreadRecordingTool()
+    loop_thread = threading.get_ident()
+
+    await chat._call_with_signature(tool.awork, None)
+
+    t = tool.threads
+    assert t["enter"] == t["body"] == t["exit"] == loop_thread
+
 
 @pytest.mark.asyncio
 async def test_sync_scope_lifecycle_and_body_share_one_worker_thread():

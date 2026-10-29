@@ -1,8 +1,68 @@
+import asyncio
 import json
 import re
 from difflib import unified_diff
 
 import pytest
+
+
+class LoopStallProbe:
+    """Heartbeat on the running event loop.
+
+    Ticks every 10 ms while the ``async with`` body runs and records the
+    longest time the loop went without giving it a turn.  Anything
+    synchronous and slow that the body runs on the loop thread shows up as a
+    stall of about its own duration; work that is awaited (I/O, a worker
+    thread) does not.
+    """
+
+    TICK = 0.01
+
+    def __init__(self):
+        self.max_stall = 0.0
+        self._stop = False
+        self._task = None
+
+    @property
+    def max_stall_ms(self) -> float:
+        return self.max_stall * 1000
+
+    async def _beat(self):
+        loop = asyncio.get_running_loop()
+        last = loop.time()
+        while not self._stop:
+            await asyncio.sleep(self.TICK)
+            now = loop.time()
+            self.max_stall = max(self.max_stall, now - last - self.TICK)
+            last = now
+
+    async def __aenter__(self):
+        self._task = asyncio.create_task(self._beat())
+        # Let the heartbeat settle so its own start-up is not measured.
+        await asyncio.sleep(self.TICK * 3)
+        self.max_stall = 0.0
+        return self
+
+    async def __aexit__(self, *exc):
+        # A stall that ends exactly when the body returns is only visible on
+        # the next tick: give the heartbeat that tick before stopping it.
+        await asyncio.sleep(self.TICK * 3)
+        self._stop = True
+        await self._task
+
+    def assert_responsive(self, what: str, limit_ms: float = 100):
+        # Shown for failures, and for passes with `pytest -rP`.
+        print(f"[loop stall] {what}: {self.max_stall_ms:.0f} ms")
+        assert self.max_stall_ms < limit_ms, (
+            f"event loop stalled {self.max_stall_ms:.0f} ms during {what} "
+            f"(limit {limit_ms:.0f} ms)"
+        )
+
+
+@pytest.fixture
+def loop_probe():
+    """A fresh event-loop heartbeat: ``async with loop_probe as probe: ...``."""
+    return LoopStallProbe()
 
 
 def replace_file_paths_with_XXX(content: str) -> str:

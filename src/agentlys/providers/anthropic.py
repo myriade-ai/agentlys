@@ -6,7 +6,11 @@ import os
 import anthropic
 from agentlys.base import AgentlysBase
 from agentlys.model import Message, MessagePart
-from agentlys.providers.base_provider import BaseProvider
+from agentlys.providers.base_provider import (
+    BaseProvider,
+    EmptyCompletionError,
+    completion_text,
+)
 from agentlys.providers.utils import (
     add_empty_function_result,
     drop_orphaned_function_results,
@@ -61,6 +65,16 @@ def _resolve_effort(value: str | None) -> str | None:
     if effort is not None and effort not in _VALID_EFFORTS:
         raise ValueError(f"Invalid effort {effort!r}: expected one of {_VALID_EFFORTS}")
     return effort
+
+
+def is_anthropic_signature(signature: str | None) -> bool:
+    """Whether a thinking signature was issued by this API.
+
+    The OpenAI Responses provider stores its reasoning state in the same
+    field as ``"<item id>|<encrypted_content>"``; Anthropic signatures are
+    base64 and never contain the separator.
+    """
+    return bool(signature) and "|" not in signature
 
 
 def _sha(payload) -> str:
@@ -239,6 +253,14 @@ def message_to_anthropic_dict(message: Message) -> dict:
             # at worst invalidates the cached prefix; replaying it kills the
             # conversation. Redacted blocks carry their payload in the
             # signature and stay.
+            continue
+        if (
+            part.type == "thinking"
+            and not part.is_redacted
+            and not is_anthropic_signature(part.thinking_signature)
+        ):
+            # A block produced by the OpenAI Responses provider (signature
+            # "<id>|<encrypted_content>"): replaying it here is a 400.
             continue
         res["content"].append(part_to_anthropic_dict(part))
 
@@ -510,6 +532,7 @@ class AnthropicProvider(BaseProvider):
             transform_list_function=lambda x: add_empty_function_result(
                 drop_orphaned_function_results(x)
             ),
+            extra_messages=kwargs.pop("extra_messages", ()),
         )
         # A message whose parts were all filtered out (an assistant turn
         # holding nothing but a non-replayable thinking block, say) would go
@@ -541,13 +564,16 @@ class AnthropicProvider(BaseProvider):
         return messages, tools, kwargs
 
     async def fetch_async(self, **kwargs):
+        # max_tokens is not part of the cache key: a per-call budget leaves
+        # the cached prefix untouched.
+        max_tokens = kwargs.pop("max_tokens", None) or self.max_tokens
         messages, tools, kwargs = self._prepare_request_params(**kwargs)
 
         res = await self.client.messages.create(
             model=self.model,
             messages=messages,
             tools=tools,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             **kwargs,
         )
         res_dict = res.to_dict()
@@ -558,6 +584,17 @@ class AnthropicProvider(BaseProvider):
         msg.usage = res_dict.get("usage")
         self._log_cache_usage(msg.usage)
         return msg
+
+    async def complete_conversation(self, prompt: str, max_tokens: int = 4096) -> str:
+        # Through fetch_async, so a subclass's request handling (auth headers,
+        # retries) applies as it does to the conversation's own calls.  The
+        # breakpoints go where the next conversation call would put them,
+        # within the lookback window of the prefix the previous call wrote.
+        message = await self.fetch_async(
+            extra_messages=[Message(role="user", content=prompt)],
+            max_tokens=max_tokens,
+        )
+        return completion_text(message)
 
     async def complete(
         self,
@@ -584,7 +621,9 @@ class AnthropicProvider(BaseProvider):
             (block for block in response.content if block.type == "text"), None
         )
         if text_block is None:
-            raise RuntimeError("Completion response contained no text block")
+            raise EmptyCompletionError(
+                response.stop_reason, [block.type for block in response.content]
+            )
         return text_block.text
 
     async def fetch_stream_async(self, **kwargs):
