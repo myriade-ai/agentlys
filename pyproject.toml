@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pillow>=12.1.1",
-    "pydantic==2.13.5",
+    "pydantic==2.14.2",
 ]
 
 [project.urls]
